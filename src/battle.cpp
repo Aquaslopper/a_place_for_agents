@@ -177,6 +177,8 @@ void battleStartImpl(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_
     gTime = 0.0f;
     gActive = true;
     g.mode = MODE_BATTLE;
+    StopMusicStream(g.assets.field);
+    StopMusicStream(g.assets.title);
     if (g.musicOn) PlayMusicStream(g.assets.battle);
     PlaySound(g.assets.encounter);
 }

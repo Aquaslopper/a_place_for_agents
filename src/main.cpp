@@ -66,6 +66,14 @@ static bool wildBlocks(int tx, int ty) {
 static float camX = 0, camY = 0;
 
 // =============================================================== MUSIC
+static void applyMusicVolume() {
+    SetMusicVolume(g.assets.title,    g.musicOn ? 0.55f : 0.0f);
+    SetMusicVolume(g.assets.field,    g.musicOn ? 0.50f : 0.0f);
+    SetMusicVolume(g.assets.battle,   g.musicOn ? 0.55f : 0.0f);
+    SetMusicVolume(g.assets.victory,  g.musicOn ? 0.70f : 0.0f);
+    SetMusicVolume(g.assets.gameover, g.musicOn ? 0.70f : 0.0f);
+}
+
 static void ensureMusic() {
     static Mode last = (Mode)-1;
     Mode want = g.mode;
@@ -702,7 +710,7 @@ static void updateMenu(float dt) {
             else if (g.menuIndex == 2) g.menuPage = 2;
             else if (g.menuIndex == 3) { if (saveGame()) pushToast("Progress saved."); else pushToast("Save failed!"); }
             else if (g.menuIndex == 4) g.menuPage = 4;
-            else if (g.menuIndex == 5) { g.mode = MODE_TITLE; StopMusicStream(g.assets.field); }
+            else if (g.menuIndex == 5) { g.mode = MODE_TITLE; g.saveExists = saveExists(); StopMusicStream(g.assets.field); }
         }
     } else {
         if (IsKeyPressed(KEY_ESCAPE)) g.menuPage = 0;
@@ -721,7 +729,7 @@ static void updateMenu(float dt) {
                     else if (i == 2) { g.menuPage = 2; s_itemsTargetMode = 0; }
                     else if (i == 3) { if (saveGame()) pushToast("Progress saved."); else pushToast("Save failed!"); }
                     else if (i == 4) g.menuPage = 4;
-                    else if (i == 5) { g.mode = MODE_TITLE; StopMusicStream(g.assets.field); }
+                    else if (i == 5) { g.mode = MODE_TITLE; g.saveExists = saveExists(); StopMusicStream(g.assets.field); }
                 }
             }
         }
@@ -736,7 +744,7 @@ static void updateMenu(float dt) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 m = getVirtualMouse();
             if (CheckCollisionPointRec(m, row0)) { g.waitBattle = !g.waitBattle; PlaySound(g.assets.confirm); }
-            if (CheckCollisionPointRec(m, row1)) { g.musicOn = !g.musicOn; SetMasterVolume(g.musicOn ? 1.0f : 0.0f); PlaySound(g.assets.confirm); }
+            if (CheckCollisionPointRec(m, row1)) { g.musicOn = !g.musicOn; applyMusicVolume(); PlaySound(g.assets.confirm); }
         }
     }
 }
@@ -1027,6 +1035,8 @@ int main() {
 
     if (!loadAllAssets()) {
         // even with missing assets we keep running; raylib draws are safe no-ops for 0 ids mostly
+    } else {
+        applyMusicVolume();
     }
 
     newGameState((uint32_t)time(nullptr) * 2654435761u ^ 0xA9E4701u);
