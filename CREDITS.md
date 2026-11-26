@@ -11,6 +11,20 @@
 
 ## Art, world, music, SFX
 All generated in-repository by `tools/gen_assets.py` (pillow + numpy).
+The overworld art (tiles, trees, houses, heroes, enemies, icons, FX, title
+screen) is produced by `tools/build_art.py`, which draws from the small SNES
+pixel toolkit in `tools/snes.py`:
+
+- `tools/art_terrain.py` — 16x16 tiles (hue-shifted 4-step ramps, ordered dithering)
+- `tools/art_objects.py` — trees, houses, shop, inn, wells, signs, fences
+- `tools/art_actors.py` — 16x24 walking heroes and 32x32 portraits
+- `tools/art_misc.py` — enemies, item icons, battle FX, title vista
+
+Every sprite is built from a hue-shifted palette ramp, gets a hard 1px dark
+outline, and is deliberately limited to a handful of colours — the same set of
+constraints a SNES-era pixel artist worked under.
+
+    python3 tools/build_art.py       # rewrite assets/ (sizes are asserted)
 Licensed CC0 by the authors of this repository — do whatever you like
 with them. Standing on the shoulders of the Liberated Pixel Cup and the
 RPG Maker community for the *style*, but not a single third-party pixel

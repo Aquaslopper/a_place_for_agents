@@ -3,6 +3,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <queue>
+#include <algorithm>
+#include <unordered_map>
 
 // ------------------------------------------------------------ hashing
 uint32_t hash2i(int x, int y, uint32_t seed) {
@@ -111,14 +114,26 @@ static const char* NAME_B[] = {
     "brook", "gate", "field", "wood", "shaw", "port", "haven", "crest", "moor"
 };
 
+// A village is a 9-tile radius of houses, wells and paths. It may only be
+// founded on solid, dry, buildable ground: every tile inside that radius has to
+// be grass (no water, no rock, no ice). Villages used to be placed after only
+// a token water check, which produced villages half-drowned in a lake with
+// their shops and inns on unreachable islands.
+static bool villageSiteFits(int tx, int ty) {
+    const int R = 9;
+    for (int dy = -R; dy <= R; dy++) {
+        for (int dx = -R; dx <= R; dx++) {
+            if (dx * dx + dy * dy > R * R) continue;
+            TileInfo t = sampleTile(tx + dx, ty + dy);
+            if (t.kind != TK_GRASS && t.kind != TK_COBBLE) return false;
+        }
+    }
+    return true;
+}
+
 static float tileScoreForVillage(int tx, int ty) {
-    // prefer mid-elevation grass far from steep rock and water
-    TileInfo t = sampleTile(tx, ty);
-    if (t.kind != TK_GRASS) return -1.0f;
-    // check surroundings are not water
-    for (int dy = -3; dy <= 3; dy += 3)
-        for (int dx = -3; dx <= 3; dx += 3)
-            if (sampleTile(tx + dx, ty + dy).kind == TK_WATER) return -1.0f;
+    if (sampleTile(tx, ty).kind != TK_GRASS) return -1.0f;
+    if (!villageSiteFits(tx, ty)) return -1.0f;
     return 1.0f - fabsf(elevation((float)tx, (float)ty, g.worldSeed) - 0.5f);
 }
 
@@ -182,7 +197,21 @@ void villageLoadFor(float x, float y) {
         int dist = 5 + (int)(hashf(i, 77, rs) * 3.0f);
         int hx = (int)(v.cx + cosf(ang) * dist);
         int hy = (int)(v.cy + sinf(ang) * dist * 0.75f);
-        slots.push_back({hx, hy});
+        // a building needs dry ground under it *and* a walkable doorstep
+        bool fits = sampleTile(hx, hy).kind != TK_WATER && sampleTile(hx, hy).kind != TK_ICE;
+        bool doorstep = sampleTile(hx, hy + 1).kind != TK_WATER && sampleTile(hx, hy + 1).kind != TK_ICE;
+        if (!fits || !doorstep) {
+            // pull the building in toward the plaza until it fits
+            for (int shrink = 1; shrink <= 4 && !(fits && doorstep); shrink++) {
+                int sx = (int)(v.cx + cosf(ang) * (dist - shrink));
+                int sy = (int)(v.cy + sinf(ang) * (dist - shrink) * 0.75f);
+                if (sampleTile(sx, sy).kind != TK_WATER && sampleTile(sx, sy + 1).kind != TK_WATER &&
+                    sampleTile(sx, sy).kind != TK_ICE && sampleTile(sx, sy + 1).kind != TK_ICE) {
+                    hx = sx; hy = sy; fits = doorstep = true;
+                }
+            }
+        }
+        if (fits && doorstep) slots.push_back({ hx, hy });
     }
     v.houses.clear();
     int shopIdx = -1, innIdx = -1;
@@ -239,6 +268,246 @@ bool villageInteractAt(int tx, int ty, int* outRole, Village* outVillage) {
         }
     }
     return false;
+}
+
+// ================================================================ navigation
+// ---------------------------------------------------------------- walkability
+// A first pass at a proper collision model. Before this, the renderer and the
+// movement code each decided for themselves what a "wild object" was, and the
+// house collision circle was big enough to swallow the doorway tile in front
+// of every building — so a shop or inn could be *seen* but never reached.
+//
+// Layout facts this code depends on (see drawWorld / villageLoadFor):
+//   * a wild tree/rock occupies its own tile and is built upward from it;
+//   * a house is anchored bottom-center at (h.tx, h.ty), i.e. its footprint is
+//     the tile (h.tx, h.ty) with the player standing on (h.tx, h.ty + 1);
+//   * interaction ("the door") happens on h.tx, h.ty or h.tx, h.ty + 1.
+
+static bool isDoorstepTile(int tx, int ty) {
+    if (!g.villageLoaded) return false;
+    for (const HouseInst& h : g.village.houses)
+        if (tx == h.tx && ty == h.ty + 1) return true;
+    return false;
+}
+
+static uint32_t wildHash(int tx, int ty) { return hash2i(tx, ty, g.worldSeed ^ 0x77ee5u); }
+
+// 0 = nothing, otherwise the WildKind the renderer draws on that tile.
+// (Kept as an int so this file does not need the renderer's enum.)
+static int wildKindAt(int tx, int ty) {
+    if (inSpawnSafeZone((float)tx + 0.5f, (float)ty + 0.5f)) return 0;
+    if (villageContains((float)tx + 0.5f, (float)ty + 0.5f)) return 0;
+    if (isDoorstepTile(tx, ty)) return 0;
+    TileInfo t = sampleTile(tx, ty);
+    uint32_t h = wildHash(tx, ty);
+    float hf = (float)h / 4294967295.0f;
+    if (t.kind == TK_GRASS) {
+        float m = moisture((float)tx, (float)ty, g.worldSeed);
+        if (m > 0.55f && hf < 0.17f) return 1;              // tree / pine
+        if (hf > 0.965f) return 3;                          // mushroom (deco)
+        if (hf > 0.935f) return 2;                          // rock (blocks)
+        if (hf > 0.905f) return 4;                          // bush (deco)
+        return 0;
+    }
+    if (t.kind == TK_SNOW) {
+        if (hf < 0.17f) return 1;                           // pine
+        if (hf > 0.965f) return 2;                          // rock
+        return 0;
+    }
+    if (t.kind == TK_SAND) {
+        if (hf < 0.02f) return 5;                           // dead tree (blocks)
+        return 0;
+    }
+    return 0;
+}
+
+static bool wildBlocksTile(int tx, int ty) {
+    int w = wildKindAt(tx, ty);
+    return w == 1 || w == 2 || w == 5;
+}
+
+static bool houseBlocksTile(int tx, int ty) {
+    if (!g.villageLoaded) return false;
+    for (const HouseInst& h : g.village.houses) {
+        // The house sprite is 66x58 and is drawn upward from its anchor row, so
+        // it covers the anchor tile and the one above it. The tile below the
+        // anchor is the doorstep: walkable, never scenery.
+        if (tx == h.tx && (ty == h.ty || ty == h.ty - 1)) return true;
+        if (tx == h.tx && ty == h.ty + 1) return false;
+    }
+    return false;
+}
+
+static bool wellBlocksTile(int tx, int ty) {
+    if (!g.villageLoaded) return false;
+    for (const auto& w : g.village.wells) if (w.first == tx && w.second == ty) return true;
+    return false;
+}
+
+bool cellWalkable(int tx, int ty) {
+    if (isDoorstepTile(tx, ty)) return true;      // a doorway is always usable
+    if (!tileWalkable(tx, ty)) return false;
+    if (houseBlocksTile(tx, ty)) return false;
+    if (wellBlocksTile(tx, ty)) return false;
+    if (wellBlocksTile(tx - 1, ty) || wellBlocksTile(tx + 1, ty)) return false;  // wells are 2 tiles wide
+    if (wildBlocksTile(tx, ty)) return false;
+    return true;
+}
+
+bool positionBlocked(float x, float y, float r) {
+    // tiles under the corners of the hero's small collision square
+    const float off[4][2] = { { -r, -r }, { r, -r }, { -r, r }, { r, r } };
+    for (const auto& o : off) {
+        int tx = (int)floorf(x + o[0]), ty = (int)floorf(y + o[1]);
+        if (!cellWalkable(tx, ty)) return true;
+    }
+    // the door tile of a house is walkable ground, but keep a little distance
+    // from the building face itself so the sprite does not clip into the roof
+    if (g.villageLoaded) {
+        for (const HouseInst& h : g.village.houses) {
+            float cx = (float)h.tx + 0.5f, cy = (float)h.ty + 0.5f;
+            float dx = x - cx, dy = y - cy;
+            if (dy > -0.1f && dx * dx + dy * dy < 0.60f * 0.60f) return true;
+        }
+    }
+    return false;
+}
+
+void nearestWalkable(int tx, int ty, int& outTx, int& outTy) {
+    if (cellWalkable(tx, ty)) { outTx = tx; outTy = ty; return; }
+    for (int r = 1; r <= 6; r++) {
+        for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) {
+            if (std::max(std::abs(dx), std::abs(dy)) != r) continue;   // ring only
+            if (cellWalkable(tx + dx, ty + dy)) { outTx = tx + dx; outTy = ty + dy; return; }
+        }
+    }
+    outTx = tx; outTy = ty;
+}
+
+// ---------------------------------------------------------------- A* pathfinding
+namespace {
+struct NavNode { int x = 0, y = 0; };
+struct NavOpen {
+    int x, y; float f;
+    bool operator>(const NavOpen& o) const { return f > o.f; }
+};
+// bounded search: clicking 40 tiles away still resolves in a few thousand
+// expansions, and the path is clamped to the walkable portion.
+constexpr int NAV_MAX_EXPAND = 9000;
+constexpr int NAV_MAX_RADIUS = 48;
+
+static inline uint64_t navKey(int x, int y) {
+    return ((uint64_t)(uint32_t)x << 32) | (uint32_t)y;
+}
+} // namespace
+
+bool findWalkPath(float fromX, float fromY, int toTx, int toTy, WalkPath& out) {
+    out.clear();
+    int sx = (int)floorf(fromX), sy = (int)floorf(fromY);
+
+    // Clicked a building? Aim for the tile in front of its door instead, and
+    // remember the house so one click both walks there and opens the door.
+    int targetX = toTx, targetY = toTy;
+    if (g.villageLoaded) {
+        for (int i = 0; i < (int)g.village.houses.size(); i++) {
+            const HouseInst& h = g.village.houses[i];
+            int dx = toTx - h.tx, dy = toTy - h.ty;
+            if (std::abs(dx) <= 1 && dy >= -1 && dy <= 1) {
+                out.doorHouse = i;
+                targetX = h.tx; targetY = h.ty + 1;
+                break;
+            }
+        }
+    }
+    if (out.doorHouse < 0) nearestWalkable(toTx, toTy, targetX, targetY);
+    if (!cellWalkable(targetX, targetY)) return false;      // nowhere to stand
+
+    // If the hero somehow stands inside a blocked tile, start from free ground.
+    if (!cellWalkable(sx, sy)) nearestWalkable(sx, sy, sx, sy);
+
+    if (sx == targetX && sy == targetY) {
+        out.cells.push_back({ targetX, targetY });
+        out.reachable = true;
+        return true;
+    }
+
+    std::unordered_map<uint64_t, float> gScore;      // best known cost
+    std::unordered_map<uint64_t, uint64_t> parent;   // best known predecessor
+    std::priority_queue<NavOpen, std::vector<NavOpen>, std::greater<NavOpen>> open;
+    std::vector<std::pair<int,int>> explored;
+
+    auto hcost = [&](int x, int y) {
+        float dx = (float)(x - targetX), dy = (float)(y - targetY);
+        return sqrtf(dx * dx + dy * dy);
+    };
+    auto relax = [&](int x, int y, float g, uint64_t from) {
+        uint64_t k = navKey(x, y);
+        auto it = gScore.find(k);
+        if (it != gScore.end() && it->second <= g + 1e-4f) return;
+        gScore[k] = g;
+        parent[k] = from;
+        open.push({ x, y, g + hcost(x, y) });
+    };
+
+    relax(sx, sy, 0.0f, 0);
+    bool found = false;
+    int expanded = 0;
+    const int dirs[8][2] = { { 1,0 },{ -1,0 },{ 0,1 },{ 0,-1 },{ 1,1 },{ 1,-1 },{ -1,1 },{ -1,-1 } };
+
+    while (!open.empty() && expanded < NAV_MAX_EXPAND) {
+        NavOpen cur = open.top(); open.pop();
+        uint64_t ck = navKey(cur.x, cur.y);
+        auto gIt = gScore.find(ck);
+        if (gIt == gScore.end()) continue;
+        if (cur.f > gIt->second + hcost(cur.x, cur.y) + 1e-3f) continue;   // stale entry
+        if (cur.x == targetX && cur.y == targetY) { found = true; break; }
+        explored.push_back({ cur.x, cur.y });
+        expanded++;
+
+        for (const auto& d : dirs) {
+            int nx = cur.x + d[0], ny = cur.y + d[1];
+            if (std::abs(nx - sx) > NAV_MAX_RADIUS || std::abs(ny - sy) > NAV_MAX_RADIUS) continue;
+            if (nx == sx && ny == sy) continue;
+            bool diagonal = (d[0] != 0 && d[1] != 0);
+            if (!cellWalkable(nx, ny)) continue;
+            // never cut a corner between two blocked tiles
+            if (diagonal && (!cellWalkable(cur.x + d[0], cur.y) || !cellWalkable(cur.x, cur.y + d[1]))) continue;
+            relax(nx, ny, gIt->second + (diagonal ? 1.4142f : 1.0f), ck);
+        }
+    }
+
+    if (!found) {
+        // No route (island, closed valley...). Walk as close to the click as
+        // the hero can get rather than ignoring the click entirely.
+        float bestD = 1e9f; int bx = sx, by = sy;
+        for (auto& c : explored) {
+            float dx = (float)(c.first - targetX), dy = (float)(c.second - targetY);
+            float d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; bx = c.first; by = c.second; }
+        }
+        if (bx == sx && by == sy) return false;
+        out.doorHouse = -1;
+        targetX = bx; targetY = by;
+    }
+
+    // walk the parent chain back
+    std::vector<std::pair<int,int>> rev;
+    int cx = targetX, cy = targetY;
+    rev.push_back({ cx, cy });
+    int guard = 0;
+    while (!(cx == sx && cy == sy) && guard++ < NAV_MAX_EXPAND) {
+        auto it = parent.find(navKey(cx, cy));
+        if (it == parent.end()) break;
+        uint64_t k = it->second;
+        cx = (int)(int32_t)(k >> 32); cy = (int)(int32_t)(k & 0xffffffffu);
+        rev.push_back({ cx, cy });
+    }
+    std::reverse(rev.begin(), rev.end());
+    if (!rev.empty() && rev.front().first == sx && rev.front().second == sy) rev.erase(rev.begin());
+    if (rev.empty()) return false;
+    out.cells = rev;
+    out.reachable = true;
+    return true;
 }
 
 // ------------------------------------------------------------ field monsters

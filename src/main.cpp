@@ -100,27 +100,9 @@ static void updateMusicStreams() {
 // =============================================================== OVERWORLD UPDATE
 static int s_lastTileX = 99999, s_lastTileY = 99999;
 
-static bool circleBlockedAt(float x, float y, float r) {
-    // check 4 corners of a square around the point + wild objects + houses
-    float corners[4][2] = { { x - r, y - r }, { x + r, y - r }, { x - r, y + r }, { x + r, y + r } };
-    for (auto& c : corners) {
-        int tx = (int)floorf(c[0]), ty = (int)floorf(c[1]);
-        if (!tileWalkable(tx, ty)) return true;
-        if (wildBlocks(tx, ty)) return true;
-    }
-    // village buildings block
-    if (g.villageLoaded) {
-        for (const auto& h : g.village.houses) {
-            float dx = x - (float)h.tx, dy = y - ((float)h.ty - 1.0f);
-            if (dx * dx + dy * dy < 1.9f * 1.9f) return true;
-        }
-        for (const auto& wpos : g.village.wells) {
-            float dx = x - (float)wpos.first, dy = y - (float)wpos.second;
-            if (dx * dx + dy * dy < 0.75f * 0.75f) return true;
-        }
-    }
-    return false;
-}
+// NOTE: collision lives in world.cpp (positionBlocked / cellWalkable) so that
+// the renderer, the pathfinder and the walk code all agree on what blocks.
+static bool circleBlockedAt(float x, float y, float r) { return positionBlocked(x, y, r); }
 
 static void tryEncounter(int tx, int ty) {
     if (g.encounterGrace > 0) return;
@@ -166,28 +148,115 @@ static void interactWithVillage() {
     }
 }
 
+// ---------------------------------------------------------------- mouse command
+// A single left click means "go there". The click is turned into a walked path
+// (A* in world.cpp), so trees, river banks and houses are routed around instead
+// of silently swallowing the input. Clicking a house door walks there and opens
+// it. Clicking again anywhere interrupts; a second click while walking just
+// re-targets.
+static void cancelWalk() {
+    g.hasMoveTarget = false;
+    g.walkQueue.clear();
+    g.walkDoorHouse = -1;
+}
+
+static void commandWalkTo(int tileX, int tileY) {
+    WalkPath nav;
+    if (!findWalkPath(g.px, g.py, tileX, tileY, nav)) return;
+    g.walkQueue = nav.cells;
+    g.walkDoorHouse = nav.doorHouse;
+    g.hasMoveTarget = true;
+    if (!g.walkQueue.empty()) {
+        g.moveTargetX = g.walkQueue.back().first + 0.5f;
+        g.moveTargetY = g.walkQueue.back().second + 0.5f;
+    } else {
+        g.moveTargetX = tileX + 0.5f;
+        g.moveTargetY = tileY + 0.5f;
+    }
+}
+
+static void onWalkArrived() {
+    int door = g.walkDoorHouse;
+    cancelWalk();
+    if (door >= 0 && door < (int)g.village.houses.size()) {
+        const HouseInst& h = g.village.houses[door];
+        // stand in front of the door and interact exactly as if the player
+        // had pressed the action key there
+        g.px = h.tx + 0.5f;
+        g.py = h.ty + 1.5f;
+        g.facing = 1;                 // face up at the door
+        interactWithVillage();
+    }
+}
+
+// returns the axis-aligned direction to step this frame toward the next
+// queued tile; false when the queue is exhausted or unreachable.
+static bool stepAlongPath(float dt, float& outDx, float& outDy) {
+    while (!g.walkQueue.empty()) {
+        int cx = (int)floorf(g.px), cy = (int)floorf(g.py);
+        auto& next = g.walkQueue.front();
+        if (cx == next.first && cy == next.second) { g.walkQueue.erase(g.walkQueue.begin()); continue; }
+        float wx = next.first + 0.5f, wy = next.second + 0.5f;
+        float dx = wx - g.px, dy = wy - g.py;
+        float len = sqrtf(dx * dx + dy * dy);
+        if (len < 1e-4f) { g.walkQueue.erase(g.walkQueue.begin()); continue; }
+        outDx = dx / len; outDy = dy / len;
+        return true;
+    }
+    return false;
+}
+
+// Interaction prompt for the tile the hero could act on right now, either the
+// tile they stand on or the one directly in front of them.
+static bool nearbyInteract(int* outRole, int* outHouse) {
+    int tx = (int)floorf(g.px + 0.5f), ty = (int)floorf(g.py + 0.5f);
+    if (g.villageLoaded) {
+        for (int i = 0; i < (int)g.village.houses.size(); i++) {
+            const HouseInst& h = g.village.houses[i];
+            if (tx == h.tx && (ty == h.ty + 1 || ty == h.ty)) {
+                if (outRole) *outRole = h.role;
+                if (outHouse) *outHouse = i;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static void updateOverworld(float dt) {
     if (g.encounterGrace > 0) g.encounterGrace -= dt;
     if (g.toastT > 0) g.toastT -= dt;
+    if (g.clickFlashT > 0) g.clickFlashT -= dt;
+    if (g.blockedFx > 0) g.blockedFx -= dt;
     g.runTime += dt;
 
     // village proximity bookkeeping
     villageLoadFor(g.px, g.py);
 
     float dx = 0, dy = 0;
-    if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) dy -= 1;
-    if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) dy += 1;
-    if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) dx -= 1;
-    if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) dx += 1;
+    bool keyboardMove = false;
+    if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))    { dy -= 1; keyboardMove = true; }
+    if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))  { dy += 1; keyboardMove = true; }
+    if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))  { dx -= 1; keyboardMove = true; }
+    if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) { dx += 1; keyboardMove = true; }
+    if (keyboardMove) cancelWalk();
 
-    bool keyboardMove = (dx != 0 || dy != 0);
-    if (keyboardMove) g.hasMoveTarget = false;
+    // ---- mouse: click to walk (left button), anywhere in the world view
+    if (!keyboardMove && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        Vector2 m = getVirtualMouse();
+        int tx = (int)floorf((camX + m.x) / TILE);
+        int ty = (int)floorf((camY + m.y) / TILE);
+        g.clickFlashX = tx + 0.5f; g.clickFlashY = ty + 0.5f; g.clickFlashT = 0.45f;
+        commandWalkTo(tx, ty);
+    }
 
-    if (g.hasMoveTarget) {
-        float ddx = g.moveTargetX - g.px, ddy = g.moveTargetY - g.py;
-        float dist = sqrtf(ddx * ddx + ddy * ddy);
-        if (dist < 0.22f) { g.hasMoveTarget = false; dx = 0; dy = 0; }
-        else { dx = ddx / dist; dy = ddy / dist; }
+    if (!keyboardMove && g.hasMoveTarget) {
+        float px = 0, py = 0;
+        if (!stepAlongPath(dt, px, py)) {
+            onWalkArrived();
+        } else {
+            dx = px; dy = py;
+        }
     }
 
     float len = sqrtf(dx * dx + dy * dy);
@@ -197,21 +266,24 @@ static void updateOverworld(float dt) {
         float speed = 4.3f;
         float nx = g.px + dx * speed * dt;
         float ny = g.py + dy * speed * dt;
-        if (!circleBlockedAt(nx, g.py, 0.26f)) g.px = nx;
-        if (!circleBlockedAt(g.px, ny, 0.26f)) g.py = ny;
-        g.moving = true;
-        g.walkAnimT += dt * 9.0f;
+        bool slid = false;
+        if (!circleBlockedAt(nx, g.py, 0.26f)) { g.px = nx; slid = true; }
+        if (!circleBlockedAt(g.px, ny, 0.26f)) { g.py = ny; slid = true; }
+        if (slid) {
+            g.moving = true;
+            g.walkAnimT += dt * 9.0f;
+        } else {
+            // genuinely stuck: stop pushing and drop the click-to-walk goal so
+            // the hero does not grind against a rock forever
+            if (g.hasMoveTarget) {
+                cancelWalk();
+                g.blockedFx = 0.35f;
+                PlaySound(g.assets.cancel);
+            }
+        }
         if (fabsf(dx) > fabsf(dy)) { g.facing = 2; g.sideFlip = dx < 0; }
         else if (dy < 0) { g.facing = 1; }
         else { g.facing = 0; }
-    }
-
-    // mouse click sets a destination (only over the world, not UI overlays)
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        Vector2 m = getVirtualMouse();
-        float wx = camX + m.x, wy = camY + m.y;
-        g.moveTargetX = wx / TILE; g.moveTargetY = wy / TILE;
-        g.hasMoveTarget = true;
     }
 
     // tile-change bookkeeping → encounters
@@ -238,10 +310,20 @@ static void updateOverworld(float dt) {
         }
     }
 
-    // village interaction
-    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ENTER)) interactWithVillage();
-    // clicking the door area also enters
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) interactWithVillage();
+    // village interaction: keyboard, or a click on the open door in front of you
+    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) interactWithVillage();
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !keyboardMove) {
+        int role, house;
+        if (nearbyInteract(&role, &house)) {
+            // the click we already handled above may have been the walk command;
+            // if the hero is already at the door this opens it right away
+            int tx = (int)floorf(g.px + 0.5f), ty = (int)floorf(g.py + 0.5f);
+            const HouseInst& h = g.village.houses[house];
+            bool atDoor = (ty == h.ty + 1) && fabsf(g.px - (h.tx + 0.5f)) < 0.75f;
+            if (atDoor) { cancelWalk(); interactWithVillage(); }
+            else { (void)tx; }
+        }
+    }
 
     if (IsKeyPressed(KEY_ESCAPE)) { g.mode = MODE_MENU; g.menuIndex = 0; PlaySound(g.assets.confirm); }
 
@@ -257,7 +339,9 @@ static void updateOverworld(float dt) {
 
 // =============================================================== OVERWORLD DRAW
 static void drawShadow(float x, float y, float w, float h) {
-    DrawEllipse((int)x, (int)y, (int)w, (int)h, Fade(BLACK, 0.32f));
+    // two-tone contact shadow (soft outer + darker core), SNES style
+    DrawEllipse((int)x, (int)y, (int)(w * 1.15f), (int)(h * 1.2f), Fade(Color{ 26, 22, 44, 255 }, 0.26f));
+    DrawEllipse((int)x, (int)y, (int)w, (int)h, Fade(Color{ 22, 18, 38, 255 }, 0.34f));
 }
 
 static void drawWildObject(WildKind kind, float wx, float wy, int variantSeed) {
@@ -307,10 +391,18 @@ static void drawWorld() {
                 case TK_ROCK:  tex = g.assets.rockHill; break;
                 default:       tex = g.assets.grass[t.variant]; break;
             }
-            DrawTexture(tex, (int)(tx * TILE - camX), (int)(ty * TILE - camY), WHITE);
+            int sx = (int)(tx * TILE - camX), sy = (int)(ty * TILE - camY);
+            DrawTexture(tex, sx, sy, WHITE);
+            // SNES shoreline: a dark lip of land where water meets dry ground
+            if (t.kind == TK_WATER) {
+                if (sampleTile(tx, ty - 1).kind != TK_WATER && sampleTile(tx, ty - 1).kind != TK_ICE)
+                    DrawRectangle(sx, sy, TILE, 2, Color{ 38, 52, 82, 200 });
+                if (sampleTile(tx - 1, ty).kind != TK_WATER && sampleTile(tx - 1, ty).kind != TK_ICE)
+                    DrawRectangle(sx, sy, 2, TILE, Fade(Color{38, 52, 82, 255}, 0.6f));
+            }
             // decorative tuft/flower overlays
-            if (t.deco == 1) DrawTexture(g.assets.tuft[t.decoVariant], (int)(tx * TILE - camX), (int)(ty * TILE - camY), WHITE);
-            else if (t.deco == 2) DrawTexture(g.assets.flower[t.decoVariant], (int)(tx * TILE - camX), (int)(ty * TILE - camY), WHITE);
+            if (t.deco == 1) DrawTexture(g.assets.tuft[t.decoVariant], sx, sy, WHITE);
+            else if (t.deco == 2) DrawTexture(g.assets.flower[t.decoVariant], sx, sy, WHITE);
         }
     }
     drawVillageOverlay();
@@ -385,7 +477,8 @@ static void drawWorld() {
                 if (h.variant == -1) tex = &g.assets.shop;
                 else if (h.variant == -2) tex = &g.assets.inn;
                 float feetX = h.tx * TILE - camX + TILE / 2.0f, feetY = (h.ty + 1) * TILE - camY;
-                DrawEllipse((int)feetX, (int)feetY - 1, (int)(tex->width * 0.42f), 5, Fade(BLACK, 0.3f));
+                DrawEllipse((int)feetX, (int)feetY - 1, (int)(tex->width * 0.46f), 6, Fade(Color{ 24, 20, 40, 255 }, 0.30f));
+                DrawEllipse((int)feetX, (int)feetY - 2, (int)(tex->width * 0.34f), 4, Fade(Color{ 20, 16, 34, 255 }, 0.34f));
                 DrawTexture(*tex, (int)(feetX - tex->width / 2), (int)(feetY - tex->height), WHITE);
                 break;
             }
@@ -470,10 +563,19 @@ static void drawWorld() {
                        { cx, g.cloudY[i], 96 * sc, 40 * sc }, { 0, 0 }, 0.0f, Fade(WHITE, 0.82f));
     }
 
-    // day/night tint
+    // day/night tint. SNES-era games fade dusk with a dither pattern rather
+    // than a smooth wash, so the extra darkness is drawn as a checkerboard.
     float cycle = fmodf((float)g.runTime / 85.0f, 1.0f);
-    float night = 0.36f * (0.55f - 0.55f * cosf(cycle * 6.2831853f));
-    if (night > 0.02f) DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{8, 12, 44, 255}, night));
+    float night = 0.42f * (0.55f - 0.55f * cosf(cycle * 6.2831853f));
+    if (night > 0.02f) {
+        Color dusk{ 14, 18, 58, 255 };
+        DrawRectangle(0, 0, VRES_W, VRES_H, Fade(dusk, night * 0.55f));
+        for (int y = 0; y < VRES_H; y += 2) {
+            for (int x = ((y / 2) & 1) ? 1 : 0; x < VRES_W; x += 2) {
+                DrawRectangle(x, y, 1, 1, Fade(dusk, night * 0.5f));
+            }
+        }
+    }
 }
 
 static void drawMiniBar(float x, float y, float w, float h, float frac, Color col) {
@@ -507,15 +609,28 @@ static void drawHud() {
         }
     }
     // interact prompt
-    int tx = (int)floorf(g.px), ty = (int)floorf(g.py);
-    int role; Village v;
-    if (villageInteractAt(tx, ty, &role, &v)) {
+    int role = 0, house = -1;
+    if (nearbyInteract(&role, &house)) {
         const char* what = role == 1 ? "enter the shop" : (role == 2 ? "enter the inn" : "enter the house");
-        char hint[64]; snprintf(hint, sizeof(hint), "E - %s", what);
+        char hint[80]; snprintf(hint, sizeof(hint), "click the door or E - %s", what);
         Vector2 hts = MeasureTextEx(g.assets.font8, hint, 8, 1);
         Rectangle r = { VRES_W / 2.0f - hts.x / 2 - 8, (float)VRES_H - 32, hts.x + 16, 14 };
         drawPanel(r);
         DrawTextEx(g.assets.font8, hint, { r.x + 8, r.y + 3 }, 8, 1, WHITE);
+    }
+    // click marker: a small ring where the player clicked, and a nudge arrow
+    // while walking, so the mouse command is visibly acknowledged
+    if (g.clickFlashT > 0) {
+        float t = 1.0f - g.clickFlashT / 0.45f;
+        float sx = g.clickFlashX * TILE - camX, sy = g.clickFlashY * TILE - camY;
+        float rr = 3.0f + t * 7.0f;
+        DrawRing({ sx, sy }, rr, rr + 1.4f, 0, 360, 24, Fade(Color{255, 240, 180, 255}, 1.0f - t));
+        DrawCircleV({ sx, sy }, 1.6f, Fade(Color{255, 250, 220, 255}, 1.0f - t));
+    }
+    if (g.hasMoveTarget) {
+        int tx = (int)floorf(g.px), ty = (int)floorf(g.py);
+        float sx = tx * TILE - camX + 8.0f, sy = ty * TILE - camY + 2.0f;
+        DrawCircleLines((int)sx, (int)sy, 6.0f + 1.2f * sinf(gAnimTime * 6.0f), Fade(Color{255, 255, 255, 120}, 0.9f));
     }
     // toast
     if (g.toastT > 0) {
@@ -527,7 +642,7 @@ static void drawHud() {
     }
     // help line
     if (g.runTime < 22.0f) {
-        const char* help = "WASD / arrows or click to walk   ESC menu";
+        const char* help = "click anywhere to walk   doors, shops & inns: click them   ESC menu";
         Vector2 hts = MeasureTextEx(g.assets.font8, help, 8, 1);
         DrawTextEx(g.assets.font8, help, { VRES_W / 2.0f - hts.x / 2, (float)VRES_H - 12 }, 8, 1, Fade(WHITE, 0.55f));
     }
