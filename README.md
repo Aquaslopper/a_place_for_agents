@@ -24,8 +24,9 @@ of any CI run):
 | Input | Action |
 |---|---|
 | `WASD` / arrow keys | Walk |
-| Left mouse button | Walk to a point / click UI |
-| `E` | Enter a shop, inn or house when prompted |
+| Left mouse button | Walk anywhere (pathfinds around trees, water and buildings) |
+| Click a building | Walk to its door and open the shop / inn / house |
+| `E` | Enter a shop, inn or house when standing at the door |
 | `ESC` | Menu (resume, status, items, save, options) |
 | Mouse | Everything — click to move, battles, shops, inn, etc |
 | `F11`-ish | (window is resizable; game letterboxes) |

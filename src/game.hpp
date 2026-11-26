@@ -138,6 +138,13 @@ struct Game {
     float px = 0, py = 0;
     float moveTargetX = 0, moveTargetY = 0;   // mouse click-to-move target
     bool hasMoveTarget = false;
+    // mouse command: queue of tiles to walk through (pathfinding)
+    std::vector<std::pair<int,int>> walkQueue;
+    int walkDoorHouse = -1;        // interact with this house on arrival
+    bool moveBlocked = false;      // hero is pushed against something
+    float blockedFx = 0;           // little "bump" offset for feedback
+    float clickFlashT = 0;         // marker pulse where the player clicked
+    float clickFlashX = 0, clickFlashY = 0;
     int facing = 0;                // 0 down, 1 up, 2 side
     bool sideFlip = false;         // facing left
     bool moving = false;
