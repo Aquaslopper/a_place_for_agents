@@ -21,6 +21,10 @@ add_executable(aplaceforagents
     src/main.cpp
     src/core.cpp
     src/world.cpp
+    src/overworld.cpp
+    src/render.cpp
+    src/dialog.cpp
+    src/room.cpp
     src/battle.cpp
 )
 target_include_directories(aplaceforagents PRIVATE src)

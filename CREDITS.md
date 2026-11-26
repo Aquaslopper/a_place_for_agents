@@ -19,15 +19,28 @@ composes and scales portions to fit this game. See the upstream
 - `FaceSet/Actor1.png`: Garakuta,
   [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/),
   http://garakutamaker.blog.fc2.com/. Cropped and resized for portraits.
-- `CharSet/Monster1.png`: MerchantShade (slime, CC0); the source sheet also
-  contains work by Garakuta, Jetrotal and Jason Perry (CC0), and R.C.O.
-  ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). Only the slime
-  is used in the game, cropped and scaled. Sources: https://merchant-shade.itch.io/,
-  http://garakutamaker.blog.fc2.com/, https://github.com/jetrotal and
-  https://finalbossblues.itch.io/; R.C.O. credited in the upstream authors list.
+- `CharSet/Monster1.png`, `Monster2.png`, `Monster3.png`: MerchantShade (slime,
+  CC0); the source sheets also contain work by Garakuta, Jetrotal and Jason Perry
+  (CC0), and R.C.O. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
+  The game's whole bestiary — slime, imp, bat, hornet, wisp, wolf, skeleton,
+  ghost, orc, serpent, golem, night rider and the Slime King — is cropped, scaled
+  and, for battle, enlarged from these sheets. Sources:
+  https://merchant-shade.itch.io/, http://garakutamaker.blog.fc2.com/,
+  https://github.com/jetrotal and https://finalbossblues.itch.io/; R.C.O.
+  credited in the upstream authors list.
+- `CharSet/People1-5.png`, `CharSet/Animal.png`, `CharSet/Object1.png`,
+  `CharSet/Object2.png`: village folk, animals and the object set, same upstream
+  authors and licences as above; cropped and re-arranged into walking sheets and
+  objects (chests, barrels, kegs, ladders, fences).
+- `ChipSet/Interior.png`, `ChipSet/Dungeon.png`, `System.png`, `Royal.png`,
+  `Title/Title1.png`, `Title/Title2.png`, `GameOver/Game Over.png`,
+  `Panorama/Dawn2.png`, `Panorama/Night Sky1.png`, `Picture/Cloud.png`:
+  Jason Perry / finalbossblues and the EasyRTP contributors listed upstream;
+  `CC0 1.0` unless the upstream authors list says otherwise. Used for interiors,
+  the window skin, the title backdrop, the game-over plate and drifting clouds.
 
-The remaining enemies, icons, effects and title art are generated in-repository
-by `tools/build_art.py` and `tools/art_*.py`. Music and sound effects are generated
+The remaining icons, effects and fallback art are generated in-repository by
+`tools/build_art.py` and `tools/art_*.py`. Music and sound effects are generated
 by `tools/gen_assets.py`. Generated original assets are CC0 by the repository's
 authors. The OpenRTP actor sheet and its derivatives retain the CC BY 4.0 terms
 above; this CC0 statement does not apply to them.

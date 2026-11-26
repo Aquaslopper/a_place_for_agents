@@ -1,48 +1,33 @@
-// battle.cpp — Active-Time-Battle, SNES style, mouse & keyboard
+// battle.cpp — active-time battle, SNES style, mouse & keyboard
 #include "battle.hpp"
 #include "world.hpp"
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <cctype>
 
 namespace {
 
 enum BPhase {
-    BP_INTRO = 0,
-    BP_MAIN,
-    BP_MENU,       // command menu open
-    BP_MAGIC,      // spell submenu
-    BP_ITEM,       // item submenu
-    BP_TARGET_FOE, // pick an enemy
-    BP_TARGET_ALLY,// pick a hero (heal/item)
-    BP_VICTORY,
-    BP_DEFEAT,
-    BP_FLED
+    BP_INTRO = 0, BP_MAIN, BP_MENU, BP_MAGIC, BP_ITEM,
+    BP_TARGET_FOE, BP_TARGET_ALLY, BP_VICTORY, BP_DEFEAT, BP_FLED
 };
 
 struct EnemySlot {
     EnemyKind kind = EN_SLIME;
     int hp = 1, maxHp = 1, atk = 1, def = 1, spd = 1;
     int xp = 1, gil = 1;
+    int drop = -1, dropChance = 0;
+    int weak = 0;
     Vector2 pos = { 0, 0 };
-    float gauge = 0.0f;
-    float bob = 0.0f;
-    float hitT = 0.0f;      // flash / shake timer
+    float gauge = 0.0f, bob = 0.0f, hitT = 0.0f, poofT = 0.0f;
     bool alive = true;
-    float poofT = 0.0f;
 };
 
-struct Floater {
-    Vector2 pos;
-    float t = 0.0f;
-    std::string text;
-    Color color = WHITE;
-};
-
+struct Floater { Vector2 pos; float t = 0.0f; std::string text; Color color = WHITE; };
 struct PendingEnemy { int idx = -1; float t = 0.0f; };
 struct Projectile { bool active = false; Vector2 from{}, to{}; float t = 0.0f, dur = 0.45f; int target = -1; };
 
-// forward decls for menu/target flow
 int firstAliveFoe();
 int firstAliveAlly();
 void cycleFoe(int dir);
@@ -50,7 +35,9 @@ void confirmFoeTarget();
 void confirmAllyTarget();
 void castSelectedSpell();
 void useSelectedItem();
-void useItemOnHero(int hero, int item, int unused);
+void useItemOnHero(int hero, int item);
+void exitToOverworld();
+
 int gPendingSpell = -1;
 int gPendingItem = -1;
 BPhase gTargetReturn = BP_MENU;
@@ -61,69 +48,41 @@ BPhase gPhase = BP_INTRO;
 float gPhaseT = 0.0f;
 float gHeroGauge[3] = { 0, 0, 0 };
 bool gHeroDefending[3] = { false, false, false };
-int gActing = -1;             // hero index whose menu is open, -1 none
-int gTargetFoe = 0;
-int gTargetAlly = 0;
-int gMenuSel = 0;             // selection in current menu
-int gMagicSel = 0;
-int gItemSel = 0;
+int gActing = -1;
+int gTargetFoe = 0, gTargetAlly = 0;
+int gMenuSel = 0, gMagicSel = 0, gItemSel = 0;
 float gBannerT = 0.0f;
 std::vector<Floater> gFloaters;
 PendingEnemy gPending[4];
 int gPendingCount = 0;
 Projectile gFireball;
-float gLunge[3] = { 0, 0, 0 };      // hero attack lunge timer
+float gLunge[3] = { 0, 0, 0 };
 float gEnemyLunge = 0.0f; int gEnemyLungeIdx = -1;
 float gHeroHitFlash = 0.0f;
-float gHitFlash = 0.0f;             // full screen flash
+float gHitFlash = 0.0f;
 float gTime = 0.0f;
 int gExpGain = 0, gGilGain = 0;
 int gLevelUps[3] = { 0, 0, 0 };
+std::vector<std::string> gLoot;
 uint64_t gFieldMonsterId = 0;
 bool gActive = false;
+Vector2 gLastEnemyPos = { 0, 0 };
 
 // ---------------------------------------------------------------- utils
 Rectangle enemyRect(int i) {
-    Texture2D& t = g.assets.enemy[(int)gEnemies[i].kind];
-    float sc = 2.2f;
-    float w = t.width * sc, h = t.height * sc;
+    Texture2D& t = g.assets.enemyBig[(int)gEnemies[i].kind];
+    float w = t.width, h = t.height;
     return { gEnemies[i].pos.x - w / 2, gEnemies[i].pos.y - h, w, h };
 }
-Rectangle heroPanelRect(int i) {
-    float pw = 150.0f, ph = 54.0f, gap = 8.0f;
-    float x = (VRES_W - (3 * pw + 2 * gap)) / 2.0f + i * (pw + gap);
-    return { x, (float)VRES_H - ph - 3.0f, pw, ph };
-}
 Vector2 heroBattlePos(int i) {
-    // heroes on the left, facing right
-    const Vector2 spots[3] = { { 84, 150 }, { 46, 192 }, { 108, 200 } };
+    const Vector2 spots[3] = { { 96, 160 }, { 46, 210 }, { 128, 218 } };
     return spots[i];
 }
 void addFloat(Vector2 pos, const std::string& text, Color c) {
     gFloaters.push_back({ pos, 0.0f, text, c });
 }
 void screenShake(float mag, float t) { g.shakeMag = mag; g.shakeT = t; }
-
 float spdGaugeRate(int spd) { return 0.055f + spd * 0.0115f; }
-int zoneDamageBonus() { return 0; }
-
-struct SpellDef { const char* name; int cost; int power; bool ally; bool aoe; };
-const SpellDef SPELLS_MAGE[] = {
-    { "Fire",  8, 34, false, false },
-    { "Spark", 5, 20, false, false },
-};
-const SpellDef SPELLS_CLERIC[] = {
-    { "Heal",     6, 62, true,  false },
-    { "Heal All", 14, 44, true,  true  },
-};
-const SpellDef SPELLS_KNIGHT[] = {
-    { "Power Slash", 6, -1, false, false },   // -1 = physical 1.8x
-};
-const SpellDef* spellsFor(int klass, int& outCount) {
-    if (klass == KLASS_MAGE)   { outCount = 2; return SPELLS_MAGE; }
-    if (klass == KLASS_CLERIC) { outCount = 2; return SPELLS_CLERIC; }
-    outCount = 1; return SPELLS_KNIGHT;
-}
 
 bool atbPausedForMenu() {
     return gPhase == BP_MENU || gPhase == BP_MAGIC || gPhase == BP_ITEM ||
@@ -135,7 +94,6 @@ void battleStartImpl(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_
     gFieldMonsterId = fieldMonsterId;
     gEnemyCount = 0;
     const float zl = (float)(zoneLevel - 1);
-    std::vector<int> counts(EN_COUNT, 0);
     for (EnemyKind k : kinds) {
         if (gEnemyCount >= 3) break;
         int idx = gEnemyCount++;
@@ -149,18 +107,18 @@ void battleStartImpl(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_
         e.spd = std::max(3, d.spd + (int)(zl * 0.8f));
         e.xp = (int)(d.xp * (1.0f + 0.35f * zl)) + 2 * zoneLevel;
         e.gil = (int)(d.gil * (1.0f + 0.4f * zl)) + 3 * zoneLevel;
+        e.drop = d.drop; e.dropChance = d.dropChance; e.weak = d.weak;
         e.gauge = hashf(idx, (int)fieldMonsterId, g.worldSeed ^ 0xc1a5) * 0.4f;
         e.bob = hashf(idx, 913, g.worldSeed) * 6.2831853f;
         e.hitT = 0; e.poofT = 0; e.alive = true;
-        counts[(int)k]++;
     }
-    // formation positions (feet anchor)
     const Vector2 formation[3][3] = {
-        { { 330, 168 }, { 0, 0 }, { 0, 0 } },
-        { { 268, 168 }, { 388, 158 }, { 0, 0 } },
-        { { 218, 172 }, { 330, 160 }, { 430, 176 } },
+        { { 348, 176 }, { 0, 0 }, { 0, 0 } },
+        { { 280, 176 }, { 404, 162 }, { 0, 0 } },
+        { { 228, 180 }, { 344, 166 }, { 444, 186 } },
     };
     for (int i = 0; i < gEnemyCount; i++) gEnemies[i].pos = formation[gEnemyCount - 1][i];
+    if (gEnemyCount > 0) gLastEnemyPos = gEnemies[0].pos;
 
     gPhase = BP_INTRO; gPhaseT = 0.0f;
     gHeroGauge[0] = gHeroGauge[1] = gHeroGauge[2] = 0.15f;
@@ -171,6 +129,7 @@ void battleStartImpl(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_
     for (int i = 0; i < 3; i++) gLunge[i] = 0;
     gEnemyLunge = 0; gHeroHitFlash = 0; gHitFlash = 0;
     gFloaters.clear();
+    gLoot.clear();
     gBannerT = 2.0f;
     gLevelUps[0] = gLevelUps[1] = gLevelUps[2] = 0;
     gExpGain = gGilGain = 0;
@@ -191,14 +150,19 @@ int calcPhysDamage(int atk, int def, float varianceSeed) {
     return std::max(1, dmg);
 }
 
-void damageEnemy(int idx, int dmg, bool crit) {
+void damageEnemy(int idx, int dmg, bool crit, int school = SCH_NONE) {
     EnemySlot& e = gEnemies[idx];
+    if (school != SCH_NONE && (e.weak & (1 << school))) {
+        dmg = (int)(dmg * 1.6f);
+        addFloat({ e.pos.x, e.pos.y - 76 }, "WEAK!", Color{ 255, 210, 120, 255 });
+    }
     e.hp -= dmg;
     e.hitT = 0.35f;
     addFloat({ e.pos.x, e.pos.y - 60 }, std::to_string(dmg), crit ? Color{ 255, 224, 120, 255 } : WHITE);
     if (e.hp <= 0) {
         e.hp = 0; e.alive = false; e.poofT = 0.8f;
         addFloat({ e.pos.x, e.pos.y - 84 }, "DOWN", Color{ 200, 210, 255, 255 });
+        PlaySound(g.assets.hit);
     }
 }
 
@@ -218,21 +182,38 @@ void damageHero(int idx, int dmg) {
 // ---------------------------------------------------------------- turns
 void endHeroTurn(int idx) {
     gHeroGauge[idx] = 0.0f;
-    gHeroDefending[idx] = false;   // defend lasts until your next action
+    gHeroDefending[idx] = false;
     gActing = -1;
     gPhase = BP_MAIN;
+}
+void endAFoeTurn(int idx) {
+    gEnemies[idx].gauge = 0.0f;
+}
+
+int aliveHeroCount() {
+    int n = 0;
+    for (auto& h : g.party) if (!h.ko) n++;
+    return n;
 }
 
 void checkBattleEnd() {
     bool anyFoe = false;
     for (int i = 0; i < gEnemyCount; i++) if (gEnemies[i].alive) anyFoe = true;
     if (!anyFoe) {
-        // compute rewards
         int xp = 0, gil = 0;
         for (int i = 0; i < gEnemyCount; i++) { xp += gEnemies[i].xp; gil += gEnemies[i].gil; }
-        xp /= 1;  // full share per hero
         gExpGain = xp; gGilGain = gil;
         g.gil += gil;
+        // loot
+        for (int i = 0; i < gEnemyCount; i++) {
+            EnemySlot& e = gEnemies[i];
+            if (e.drop < 0) continue;
+            float roll = hashf(i, (int)(gTime * 1000), g.worldSeed ^ 0x10001u) * 100.0f;
+            if (roll < (float)e.dropChance) {
+                addItem(e.drop, 1);
+                gLoot.push_back(itemDef(e.drop).name);
+            }
+        }
         for (int i = 0; i < 3; i++) {
             if (g.party[i].ko) continue;
             g.party[i].xp += xp;
@@ -240,14 +221,25 @@ void checkBattleEnd() {
         }
         g.defeatedCount += gEnemyCount;
         if (gFieldMonsterId != 0) g.defeatedMonsters.insert(gFieldMonsterId);
+        // quest hooks
+        for (int i = 0; i < gEnemyCount; i++) {
+            if (gEnemies[i].kind == EN_SLIME) g.slimesSlain++;
+            if (gEnemies[i].kind == EN_SLIME_KING) {
+                g.bossDefeated = true;
+                if (questActive(QUEST_CROWN)) {
+                    questSetState(QUEST_CROWN, QS_DONE);
+                    addItem(IT_CROWN, 1);
+                    addItem(IT_SWORD_DRAGON, 1);
+                }
+            }
+        }
         gPhase = BP_VICTORY; gPhaseT = 0.0f;
         StopMusicStream(g.assets.battle);
         if (g.musicOn) PlayMusicStream(g.assets.victory);
+        PlaySound(g.assets.levelup);
         return;
     }
-    bool anyHero = false;
-    for (auto& h : g.party) if (!h.ko) anyHero = true;
-    if (!anyHero) {
+    if (aliveHeroCount() == 0) {
         gPhase = BP_DEFEAT; gPhaseT = 0.0f;
         StopMusicStream(g.assets.battle);
         if (g.musicOn) PlayMusicStream(g.assets.gameover);
@@ -256,9 +248,10 @@ void checkBattleEnd() {
 
 void heroAttack(int heroIdx, int foeIdx) {
     Hero& h = g.party[heroIdx];
-    float roll = hashf((int)gTime * 1000, heroIdx, g.worldSeed);
+    float roll = hashf((int)(gTime * 1000), heroIdx, g.worldSeed);
     bool crit = roll < 0.12f;
-    int dmg = calcPhysDamage(heroAtk(h), gEnemies[foeIdx].def, hashf(gEnemies[foeIdx].hp, heroIdx, (uint32_t)gTime));
+    int dmg = calcPhysDamage(heroAtk(h), gEnemies[foeIdx].def,
+                             hashf(gEnemies[foeIdx].hp, heroIdx, (uint32_t)(gTime * 1000)));
     if (crit) dmg = (int)(dmg * 1.6f);
     gLunge[heroIdx] = 0.32f;
     PlaySound(g.assets.sword);
@@ -269,29 +262,49 @@ void heroAttack(int heroIdx, int foeIdx) {
     if (gPhase == BP_MAIN) endHeroTurn(heroIdx);
 }
 
-void heroCast(int heroIdx, int spellIdx, int targetIdx /* foe or ally */) {
+void heroCast(int heroIdx, int spellIdx, int targetIdx) {
     Hero& h = g.party[heroIdx];
-    int spellCount = 0;
-    const SpellDef* spells = spellsFor(h.klass, spellCount);
-    if (spellIdx < 0 || spellIdx >= spellCount) { gPhase = BP_MAIN; return; }
-    const SpellDef& sp = spells[spellIdx];
+    SpellList list = spellsFor(h.klass, h.level);
+    if (!list.spells || spellIdx < 0 || spellIdx >= list.count) { gPhase = BP_MAIN; return; }
+    const SpellDef& sp = list.spells[spellIdx];
     if (h.mp < sp.cost) {
         addFloat(heroBattlePos(heroIdx), "Not enough MP!", Color{ 150, 190, 255, 255 });
+        PlaySound(g.assets.cancel);
         gPhase = BP_MENU;
         return;
     }
     h.mp -= sp.cost;
 
-    if (h.klass == KLASS_KNIGHT) {
-        // Power Slash — physical
-        gLunge[heroIdx] = 0.36f;
-        PlaySound(g.assets.sword);
-        int dmg = (int)(heroAtk(h) * 1.8f * (0.85f + hashf(gEnemies[targetIdx].hp, 7, (uint32_t)gTime) * 0.3f));
-        dmg = std::max(2, dmg);
-        damageEnemy(targetIdx, dmg, false);
-        screenShake(3.5f, 0.3f);
-        checkBattleEnd();
-        if (gPhase == BP_MAIN) endHeroTurn(heroIdx);
+    if (sp.name[0] == 'R' && std::strcmp(sp.name, "Revive") == 0) {
+        if (!g.party[targetIdx].ko) {
+            addFloat(heroBattlePos(heroIdx), "No one to revive!", Color{ 150, 190, 255, 255 });
+            gPhase = BP_MENU; return;
+        }
+        g.party[targetIdx].ko = false;
+        g.party[targetIdx].hp = g.party[targetIdx].maxHp / 2;
+        PlaySound(g.assets.heal);
+        addFloat(heroBattlePos(targetIdx), "REVIVED", Color{ 180, 255, 200, 255 });
+        endHeroTurn(heroIdx);
+        return;
+    }
+    if (std::strcmp(sp.name, "Last Stand") == 0 || std::strcmp(sp.name, "Sanctuary") == 0) {
+        PlaySound(g.assets.heal);
+        if (std::strcmp(sp.name, "Last Stand") == 0) {
+            gHeroDefending[heroIdx] = true;
+            Hero& t = g.party[heroIdx];
+            t.hp = std::min(t.maxHp, t.hp + 24);
+            addFloat(heroBattlePos(heroIdx), "GUARD", Color{ 190, 220, 255, 255 });
+        } else {
+            for (int i = 0; i < 3; i++) {
+                Hero& t = g.party[i];
+                if (t.ko) { t.ko = false; }
+                t.hp = std::min(t.maxHp, t.hp + 90);
+                t.mp = std::min(t.maxMp, t.mp + 30);
+                gHeroDefending[i] = true;
+                addFloat(heroBattlePos(i), "+90", Color{ 150, 255, 190, 255 });
+            }
+        }
+        endHeroTurn(heroIdx);
         return;
     }
 
@@ -300,42 +313,52 @@ void heroCast(int heroIdx, int spellIdx, int targetIdx /* foe or ally */) {
         auto healOne = [&](int i) {
             Hero& t = g.party[i];
             if (t.ko) return;
-            int amount = sp.power + (int)(hashf(i, (int)gTime * 13, g.worldSeed) * 22.0f);
+            int amount = sp.power + (int)(hashf(i, (int)(gTime * 13), g.worldSeed) * 22.0f);
             t.hp = std::min(t.maxHp, t.hp + amount);
-            Vector2 pos = heroBattlePos(i);
-            addFloat({ pos.x, pos.y - 64 }, "+" + std::to_string(amount), Color{ 140, 255, 160, 255 });
+            addFloat({ heroBattlePos(i).x, heroBattlePos(i).y - 64 }, "+" + std::to_string(amount),
+                     Color{ 140, 255, 160, 255 });
         };
         if (sp.aoe) { for (int i = 0; i < 3; i++) healOne(i); }
         else healOne(targetIdx);
         gHitFlash = std::max(gHitFlash, 0.12f);
-        if (gPhase == BP_MAIN) endHeroTurn(heroIdx);
+        endHeroTurn(heroIdx);
         return;
     }
 
-    // offensive magic
     PlaySound(g.assets.spell);
-    if (spellIdx == 0 && h.klass == KLASS_MAGE) {
-        // fireball projectile
+    if (sp.school == SCH_HOLY && h.klass == KLASS_CLERIC) {
+        // holy bolt / smite — instant, plus a sparkle
+        int dmg = sp.power + heroMag(h) + (int)(hashf(targetIdx, (int)(gTime * 29), g.worldSeed) * 14.0f);
+        dmg = std::max(1, dmg - gEnemies[targetIdx].def / 2);
+        damageEnemy(targetIdx, dmg, false, SCH_HOLY);
+        screenShake(2.5f, 0.2f);
+        gHitFlash = std::max(gHitFlash, 0.15f);
+        checkBattleEnd();
+        if (gPhase == BP_MAIN) endHeroTurn(heroIdx);
+        return;
+    }
+    if (sp.fx == 1) {
         gFireball.active = true;
         gFireball.from = heroBattlePos(heroIdx);
         gFireball.to = { gEnemies[targetIdx].pos.x, gEnemies[targetIdx].pos.y - 30 };
         gFireball.t = 0.0f; gFireball.dur = 0.42f; gFireball.target = targetIdx;
-        // damage applied on arrival in update()
-    } else {
-        // spark — instant
-        int dmg = sp.power + (int)(hashf(targetIdx, (int)gTime * 29, g.worldSeed) * 14.0f) + zoneDamageBonus();
-        dmg = std::max(1, dmg - gEnemies[targetIdx].def / 2);
-        damageEnemy(targetIdx, dmg, false);
-        screenShake(2.5f, 0.2f);
-        gHitFlash = std::max(gHitFlash, 0.15f);
-        checkBattleEnd();
+        gPendingSpell = spellIdx;
+        return;
     }
+    // instant elemental hit
+    int dmg = sp.power + heroMag(h) + (int)(hashf(targetIdx, (int)(gTime * 29), g.worldSeed) * 14.0f);
+    dmg = std::max(1, dmg - gEnemies[targetIdx].def / 2);
+    damageEnemy(targetIdx, dmg, false, sp.school);
+    screenShake(2.5f, 0.2f);
+    gHitFlash = std::max(gHitFlash, 0.15f);
+    checkBattleEnd();
     if (gPhase == BP_MAIN) endHeroTurn(heroIdx);
 }
 
 void tryFlee(int heroIdx) {
-    float roll = hashf((int)gTime * 77, heroIdx, g.worldSeed);
-    if (roll < 0.7f) {
+    float roll = hashf((int)(gTime * 77), heroIdx, g.worldSeed);
+    float chance = 0.62f;
+    if (roll < chance) {
         PlaySound(g.assets.flee);
         gPhase = BP_FLED; gPhaseT = 0.0f;
         StopMusicStream(g.assets.battle);
@@ -348,117 +371,24 @@ void tryFlee(int heroIdx) {
 void enemyAttack(int idx) {
     EnemySlot& e = gEnemies[idx];
     if (!e.alive) return;
-    // pick target: prefer lowest HP living hero, slight randomness
     int best = -1; float bestScore = 1e9f;
     for (int i = 0; i < 3; i++) {
         if (g.party[i].ko) continue;
-        float score = (float)g.party[i].hp * (0.7f + hashf(i, (int)gTime * 3, g.worldSeed));
+        float score = (float)g.party[i].hp * (0.7f + hashf(i, (int)(gTime * 3), g.worldSeed));
         if (score < bestScore) { bestScore = score; best = i; }
     }
     if (best < 0) return;
     gEnemyLunge = 0.32f; gEnemyLungeIdx = idx;
-    float roll = hashf((int)gTime * 500, idx, g.worldSeed);
+    float roll = hashf((int)(gTime * 500), idx, g.worldSeed);
     bool crit = roll < 0.10f;
-    int dmg = calcPhysDamage(e.atk, heroDef(g.party[best]), hashf(best, (int)gTime, g.worldSeed + 5));
+    int dmg = calcPhysDamage(e.atk, heroDef(g.party[best]),
+                             hashf(best, (int)(gTime * 1000), g.worldSeed + 5));
     if (crit) dmg = (int)(dmg * 1.5f);
     PlaySound(g.assets.hit);
     damageHero(best, dmg);
     screenShake(crit ? 4.0f : 2.0f, 0.25f);
+    endAFoeTurn(idx);
     checkBattleEnd();
-}
-
-} // namespace
-
-// ------------------------------------------------------------ namespace exports
-void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fieldMonsterId) {
-    battleStartImpl(kinds, zoneLevel, fieldMonsterId);
-}
-bool battleIsActive() { return gActive; }
-
-namespace {
-
-// ================================================================ update
-void updateIntro(float dt) {
-    gPhaseT += dt; gTime += dt;
-    if (gPhaseT >= 1.55f) { gPhase = BP_MAIN; gPhaseT = 0.0f; }
-}
-
-void applyPending(float dt, bool fill) {
-    if (fill) {
-        for (int i = 0; i < gEnemyCount; i++) {
-            EnemySlot& e = gEnemies[i];
-            if (!e.alive) continue;
-            e.gauge += spdGaugeRate(e.spd) * dt;
-            if (e.gauge >= 1.0f && gPendingCount < 4) {
-                e.gauge = 0.0f;
-                gPending[gPendingCount++] = { i, 0.45f };
-            }
-        }
-        for (int i = 0; i < 3; i++) {
-            if (g.party[i].ko) { gHeroGauge[i] = 0.0f; continue; }
-            gHeroGauge[i] = std::min(1.0f, gHeroGauge[i] + spdGaugeRate(g.party[i].spd) * dt);
-        }
-    }
-    for (int i = 0; i < gPendingCount;) {
-        gPending[i].t -= dt;
-        if (gPending[i].t <= 0.0f) {
-            int idx = gPending[i].idx;
-            // shift remaining entries down
-            for (int j = i + 1; j < gPendingCount; j++) gPending[j - 1] = gPending[j];
-            gPendingCount--;
-            enemyAttack(idx);
-            // if battle ended inside enemyAttack, stop
-            if (gPhase == BP_DEFEAT || gPhase == BP_VICTORY) { gPendingCount = 0; return; }
-        } else i++;
-    }
-}
-
-void updateMain(float dt) {
-    gTime += dt;
-    gPhaseT += dt;
-    if (gBannerT > 0) gBannerT -= dt;
-
-    bool menuOpen = atbPausedForMenu();
-    bool fill = (gPhase == BP_MAIN) || (!g.waitBattle && menuOpen);
-    applyPending(dt, fill);
-
-    // heroes whose gauge filled open their menu (one at a time)
-    if (gPhase == BP_MAIN) {
-        for (int i = 0; i < 3; i++) {
-            if (g.party[i].ko) continue;
-            if (gHeroGauge[i] >= 1.0f) {
-                gActing = i; gPhase = BP_MENU; gMenuSel = 0;
-                PlaySound(g.assets.cursor);
-                break;
-            }
-        }
-    }
-
-    // timers
-    if (gFireball.active) {
-        gFireball.t += dt;
-        if (gFireball.t >= gFireball.dur) {
-            gFireball.active = false;
-            int dmg = 30 + (int)(hashf(gFireball.target, (int)gTime * 31, g.worldSeed) * 16.0f) + zoneDamageBonus();
-            dmg = std::max(1, dmg - gEnemies[gFireball.target].def / 2);
-            damageEnemy(gFireball.target, dmg, false);
-            gHitFlash = std::max(gHitFlash, 0.28f);
-            screenShake(4.0f, 0.3f);
-            checkBattleEnd();
-            if (gPhase == BP_MAIN && gActing >= 0) endHeroTurn(gActing);
-        }
-    }
-    for (int i = 0; i < gEnemyCount; i++) {
-        if (gEnemies[i].hitT > 0) gEnemies[i].hitT -= dt;
-        if (!gEnemies[i].alive && gEnemies[i].poofT > 0) gEnemies[i].poofT -= dt;
-    }
-    for (int i = 0; i < 3; i++) if (gLunge[i] > 0) gLunge[i] -= dt;
-    if (gEnemyLunge > 0) gEnemyLunge -= dt;
-    if (gHeroHitFlash > 0) gHeroHitFlash -= dt;
-    if (gHitFlash > 0) gHitFlash -= dt;
-
-    for (auto& f : gFloaters) f.t += dt;
-    gFloaters.erase(std::remove_if(gFloaters.begin(), gFloaters.end(), [](const Floater& f) { return f.t > 1.15f; }), gFloaters.end());
 }
 
 void exitToOverworld() {
@@ -471,11 +401,102 @@ void exitToOverworld() {
     gActive = false;
 }
 
+// ---------------------------------------------------------------- updates
+void updateIntro(float dt) {
+    gPhaseT += dt;
+    gTime += dt;
+    if (gPhaseT > 0.9f) { gPhase = BP_MAIN; gPhaseT = 0.0f; }
+}
+
+void applyPending(float dt) {
+    for (int i = 0; i < gPendingCount; i++) {
+        gPending[i].t -= dt;
+        if (gPending[i].t <= 0.0f && gPending[i].idx >= 0) {
+            if (gEnemies[gPending[i].idx].alive) enemyAttack(gPending[i].idx);
+            gPending[i].idx = -1;
+        }
+    }
+    // compact
+    int w = 0;
+    for (int i = 0; i < gPendingCount; i++)
+        if (gPending[i].idx >= 0) gPending[w++] = gPending[i];
+    gPendingCount = w;
+}
+
+void updateMain(float dt) {
+    gTime += dt;
+    if (gPhaseT > 0) gPhaseT -= dt;
+    if (gBannerT > 0) gBannerT -= dt;
+
+    // hero ATB gauges fill while nobody's menu is open
+    for (int i = 0; i < 3; i++) {
+        if (g.party[i].ko) continue;
+        gHeroGauge[i] = std::min(1.0f, gHeroGauge[i] + dt * spdGaugeRate(g.party[i].spd) * 0.55f);
+    }
+    // enemy gauges
+    for (int i = 0; i < gEnemyCount; i++) {
+        if (!gEnemies[i].alive) continue;
+        gEnemies[i].gauge = std::min(1.0f, gEnemies[i].gauge + dt * spdGaugeRate(gEnemies[i].spd) * 0.42f);
+        if (gEnemies[i].gauge >= 1.0f) {
+            gEnemies[i].gauge = 1.0f;
+            bool queued = false;
+            for (int p = 0; p < gPendingCount; p++) if (gPending[p].idx == i) queued = true;
+            if (!queued && gPendingCount < 4) {
+                gPending[gPendingCount++] = { i, 0.25f + 0.1f * gPendingCount };
+            }
+        }
+    }
+    applyPending(dt);
+
+    // fireball in flight
+    if (gFireball.active) {
+        gFireball.t += dt;
+        if (gFireball.t >= gFireball.dur) {
+            gFireball.active = false;
+            int dmg = 30 + (int)(hashf(gFireball.target, (int)(gTime * 31), g.worldSeed) * 16.0f);
+            dmg += heroMag(g.party[gActing >= 0 ? gActing : 0]);
+            dmg = std::max(1, dmg - gEnemies[gFireball.target].def / 2);
+            damageEnemy(gFireball.target, dmg, false, SCH_FIRE);
+            gHitFlash = std::max(gHitFlash, 0.28f);
+            screenShake(4.0f, 0.3f);
+            checkBattleEnd();
+            if (gPhase == BP_MAIN && gActing >= 0) endHeroTurn(gActing);
+        }
+    }
+
+    for (int i = 0; i < gEnemyCount; i++) {
+        if (gEnemies[i].hitT > 0) gEnemies[i].hitT -= dt;
+        if (!gEnemies[i].alive && gEnemies[i].poofT > 0) gEnemies[i].poofT -= dt;
+    }
+    for (int i = 0; i < 3; i++) if (gLunge[i] > 0) gLunge[i] -= dt;
+    if (gEnemyLunge > 0) gEnemyLunge -= dt;
+    if (gHeroHitFlash > 0) gHeroHitFlash -= dt;
+    if (gHitFlash > 0) gHitFlash -= dt;
+
+    // whoever fills their gauge first gets the command menu
+    if (gPhase == BP_MAIN && gActing < 0) {
+        int first = -1; float best = -1.0f;
+        for (int i = 0; i < 3; i++) {
+            if (g.party[i].ko) continue;
+            if (gHeroGauge[i] >= 1.0f && gHeroGauge[i] > best) { best = gHeroGauge[i]; first = i; }
+        }
+        if (first >= 0) {
+            gActing = first;
+            gPhase = BP_MENU;
+            gMenuSel = 0;
+            PlaySound(g.assets.cursor);
+        }
+    }
+}
+
 void updateVictory(float dt) {
     gTime += dt; gPhaseT += dt;
     for (auto& f : gFloaters) f.t += dt;
-    gFloaters.erase(std::remove_if(gFloaters.begin(), gFloaters.end(), [](const Floater& f) { return f.t > 1.15f; }), gFloaters.end());
-    if (gPhaseT > 1.0f && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))) {
+    gFloaters.erase(std::remove_if(gFloaters.begin(), gFloaters.end(),
+                                   [](const Floater& f) { return f.t > 1.15f; }),
+                    gFloaters.end());
+    if (gPhaseT > 1.0f && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_ENTER) ||
+                           IsKeyPressed(KEY_SPACE))) {
         PlaySound(g.assets.coin);
         exitToOverworld();
     }
@@ -508,100 +529,129 @@ std::vector<std::pair<const char*, int>> consumableList() {
 void confirmMenuCommand(int cmd) {
     PlaySound(g.assets.confirm);
     switch (cmd) {
-        case 0: // Attack
+        case 0:   // attack
             gPhase = BP_TARGET_FOE;
-            gPendingSpell = -1; gPendingItem = -1; gTargetFoe = firstAliveFoe();
+            gPendingSpell = -1; gPendingItem = -1;
+            gTargetFoe = firstAliveFoe();
             gTargetReturn = BP_MENU;
             break;
-        case 1: // Magic
+        case 1:   // magic
             gPhase = BP_MAGIC; gMagicSel = 0;
             break;
-        case 2: // Item
+        case 2:   // item
             gPhase = BP_ITEM; gItemSel = 0;
             break;
-        case 3: // Defend
+        case 3:   // defend
             gHeroDefending[gActing] = true;
-            addFloat({ heroBattlePos(gActing).x, heroBattlePos(gActing).y - 70 }, "Defend", Color{ 170, 200, 255, 255 });
+            addFloat(heroBattlePos(gActing), "GUARD", Color{ 190, 220, 255, 255 });
             endHeroTurn(gActing);
             break;
-        case 4: // Run
+        case 4:   // flee
             tryFlee(gActing);
             break;
     }
 }
 
 void updateMenuInput() {
-    if (gActing < 0) { gPhase = BP_MAIN; return; }
-    Vector2 m = getVirtualMouse();
-    // command box above acting panel
-    Rectangle pr = heroPanelRect(gActing);
-    Rectangle box = { pr.x + 6, pr.y - 78, 116, 72 };
-    const char* labels[5] = { "Attack", "Magic", "Item", "Defend", "Run" };
+    const char* cmds[5] = { "Attack", "Magic", "Item", "Defend", "Flee" };
     for (int i = 0; i < 5; i++) {
-        Rectangle row = { box.x + 3, box.y + 3 + i * 13, box.width - 6, 12 };
-        if (CheckCollisionPointRec(m, row)) gMenuSel = i;
-        if (CheckCollisionPointRec(m, row) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) confirmMenuCommand(i);
+        Rectangle r{ 8.0f, 60.0f + i * 20, 96, 19 };
+        Vector2 m = getVirtualMouse();
+        if (CheckCollisionPointRec(m, r)) {
+            if (gMenuSel != i) PlaySound(g.assets.cursor);
+            gMenuSel = i;
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { confirmMenuCommand(i); return; }
+        }
     }
-    if (IsKeyPressed(KEY_DOWN)) { gMenuSel = (gMenuSel + 1) % 5; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_UP))   { gMenuSel = (gMenuSel + 4) % 5; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) confirmMenuCommand(gMenuSel);
-}
-
-void updateMagicInput() {
-    if (gActing < 0) { gPhase = BP_MAIN; return; }
-    Hero& h = g.party[gActing];
-    int count = 0; const SpellDef* sp = spellsFor(h.klass, count);
-    Vector2 m = getVirtualMouse();
-    Rectangle pr = heroPanelRect(gActing);
-    Rectangle box = { pr.x + 6, pr.y - 92, 168, (float)(18 + count * 13) };
-    for (int i = 0; i < count; i++) {
-        Rectangle row = { box.x + 3, box.y + 12 + i * 13, box.width - 6, 12 };
-        if (CheckCollisionPointRec(m, row)) gMagicSel = i;
-        if (CheckCollisionPointRec(m, row) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) gMagicSel = i, castSelectedSpell();
-    }
-    if (IsKeyPressed(KEY_DOWN)) { gMagicSel = (gMagicSel + 1) % count; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_UP))   { gMagicSel = (gMagicSel + count - 1) % count; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) castSelectedSpell();
-    if (IsKeyPressed(KEY_ESCAPE)) { PlaySound(g.assets.cancel); gPhase = BP_MENU; }
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { gMenuSel = (gMenuSel + 1) % 5; PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { gMenuSel = (gMenuSel + 4) % 5; PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) { confirmMenuCommand(gMenuSel); return; }
+    if (IsKeyPressed(KEY_ESCAPE)) { /* nothing — the hero must act */ }
+    (void)cmds;
 }
 
 void castSelectedSpell() {
-    Hero& h = g.party[gActing];
-    int count = 0; const SpellDef* sp = spellsFor(h.klass, count);
-    const SpellDef& s = sp[gMagicSel];
-    PlaySound(g.assets.confirm);
-    if (s.aoe) { heroCast(gActing, gMagicSel, -1); return; }
-    if (s.ally) { gPhase = BP_TARGET_ALLY; gPendingSpell = gMagicSel; gPendingItem = -1; gTargetAlly = 0; gTargetReturn = BP_MAGIC; return; }
-    gPhase = BP_TARGET_FOE; gPendingSpell = gMagicSel; gPendingItem = -1; gTargetFoe = firstAliveFoe(); gTargetReturn = BP_MAGIC;
+    int count = 0;
+    SpellList list = spellsFor(g.party[gActing].klass, g.party[gActing].level);
+    count = list.count;
+    if (gMagicSel < 0 || gMagicSel >= count) { gPhase = BP_MENU; return; }
+    const SpellDef& sp = list.spells[gMagicSel];
+    gPendingSpell = gMagicSel;
+    if (sp.ally) {
+        gPhase = BP_TARGET_ALLY;
+        gTargetAlly = (g.party[gActing].ko || g.party[gActing].hp < g.party[gActing].maxHp) ? gActing : firstAliveAlly();
+        gTargetReturn = BP_MAGIC;
+    } else {
+        gPhase = BP_TARGET_FOE;
+        gTargetFoe = firstAliveFoe();
+        gTargetReturn = BP_MAGIC;
+    }
 }
 
-void updateItemInput() {
-    if (gActing < 0) { gPhase = BP_MAIN; return; }
-    auto items = consumableList();
+void updateMagicInput() {
+    SpellList list = spellsFor(g.party[gActing].klass, g.party[gActing].level);
     Vector2 m = getVirtualMouse();
-    Rectangle pr = heroPanelRect(gActing);
-    Rectangle box = { pr.x + 6, pr.y - 96, 176, (float)(20 + std::max(1, (int)items.size()) * 13) };
-    for (int i = 0; i < (int)items.size(); i++) {
-        Rectangle row = { box.x + 3, box.y + 14 + i * 13, box.width - 6, 12 };
-        if (CheckCollisionPointRec(m, row)) gItemSel = i;
-        if (CheckCollisionPointRec(m, row) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { gItemSel = i; useSelectedItem(); }
+    for (int i = 0; i < list.count; i++) {
+        Rectangle r{ 8.0f, 260.0f - (float)(list.count * 18) + i * 18, 220, 17 };
+        if (CheckCollisionPointRec(m, r)) {
+            if (gMagicSel != i) PlaySound(g.assets.cursor);
+            gMagicSel = i;
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { castSelectedSpell(); return; }
+        }
     }
-    int n = std::max(1, (int)items.size());
-    if (IsKeyPressed(KEY_DOWN)) { gItemSel = (gItemSel + 1) % n; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_UP))   { gItemSel = (gItemSel + n - 1) % n; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) useSelectedItem();
+    if (list.count == 0) { gPhase = BP_MENU; return; }
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { gMagicSel = (gMagicSel + 1) % list.count; PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { gMagicSel = (gMagicSel + list.count - 1) % list.count; PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) { castSelectedSpell(); return; }
     if (IsKeyPressed(KEY_ESCAPE)) { PlaySound(g.assets.cancel); gPhase = BP_MENU; }
 }
 
+void useItemOnHero(int hero, int item) {
+    if (item < 0) { gPhase = BP_MENU; return; }
+    if (!applyConsumable(item, hero)) {
+        addFloat(heroBattlePos(hero), "No effect", Color{ 190, 200, 230, 255 });
+        PlaySound(g.assets.cancel);
+        gPhase = BP_ITEM;
+        return;
+    }
+    PlaySound(g.assets.potion);
+    const ItemDef& d = itemDef(item);
+    Vector2 pos = heroBattlePos(hero);
+    if (item == IT_PHOENIX || item == IT_ELIXIR) {
+        g.party[hero].ko = false;
+        addFloat({ pos.x, pos.y - 70 }, "REVIVED", Color{ 180, 255, 200, 255 });
+    } else {
+        addFloat({ pos.x, pos.y - 64 }, std::string("+") + d.name, Color{ 140, 255, 160, 255 });
+    }
+    endHeroTurn(gActing);
+}
+
 void useSelectedItem() {
-    auto items = consumableList();
-    if (items.empty()) { PlaySound(g.assets.cancel); return; }
-    PlaySound(g.assets.confirm);
+    auto list = consumableList();
+    if (list.empty()) { gPhase = BP_MENU; return; }
+    if (gItemSel >= (int)list.size()) gItemSel = 0;
+    gPendingItem = list[gItemSel].second;
     gPhase = BP_TARGET_ALLY;
-    gPendingItem = items[gItemSel].second;
-    gPendingSpell = -1;
-    gTargetAlly = firstAliveAlly();
+    gTargetAlly = gActing;
     gTargetReturn = BP_ITEM;
+}
+
+void updateItemInput() {
+    auto list = consumableList();
+    Vector2 m = getVirtualMouse();
+    for (int i = 0; i < (int)list.size(); i++) {
+        Rectangle r{ 8.0f, 260.0f - (float)(list.size() * 18) + i * 18, 220, 17 };
+        if (CheckCollisionPointRec(m, r)) {
+            if (gItemSel != i) PlaySound(g.assets.cursor);
+            gItemSel = i;
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { useSelectedItem(); return; }
+        }
+    }
+    if (list.empty()) { gPhase = BP_MENU; return; }
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { gItemSel = (gItemSel + 1) % (int)list.size(); PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { gItemSel = (gItemSel + (int)list.size() - 1) % (int)list.size(); PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) { useSelectedItem(); return; }
+    if (IsKeyPressed(KEY_ESCAPE)) { PlaySound(g.assets.cancel); gPhase = BP_MENU; }
 }
 
 int firstAliveFoe() {
@@ -612,183 +662,137 @@ int firstAliveAlly() {
     for (int i = 0; i < 3; i++) if (!g.party[i].ko) return i;
     return 0;
 }
+void cycleFoe(int dir) {
+    for (int n = 0; n < gEnemyCount; n++) {
+        gTargetFoe = (gTargetFoe + dir + gEnemyCount) % gEnemyCount;
+        if (gEnemies[gTargetFoe].alive) return;
+    }
+}
+void confirmFoeTarget() {
+    if (!gEnemies[gTargetFoe].alive) { gTargetFoe = firstAliveFoe(); return; }
+    if (gPendingItem >= 0) { useItemOnHero(gActing, gPendingItem); return; }
+    if (gPendingSpell >= 0) heroCast(gActing, gPendingSpell, gTargetFoe);
+    else heroAttack(gActing, gTargetFoe);
+}
+void confirmAllyTarget() {
+    if (gPendingItem >= 0) { useItemOnHero(gTargetAlly, gPendingItem); return; }
+    heroCast(gActing, gPendingSpell, gTargetAlly);
+}
 
 void updateTargetFoe() {
     Vector2 m = getVirtualMouse();
     for (int i = 0; i < gEnemyCount; i++) {
         if (!gEnemies[i].alive) continue;
-        Rectangle r = enemyRect(i);
-        r.x -= 8; r.width += 16;
-        if (CheckCollisionPointRec(m, r)) gTargetFoe = i;
-        if (CheckCollisionPointRec(m, r) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { confirmFoeTarget(); return; }
+        if (CheckCollisionPointRec(m, enemyRect(i))) {
+            if (gTargetFoe != i) PlaySound(g.assets.cursor);
+            gTargetFoe = i;
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { confirmFoeTarget(); return; }
+        }
     }
-    if (IsKeyPressed(KEY_RIGHT)) cycleFoe(1);
-    if (IsKeyPressed(KEY_LEFT))  cycleFoe(-1);
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) confirmFoeTarget();
-    if (IsKeyPressed(KEY_ESCAPE)) { PlaySound(g.assets.cancel); gPhase = gTargetReturn; }
-}
-
-void cycleFoe(int dir) {
-    for (int step = 1; step <= gEnemyCount; step++) {
-        int i = (gTargetFoe + dir * step + gEnemyCount * 8) % gEnemyCount;
-        if (gEnemies[i].alive) { gTargetFoe = i; PlaySound(g.assets.cursor); return; }
-    }
-}
-
-void confirmFoeTarget() {
-    int hero = gActing;
-    if (gPendingSpell >= 0) { heroCast(hero, gPendingSpell, gTargetFoe); }
-    else if (gPendingItem >= 0) { useItemOnHero(hero, gPendingItem, 2 /* unused */); }
-    else { heroAttack(hero, gTargetFoe); }
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) { cycleFoe(1); PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) { cycleFoe(-1); PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) { confirmFoeTarget(); return; }
+    if (IsKeyPressed(KEY_ESCAPE)) { PlaySound(g.assets.cancel); gPhase = gTargetReturn; gPendingSpell = -1; }
 }
 
 void updateTargetAlly() {
     Vector2 m = getVirtualMouse();
     for (int i = 0; i < 3; i++) {
-        Vector2 p = heroBattlePos(i);
-        Rectangle r = { p.x - 18, p.y - 44, 40, 46 };
-        if (CheckCollisionPointRec(m, r)) gTargetAlly = i;
-        if (CheckCollisionPointRec(m, r) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { confirmAllyTarget(); return; }
-    }
-    if (IsKeyPressed(KEY_RIGHT)) { gTargetAlly = (gTargetAlly + 1) % 3; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_LEFT))  { gTargetAlly = (gTargetAlly + 2) % 3; PlaySound(g.assets.cursor); }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) confirmAllyTarget();
-    if (IsKeyPressed(KEY_ESCAPE)) { PlaySound(g.assets.cancel); gPhase = gTargetReturn; }
-}
-
-void confirmAllyTarget() {
-    int hero = gActing;
-    if (gPendingSpell >= 0) { heroCast(hero, gPendingSpell, gTargetAlly); }
-    else if (gPendingItem >= 0) {
-        if (applyConsumable(gPendingItem, gTargetAlly)) {
-            PlaySound(g.assets.potion);
-            addFloat({ heroBattlePos(gTargetAlly).x, heroBattlePos(gTargetAlly).y - 70 },
-                     itemDef(gPendingItem).name, Color{ 150, 220, 255, 255 });
-        } else {
-            addFloat({ heroBattlePos(gTargetAlly).x, heroBattlePos(gTargetAlly).y - 70 },
-                     "No effect", Color{ 200, 200, 200, 255 });
+        bool reviveItem = (gPendingItem == IT_PHOENIX || gPendingItem == IT_ELIXIR);
+        bool reviveSpell = false;
+        if (gPendingSpell >= 0) {
+            SpellList sl = spellsFor(g.party[gActing].klass, g.party[gActing].level);
+            if (sl.spells && gPendingSpell < sl.count &&
+                std::strcmp(sl.spells[gPendingSpell].name, "Revive") == 0)
+                reviveSpell = true;
         }
-        endHeroTurn(hero);
-    } else {
-        endHeroTurn(hero);
+        if (g.party[i].ko && !reviveItem && !reviveSpell) continue;
+        Rectangle r{ heroBattlePos(i).x - 24, heroBattlePos(i).y - 64, 48, 68 };
+        if (CheckCollisionPointRec(m, r)) {
+            if (gTargetAlly != i) PlaySound(g.assets.cursor);
+            gTargetAlly = i;
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { confirmAllyTarget(); return; }
+        }
     }
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) { gTargetAlly = (gTargetAlly + 1) % 3; PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) { gTargetAlly = (gTargetAlly + 2) % 3; PlaySound(g.assets.cursor); }
+    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) { confirmAllyTarget(); return; }
+    if (IsKeyPressed(KEY_ESCAPE)) { PlaySound(g.assets.cancel); gPhase = gTargetReturn; gPendingSpell = -1; gPendingItem = -1; }
 }
 
-void useItemOnHero(int hero, int item, int /*unused*/) {
-    // items are targeted at allies in this design; defend against misuse
-    (void)hero; (void)item;
-}
-
-} // namespace
-
-void battleUpdate(float dt) {
-    switch (gPhase) {
-        case BP_INTRO:   updateIntro(dt); break;
-        case BP_MAIN:
-        case BP_MENU:
-        case BP_MAGIC:
-        case BP_ITEM:
-        case BP_TARGET_FOE:
-        case BP_TARGET_ALLY: updateMain(dt); break;
-        case BP_VICTORY: updateVictory(dt); break;
-        case BP_DEFEAT:  updateDefeat(dt); break;
-        case BP_FLED:    updateFled(dt); break;
-    }
-    if (gPhase == BP_MENU) updateMenuInput();
-    else if (gPhase == BP_MAGIC) updateMagicInput();
-    else if (gPhase == BP_ITEM) updateItemInput();
-    else if (gPhase == BP_TARGET_FOE) updateTargetFoe();
-    else if (gPhase == BP_TARGET_ALLY) updateTargetAlly();
-}
-
-namespace {
-
-// ================================================================ draw
+// ---------------------------------------------------------------- drawing
 Color lerpCol(Color a, Color b, float t) {
-    return { (unsigned char)(a.r + (b.r - a.r) * t), (unsigned char)(a.g + (b.g - a.g) * t),
-             (unsigned char)(a.b + (b.b - a.b) * t), (unsigned char)(a.a + (b.a - a.a) * t) };
+    auto c = [&](unsigned char x, unsigned char y) { return (unsigned char)(x + (y - x) * t); };
+    return { c(a.r, b.r), c(a.g, b.g), c(a.b, b.b), c(a.a, b.a) };
 }
 
 void drawBattleBackground() {
-    TileInfo t = sampleTile((int)floorf(g.px), (int)floorf(g.py));
-    bool snow = (t.kind == TK_SNOW || t.kind == TK_ICE);
-    bool forest = moisture((float)g.px, (float)g.py, g.worldSeed) > 0.55f;
-    Color skyTop = snow ? Color{40, 44, 70, 255} : Color{24, 28, 56, 255};
-    Color skyMid = snow ? Color{110, 100, 120, 255} : Color{84, 52, 88, 255};
-    Color skyHor = snow ? Color{212, 178, 140, 255} : Color{216, 124, 70, 255};
-    int horizon = 148;
-    for (int y = 0; y < horizon; y += 2) {
-        float f = y / (float)horizon;
-        Color c = (f < 0.55f) ? lerpCol(skyTop, skyMid, f / 0.55f) : lerpCol(skyMid, skyHor, (f - 0.55f) / 0.45f);
-        DrawRectangle(0, y, VRES_W, 2, c);
+    // a stylised sky + hills backdrop built from the palette (no extra art needed)
+    float t = gTime;
+    DrawRectangle(-8, -12, VRES_W + 16, VRES_H + 24, Color{ 40, 52, 92, 255 });
+    DrawRectangleGradientV(0, 0, VRES_W, VRES_H,
+                           Color{ 56, 74, 132, 255 }, Color{ 148, 176, 208, 255 });
+    // sun / moon
+    DrawCircleGradient(VRES_W - 74, 46, 26, Fade(Color{ 255, 236, 170, 255 }, 0.9f), BLANK);
+    // distant hills
+    for (int layer = 0; layer < 3; layer++) {
+        Color c = lerpCol({ 86, 116, 152, 255 }, { 44, 62, 84, 255 }, layer / 2.0f);
+        for (int x = -20; x < VRES_W + 20; x += 8) {
+            float h = 70.0f + sinf((x + layer * 40) * 0.012f + layer * 1.7f) * 26.0f +
+                      sinf((x + layer * 13) * 0.031f) * 10.0f;
+            DrawRectangle(x, (int)(150 + layer * 26 - h), 9, (int)(h + 60), c);
+        }
     }
-    // sun
-    Vector2 sun = { 356, 118 };
-    DrawCircleV(sun, 30, Fade(Color{255, 214, 130, 255}, 0.35f));
-    DrawCircleV(sun, 17, Color{255, 224, 150, 255});
-    // ridge lines (sawtooth silhouettes)
-    for (int x = 0; x < VRES_W; x += 2) {
-        float f = x * 0.028f;
-        float r1 = 118.0f + sinf(f + 1.7f) * 16.0f + sinf(f * 0.37f + 0.4f) * 22.0f;
-        DrawRectangle(x, (int)r1, 2, horizon - (int)r1, Color{23, 29, 51, 255});
+    // grass stage
+    DrawRectangleGradientV(0, 196, VRES_W, VRES_H - 196,
+                           Color{ 96, 140, 78, 255 }, Color{ 44, 72, 44, 255 });
+    for (int i = 0; i < 60; i++) {
+        float x = hashf(i, 3, 5u) * VRES_W;
+        float y = 196 + hashf(i, 7, 9u) * (VRES_H - 196);
+        DrawRectangle((int)x, (int)y, 1, 2, Fade(Color{ 150, 200, 120, 255 }, 0.35f));
     }
-    for (int x = 0; x < VRES_W; x += 2) {
-        float f = x * 0.017f;
-        float r2 = 136.0f + sinf(f + 4.1f) * 12.0f + sinf(f * 0.5f + 2.2f) * 14.0f;
-        DrawRectangle(x, (int)r2, 2, horizon - (int)r2, Color{17, 22, 40, 255});
-    }
-    // ground
-    Color gTop = snow ? Color{84, 84, 104, 255} : (forest ? Color{30, 52, 34, 255} : Color{46, 72, 44, 255});
-    Color gBot = snow ? Color{52, 52, 70, 255} : (forest ? Color{20, 36, 24, 255} : Color{30, 50, 30, 255});
-    for (int y = horizon; y < VRES_H; y += 2) {
-        float f = (y - horizon) / (float)(VRES_H - horizon);
-        DrawRectangle(0, y, VRES_W, 2, lerpCol(gTop, gBot, f));
-    }
-    // battle clearing
-    DrawRectangleGradientH(0, 0, 0, 0, BLANK, BLANK); // no-op keep symmetry
-    DrawEllipse(256, 232, 236, 46, Fade(Color{0, 0, 0, 255}, 0.28f));
-    DrawEllipse(256, 232, 200, 36, Fade(Color{255, 255, 255, 255}, 0.05f));
+    (void)t;
 }
 
 void drawHpMiniBar(float x, float y, float w, float frac, Color col) {
-    DrawRectangle((int)x, (int)y, (int)w, 4, Color{10, 10, 18, 220});
-    DrawRectangle((int)x, (int)y, (int)(w * std::max(0.0f, std::min(1.0f, frac))), 4, col);
+    drawBar(x, y, w, 4, frac, col, Color{ 16, 18, 32, 255 });
 }
 
 void drawEnemies() {
     for (int i = 0; i < gEnemyCount; i++) {
         EnemySlot& e = gEnemies[i];
-        Texture2D& tex = g.assets.enemy[(int)e.kind];
-        float sc = 2.2f;
-        float w = tex.width * sc, h = tex.height * sc;
-        float bob = e.alive ? sinf(gTime * 2.2f + e.bob) * 3.0f : 0.0f;
-        float drawX = e.pos.x - w / 2 + ((e.hitT > 0) ? sinf(gTime * 80.0f) * 3.5f * (e.hitT / 0.35f) : 0.0f);
-        float drawY = e.pos.y - h + bob;
-        // shadow
-        DrawEllipse((int)e.pos.x, (int)(e.pos.y) + 2, (int)(w * 0.42f), 6, Fade(BLACK, 0.35f));
-        // lunge toward heroes (leftwards)
-        if (gEnemyLunge > 0 && gEnemyLungeIdx == i) {
-            float p = 1.0f - gEnemyLunge / 0.32f;
-            drawX -= sinf(p * 3.14159f) * 22.0f;
-        }
-        Color tint = (e.hitT > 0) ? Color{255, 190, 170, 255} : WHITE;
+        Texture2D& t = g.assets.enemyBig[(int)e.kind];
+        if (t.id == 0) continue;
+        float bob = sinf(gTime * 2.2f + e.bob) * 2.0f;
+        float lunge = 0.0f;
+        if (gEnemyLunge > 0 && gEnemyLungeIdx == i) lunge = sinf((0.32f - gEnemyLunge) * 14.0f) * 14.0f;
+        Color tint = WHITE;
+        if (e.hitT > 0) tint = (fmodf(e.hitT * 30.0f, 2.0f) < 1.0f) ? Color{ 255, 170, 170, 255 } : WHITE;
         if (!e.alive) {
-            if (e.poofT > 0) {
-                float a = e.poofT / 0.8f;
-                DrawTexturePro(g.assets.fxPoof, { 0, 0, (float)g.assets.fxPoof.width, (float)g.assets.fxPoof.height },
-                               { e.pos.x - 28 * a, e.pos.y - 30, 56 * a + 20, 38 * a + 14 }, { 0, 0 }, 0.0f, Fade(WHITE, a));
-            }
-            continue;
+            float a = std::max(0.0f, e.poofT / 0.8f);
+            tint = Fade(WHITE, a);
         }
-        DrawTexturePro(tex, { 0, 0, (float)tex.width, (float)tex.height }, { drawX, drawY, w, h }, { 0, 0 }, 0.0f, tint);
-        // target cursor
-        if (gPhase == BP_TARGET_FOE && i == gTargetFoe) {
-            float ty = drawY - 12 - sinf(gTime * 6.0f) * 3.0f;
-            DrawTriangle({ e.pos.x - 6, ty }, { e.pos.x + 6, ty }, { e.pos.x, ty + 8 }, Color{255, 214, 90, 255});
-            drawHpMiniBar(e.pos.x - 24, e.pos.y + 6, 48, (float)e.hp / (float)e.maxHp, Color{235, 120, 90, 255});
-            const char* nm = enemyDef((int)e.kind).name;
-            Vector2 ts = MeasureTextEx(g.assets.font8, nm, 8, 1);
-            DrawTextEx(g.assets.font8, nm, { e.pos.x - ts.x / 2, e.pos.y + 13 }, 8, 1, Color{255, 228, 160, 255});
+        Rectangle dst{ e.pos.x - t.width * 0.5f - lunge * 0.4f,
+                       e.pos.y - t.height + bob, (float)t.width, (float)t.height };
+        DrawEllipse((int)e.pos.x, (int)e.pos.y, t.width * 0.32f, 6, Fade(BLACK, 0.25f));
+        DrawTexturePro(t, { 0, 0, (float)t.width, (float)t.height }, dst, { 0, 0 }, 0.0f, tint);
+        if (e.alive) {
+            // target reticle
+            if (gPhase == BP_TARGET_FOE && gTargetFoe == i) {
+                float y = e.pos.y - t.height - 14;
+                float w = t.width + 8;
+                float x = e.pos.x - w * 0.5f;
+                Color rc = Color{ 255, 224, 120, 255 };
+                DrawRectangleLines((int)x, (int)y, (int)w, (int)(t.height + 16), rc);
+                drawTextCentered(enemyDef((int)e.kind).name, e.pos.x, y - 12, rc, 8);
+            }
+            // health pip bar
+            float w = std::min(90.0f, (float)t.width * 0.8f);
+            drawHpMiniBar(e.pos.x - w * 0.5f, e.pos.y + 4, w, (float)e.hp / std::max(1, e.maxHp),
+                          Color{ 220, 90, 90, 255 });
+            // ATB gauge under it
+            drawBar(e.pos.x - w * 0.5f, e.pos.y + 10, w, 2, e.gauge,
+                    Color{ 240, 180, 90, 200 }, Color{ 20, 24, 40, 160 });
         }
     }
 }
@@ -797,253 +801,255 @@ void drawHeroes() {
     for (int i = 0; i < 3; i++) {
         Hero& h = g.party[i];
         Vector2 pos = heroBattlePos(i);
-        Texture2D& sheet = g.assets.heroWalk[h.klass];
-        float sc = 2.0f;
-        float fw = 24 * sc, fh = 32 * sc;
+        Texture2D& sheet = g.assets.heroWalk[std::max(0, std::min(2, h.klass))];
+        int row = h.ko ? 0 : 2;
+        int frame = h.ko ? 1 : (1 + ((int)(gTime * 5.0f + i) & 1));
+        Color tint = h.ko ? Color{ 120, 120, 150, 255 } : WHITE;
+        if (gHeroHitFlash > 0 && fmodf(gHeroHitFlash * 30.0f, 2.0f) < 1.0f) tint = Color{ 255, 160, 150, 255 };
         float lunge = 0.0f;
-        if (gLunge[i] > 0) { float p = 1.0f - gLunge[i] / 0.32f; lunge = sinf(p * 3.14159f) * 16.0f; }
-        float bob = (!h.ko) ? sinf(gTime * 2.6f + i * 2.1f) * 1.5f : 0.0f;
-        Rectangle src = { 0, 64, 24, 32 };   // OpenRTP side idle
-        Rectangle dst = { pos.x - fw / 2 + lunge, pos.y - fh + bob, fw, fh };
-        DrawEllipse((int)pos.x + (int)lunge, (int)pos.y + 2, 17, 4, Fade(BLACK, 0.35f));
-        Color tint = h.ko ? Color{110, 110, 135, 255} : ((gHeroHitFlash > 0) ? Color{255, 200, 190, 255} : WHITE);
+        if (gLunge[i] > 0) lunge = sinf((0.32f - gLunge[i]) * 14.0f) * 16.0f;
+        float baseX = pos.x + lunge;
+        float baseY = pos.y;
+        if (gActing == i) baseY -= 2;
+        Rectangle src{ (float)(frame * 24), (float)(row * 32), 24, 32 };
+        Rectangle dst{ baseX - 24, baseY - 64, 48, 64 };
+        DrawEllipse((int)baseX, (int)baseY, 13, 4, Fade(BLACK, 0.28f));
         DrawTexturePro(sheet, src, dst, { 0, 0 }, 0.0f, tint);
-        if (!h.ko && gHeroDefending[i]) {
-            DrawTextEx(g.assets.font8, "DEF", { pos.x - 11, pos.y - fh - 9 + bob }, 8, 1, Color{140, 190, 255, 255});
+        if (gPhase == BP_TARGET_ALLY && gTargetAlly == i) {
+            DrawRectangleLines((int)(baseX - 26), (int)(baseY - 68), 52, 74, Color{ 255, 224, 120, 255 });
         }
-        if (h.ko) {
-            DrawTextEx(g.assets.font8, "KO", { pos.x - 8, pos.y - 14 }, 8, 1, Color{255, 100, 100, 255});
-        }
-        if (gPhase == BP_TARGET_ALLY && i == gTargetAlly) {
-            float ty = pos.y - fh - 12 - sinf(gTime * 6.0f) * 3.0f;
-            DrawTriangle({ pos.x - 6, ty }, { pos.x + 6, ty }, { pos.x, ty + 8 }, Color{120, 230, 140, 255});
-        }
-    }
-}
-
-void drawBar(float x, float y, float w, float h, float frac, Color col, Color bg = Color{16, 16, 26, 255}) {
-    DrawRectangle((int)x, (int)y, (int)w, (int)h, bg);
-    DrawRectangle((int)x, (int)y, (int)(w * std::max(0.0f, std::min(1.0f, frac))), (int)h, col);
-}
-
-void drawHeroPanel(int i) {
-    Hero& h = g.party[i];
-    Rectangle r = heroPanelRect(i);
-    bool acting = (gActing == i) && (gPhase == BP_MENU || gPhase == BP_MAGIC || gPhase == BP_ITEM || gPhase == BP_TARGET_FOE || gPhase == BP_TARGET_ALLY);
-    drawPanel(r);
-    if (acting) {
-        float pulse = 0.6f + 0.4f * sinf(gTime * 7.0f);
-        DrawRectangleRoundedLinesEx({ r.x - 2, r.y - 2, r.width + 4, r.height + 4 }, 0.14f, 6, 1.6f,
-                                    Fade(Color{255, 214, 90, 255}, pulse));
-    }
-    // portrait
-    Texture2D& face = g.assets.face[h.klass];
-    DrawTexturePro(face, { 0, 0, 32, 32 }, { r.x + 5, r.y + 7, 34, 34 }, { 0, 0 }, 0.0f, h.ko ? Color{120,120,140,255} : WHITE);
-    float tx = r.x + 45;
-    DrawTextEx(g.assets.font8, heroName(h.klass), { tx, r.y + 4 }, 8, 1, Color{235, 238, 255, 255});
-    char hp[48], mp[48];
-    snprintf(hp, sizeof(hp), "HP %d", h.hp);
-    snprintf(mp, sizeof(mp), "MP %d", h.mp);
-    DrawTextEx(g.assets.font8, hp, { tx, r.y + 14 }, 8, 1, Color{255, 200, 190, 255});
-    drawBar(tx + 30, r.y + 16, 64, 5, (float)h.hp / h.maxHp, Color{224, 80, 70, 255});
-    DrawTextEx(g.assets.font8, mp, { tx, r.y + 23 }, 8, 1, Color{180, 210, 255, 255});
-    drawBar(tx + 30, r.y + 25, 64, 4, (float)h.mp / h.maxMp, Color{70, 140, 230, 255});
-    // ATB bar
-    float atb = gHeroGauge[i];
-    Color atbCol = (atb >= 1.0f) ? (sinf(gTime * 10.0f) > 0 ? Color{255, 240, 150, 255} : Color{255, 200, 80, 255}) : Color{228, 184, 60, 255};
-    drawBar(tx, r.y + 33, 94, 5, atb, atbCol);
-    if (h.ko) {
-        DrawRectangleRounded(r, 0.12f, 6, Fade(Color{40, 8, 8, 255}, 0.45f));
-        DrawTextEx(g.assets.font8, "KO", { r.x + r.width / 2 - 8, r.y + r.height - 11 }, 8, 1, Color{255, 90, 90, 255});
     }
 }
 
 void drawFloaters() {
     for (auto& f : gFloaters) {
-        float a = 1.0f - f.t / 1.15f;
-        Vector2 p = { f.pos.x, f.pos.y - f.t * 24.0f };
-        Vector2 ts = MeasureTextEx(g.assets.font8, f.text.c_str(), 8, 1);
-        DrawTextEx(g.assets.font8, f.text.c_str(), { p.x - ts.x / 2 + 1, p.y + 1 }, 8, 1, Fade(BLACK, a * 0.7f));
-        DrawTextEx(g.assets.font8, f.text.c_str(), { p.x - ts.x / 2, p.y }, 8, 1, Fade(f.color, a));
+        float a = 1.0f - std::max(0.0f, (f.t - 0.7f) / 0.45f);
+        float y = f.pos.y - f.t * 22.0f;
+        drawTextCentered(f.text.c_str(), f.pos.x, y, Fade(f.color, a), 8);
     }
 }
 
 void drawProjectiles() {
     if (!gFireball.active) return;
     float t = gFireball.t / gFireball.dur;
-    Vector2 p;
-    p.x = gFireball.from.x + (gFireball.to.x - gFireball.from.x) * t;
-    p.y = gFireball.from.y + (gFireball.to.y - gFireball.from.y) * t - sinf(t * 3.14159f) * 26.0f;
-    Texture2D& fb = g.assets.fxFireball;
-    DrawTexturePro(fb, { 0, 0, (float)fb.width, (float)fb.height }, { p.x - 18, p.y - 18, 36, 36 }, { 0, 0 }, 0.0f, WHITE);
+    float x = gFireball.from.x + (gFireball.to.x - gFireball.from.x) * t;
+    float y = gFireball.from.y + (gFireball.to.y - gFireball.from.y) * t - sinf(t * 3.14159f) * 22.0f;
+    DrawCircleGradient((int)x, (int)y, 14, Fade(Color{ 255, 210, 120, 255 }, 0.95f),
+                       Fade(Color{ 200, 60, 30, 255 }, 0.15f));
+    DrawCircleV({ x, y }, 5, Color{ 255, 250, 220, 255 });
 }
 
-const char* enemyListText() {
-    static char buf[96];
-    buf[0] = 0;
-    int counts[EN_COUNT] = { 0, 0, 0, 0, 0 };
-    for (int i = 0; i < gEnemyCount; i++) counts[(int)gEnemies[i].kind]++;
-    int pos = 0;
-    bool first = true;
-    for (int k = 0; k < EN_COUNT; k++) {
-        if (counts[k] == 0) continue;
-        if (!first) pos += snprintf(buf + pos, sizeof(buf) - pos, " and ");
-        first = false;
-        if (counts[k] > 1) pos += snprintf(buf + pos, sizeof(buf) - pos, "%s x%d", enemyDef(k).name, counts[k]);
-        else pos += snprintf(buf + pos, sizeof(buf) - pos, "%s", enemyDef(k).name);
+void drawHeroPanel(int i) {
+    const Hero& h = g.party[i];
+    float pw = 158.0f, ph = 54.0f, gap = 6.0f;
+    float x = 6.0f + i * (pw + gap);
+    float y = VRES_H - ph - 4.0f;
+    drawWindow({ x, y, pw, ph });
+    Texture2D& f = g.assets.face[i == 0 ? FACE_KNIGHT : (i == 1 ? FACE_MAGE : FACE_CLERIC)];
+    if (f.id) {
+        DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height }, { x + 6, y + 6, 30, 30 },
+                       { 0, 0 }, 0.0f, h.ko ? Color{ 130, 130, 160, 255 } : WHITE);
     }
-    return buf;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s", heroName(h.klass));
+    drawText(buf, x + 42, y + 6, h.ko ? Color{ 200, 140, 140, 255 } : Color{ 236, 240, 255, 255 }, 8);
+    snprintf(buf, sizeof(buf), "Lv %d", h.level);
+    drawText(buf, x + pw - 40, y + 6, Color{ 200, 210, 240, 255 }, 8);
+    snprintf(buf, sizeof(buf), "%d/%d", h.hp, h.maxHp);
+    drawText(buf, x + 42, y + 19, Color{ 170, 240, 180, 255 }, 8);
+    drawBar(x + 42, y + 29, pw - 50, 3, (float)h.hp / std::max(1, h.maxHp),
+            Color{ 96, 220, 120, 255 }, Color{ 24, 30, 50, 255 });
+    snprintf(buf, sizeof(buf), "%d/%d", h.mp, h.maxMp);
+    drawText(buf, x + 42, y + 34, Color{ 160, 200, 255, 255 }, 8);
+    drawBar(x + 42, y + 44, pw - 50, 2, (float)h.mp / std::max(1, h.maxMp),
+            Color{ 96, 160, 255, 255 }, Color{ 24, 30, 50, 255 });
+    // ATB gauge
+    drawBar(x + 6, y + ph - 6, pw - 12, 3, gHeroGauge[i],
+            h.ko ? Color{ 90, 90, 120, 255 } : Color{ 255, 210, 120, 255 }, Color{ 20, 24, 40, 255 });
+    if (gActing == i) {
+        DrawRectangleLines((int)x, (int)y, (int)pw, (int)ph, Color{ 255, 224, 120, 255 });
+    }
 }
 
 void drawIntro() {
-    float t = gPhaseT;
-    float slide;
-    if (t < 0.5f) slide = t / 0.5f;         // in
-    else if (t < 0.95f) slide = 1.0f;       // hold
-    else slide = std::max(0.0f, 1.0f - (t - 0.95f) / 0.55f);  // out
-    int barH = (int)(152 * slide);
-    DrawRectangle(0, 0, VRES_W, barH, Color{8, 8, 14, 255});
-    DrawRectangle(0, VRES_H - barH, VRES_W, barH, Color{8, 8, 14, 255});
-    if (t > 0.35f && t < 1.35f) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "A wild %s appeared!", enemyListText());
-        Vector2 ts = MeasureTextEx(g.assets.font8, buf, 8, 1);
-        Rectangle r = { VRES_W / 2.0f - ts.x / 2 - 12, 124, ts.x + 24, 22 };
-        drawPanel(r);
-        DrawTextEx(g.assets.font8, buf, { r.x + 12, r.y + 7 }, 8, 1, Color{255, 240, 200, 255});
+    float a = std::min(1.0f, gPhaseT / 0.5f);
+    for (int y = 0; y < VRES_H; y += 2) DrawRectangle(0, y, VRES_W, 2, Fade(BLACK, 0.45f * a));
+    const char* names[3] = { "", "", "" };
+    (void)names;
+    std::string title = "";
+    for (int i = 0; i < gEnemyCount; i++) {
+        if (i) title += " & ";
+        title += enemyDef((int)gEnemies[i].kind).name;
     }
+    if (!title.empty()) title[0] = (char)toupper(title[0]);
+    DrawRectangle(0, VRES_H / 2 - 20, VRES_W, 40, Fade(Color{ 6, 8, 20, 255 }, 0.8f * a));
+    drawTextCentered(title.c_str(), VRES_W * 0.5f, VRES_H / 2 - 10, Fade(Color{ 255, 236, 176, 255 }, a), 16);
+    drawTextCentered("attacks!", VRES_W * 0.5f, VRES_H / 2 + 6, Fade(WHITE, a * 0.8f), 8);
 }
 
 void drawMenuBox() {
-    if (gActing < 0) return;
-    Rectangle pr = heroPanelRect(gActing);
-    Rectangle box = { pr.x + 6, pr.y - 80, 116, 74 };
-    drawPanel(box);
-    const char* labels[5] = { "Attack", "Magic", "Item", "Defend", "Run" };
+    drawWindow({ 4, 54, 104, 106 });
+    const char* cmds[5] = { "Attack", "Magic", "Item", "Defend", "Flee" };
     for (int i = 0; i < 5; i++) {
-        Color col = (i == gMenuSel) ? Color{255, 224, 120, 255} : Color{220, 226, 255, 255};
-        if (i == gMenuSel) DrawTextEx(g.assets.font8, "-", { box.x + 2, box.y + 4 + i * 13 }, 8, 1, col);
-        DrawTextEx(g.assets.font8, labels[i], { box.x + 12, box.y + 4 + i * 13 }, 8, 1, col);
+        bool sel = (gMenuSel == i);
+        if (sel)
+            DrawRectangleRounded({ 8, 60.0f + i * 20, 96, 17 }, 0.3f, 4, Fade(Color{ 70, 90, 180, 255 }, 0.85f));
+        drawText(cmds[i], 14, 64.0f + i * 20, sel ? Color{ 255, 236, 176, 255 } : WHITE, 8);
     }
+    const Hero& h = g.party[gActing];
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s  Lv %d", heroName(h.klass), h.level);
+    drawWindow({ 4, 32, 150, 20 });
+    drawText(buf, 10, 38, Color{ 236, 240, 255, 255 }, 8);
 }
 
 void drawMagicBox() {
-    if (gActing < 0) return;
     Hero& h = g.party[gActing];
-    int count = 0; const SpellDef* sp = spellsFor(h.klass, count);
-    Rectangle pr = heroPanelRect(gActing);
-    Rectangle box = { pr.x + 6, pr.y - 96, 170, (float)(20 + count * 13) };
-    drawPanel(box);
-    char title[32]; snprintf(title, sizeof(title), "Magic  MP %d", h.mp);
-    DrawTextEx(g.assets.font8, title, { box.x + 6, box.y + 4 }, 8, 1, Color{170, 210, 255, 255});
-    for (int i = 0; i < count; i++) {
-        bool sel = (i == gMagicSel);
-        bool can = h.mp >= sp[i].cost;
-        Color col = !can ? Color{110, 110, 140, 255} : (sel ? Color{255, 224, 120, 255} : Color{220, 226, 255, 255});
-        char row[48]; snprintf(row, sizeof(row), "%s %d", sp[i].name, sp[i].cost);
-        if (sel) DrawTextEx(g.assets.font8, "-", { box.x + 2, box.y + 14 + i * 13 }, 8, 1, col);
-        DrawTextEx(g.assets.font8, row, { box.x + 12, box.y + 14 + i * 13 }, 8, 1, col);
+    SpellList list = spellsFor(h.klass, h.level);
+    float hh = list.count * 18 + 12;
+    drawWindow({ 4, 260 - hh, 236, hh });
+    for (int i = 0; i < list.count; i++) {
+        const SpellDef& sp = list.spells[i];
+        bool sel = (gMagicSel == i);
+        bool can = h.mp >= sp.cost;
+        if (sel) DrawRectangleRounded({ 8, 260 - hh + 5.0f + i * 18, 228, 17 }, 0.3f, 4,
+                                      Fade(Color{ 70, 90, 180, 255 }, 0.85f));
+        Color c = can ? (sel ? Color{ 255, 236, 176, 255 } : WHITE) : Color{ 140, 140, 170, 255 };
+        drawText(sp.name, 12, 260 - hh + 9.0f + i * 18, c, 8);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%2d MP", sp.cost);
+        drawText(buf, 206, 260 - hh + 9.0f + i * 18, c, 8);
     }
+    drawText("ESC: back", 12, 262, Color{ 170, 180, 210, 220 }, 8);
 }
 
 void drawItemBox() {
-    if (gActing < 0) return;
-    auto items = consumableList();
-    Rectangle pr = heroPanelRect(gActing);
-    Rectangle box = { pr.x + 6, pr.y - 100, 178, (float)(22 + std::max(1, (int)items.size()) * 13) };
-    drawPanel(box);
-    DrawTextEx(g.assets.font8, "Items", { box.x + 6, box.y + 4 }, 8, 1, Color{180, 255, 190, 255});
-    if (items.empty()) {
-        DrawTextEx(g.assets.font8, "(empty)", { box.x + 12, box.y + 15 }, 8, 1, Color{150, 150, 170, 255});
-        return;
+    auto list = consumableList();
+    float hh = list.size() * 18 + 12;
+    if (hh < 30) hh = 30;
+    drawWindow({ 4, 260 - hh, 236, hh });
+    for (int i = 0; i < (int)list.size(); i++) {
+        bool sel = (gItemSel == i);
+        if (sel) DrawRectangleRounded({ 8, 260 - hh + 5.0f + i * 18, 228, 17 }, 0.3f, 4,
+                                      Fade(Color{ 70, 90, 180, 255 }, 0.85f));
+        drawItemIcon(list[i].second, 12, 260 - hh + 7.0f + i * 18, 12);
+        Color c = sel ? Color{ 255, 236, 176, 255 } : WHITE;
+        drawText(list[i].first, 28, 260 - hh + 9.0f + i * 18, c, 8);
+        char buf[16];
+        snprintf(buf, sizeof(buf), "x%d", itemCount(list[i].second));
+        drawText(buf, 214, 260 - hh + 9.0f + i * 18, c, 8);
     }
-    for (int i = 0; i < (int)items.size(); i++) {
-        bool sel = (i == gItemSel);
-        Color col = sel ? Color{255, 224, 120, 255} : Color{220, 226, 255, 255};
-        char row[48];
-        snprintf(row, sizeof(row), "%s x%d", items[i].first, g.inventory[items[i].second]);
-        if (sel) DrawTextEx(g.assets.font8, "-", { box.x + 2, box.y + 14 + i * 13 }, 8, 1, col);
-        DrawTextEx(g.assets.font8, row, { box.x + 12, box.y + 14 + i * 13 }, 8, 1, col);
-    }
-}
-
-void drawTargetHint() {
-    const char* hint = (gPhase == BP_TARGET_FOE) ? "Choose a target  (Esc: back)" : "Choose an ally  (Esc: back)";
-    Vector2 ts = MeasureTextEx(g.assets.font8, hint, 8, 1);
-    DrawTextEx(g.assets.font8, hint, { VRES_W / 2.0f - ts.x / 2, 8 }, 8, 1, Color{220, 226, 255, 255});
+    if (list.empty()) drawText("No items.", 14, 260 - hh + 10, Color{ 190, 200, 230, 255 }, 8);
 }
 
 void drawVictory() {
-    DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{10, 10, 24, 255}, 0.45f * std::min(1.0f, gPhaseT * 2.0f)));
-    // banner
-    const char* txt = "VICTORY!";
-    Vector2 ts = MeasureTextEx(g.assets.font32, txt, 32, 2);
-    float bob = sinf(gTime * 3.0f) * 2.0f;
-    DrawTextEx(g.assets.font32, txt, { VRES_W / 2.0f - ts.x / 2 + 2, 44 + bob + 2 }, 32, 2, Color{90, 40, 10, 255});
-    DrawTextEx(g.assets.font32, txt, { VRES_W / 2.0f - ts.x / 2, 44 + bob }, 32, 2, Color{255, 214, 90, 255});
-    // results panel
-    Rectangle r = { 146, 104, 220, 118 };
-    drawPanel(r);
+    for (int y = 0; y < VRES_H; y += 2) DrawRectangle(0, y, VRES_W, 2, Fade(BLACK, 0.35f));
+    float w = 260, h = 148;
+    float x = VRES_W * 0.5f - w * 0.5f, y = VRES_H * 0.5f - h * 0.5f - 10;
+    drawWindow({ x, y, w, h });
+    drawTextCentered("VICTORY", VRES_W * 0.5f, y + 10, Color{ 255, 236, 176, 255 }, 16);
     char buf[64];
-    snprintf(buf, sizeof(buf), "EXP  +%d", gExpGain);
-    DrawTextEx(g.assets.font8, buf, { r.x + 14, r.y + 12 }, 8, 1, Color{235, 238, 255, 255});
-    snprintf(buf, sizeof(buf), "Gil  +%d G", gGilGain);
-    DrawTextEx(g.assets.font8, buf, { r.x + 14, r.y + 26 }, 8, 1, Color{255, 224, 120, 255});
-    int ly = r.y + 44;
+    snprintf(buf, sizeof(buf), "%d EXP", gExpGain);
+    drawText(buf, x + 20, y + 36, Color{ 200, 230, 255, 255 }, 8);
+    snprintf(buf, sizeof(buf), "%d gil", gGilGain);
+    drawText(buf, x + 150, y + 36, Color{ 255, 230, 160, 255 }, 8);
+    float ly = y + 54;
     for (int i = 0; i < 3; i++) {
         if (gLevelUps[i] > 0) {
-            snprintf(buf, sizeof(buf), "%s -> Lv %d!", heroName(g.party[i].klass), g.party[i].level);
-            DrawTextEx(g.assets.font8, buf, { r.x + 14, (float)ly }, 8, 1, Color{140, 255, 160, 255});
-            ly += 13;
+            snprintf(buf, sizeof(buf), "%s reached level %d!", heroName(g.party[i].klass),
+                     g.party[i].level);
+            drawText(buf, x + 20, ly, Color{ 160, 255, 180, 255 }, 8);
+            ly += 14;
         }
     }
-    if (gPhaseT > 1.0f && sinf(gTime * 4.0f) > -0.2f) {
-        const char* hint = "click / Enter to continue";
-        Vector2 hts = MeasureTextEx(g.assets.font8, hint, 8, 1);
-        DrawTextEx(g.assets.font8, hint, { VRES_W / 2.0f - hts.x / 2, (float)(r.y + r.height - 14) }, 8, 1, Color{200, 208, 255, 200});
+    for (auto& l : gLoot) {
+        snprintf(buf, sizeof(buf), "Found %s", l.c_str());
+        drawText(buf, x + 20, ly, Color{ 255, 220, 170, 255 }, 8);
+        ly += 14;
     }
-}
-
-void drawDefeat() {
-    float a = std::min(1.0f, gPhaseT / 1.6f);
-    DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{0, 0, 0, 255}, a * 0.85f));
-    if (gPhaseT > 0.7f) {
-        const char* txt = "THE PARTY HAS FALLEN...";
-        Vector2 ts = MeasureTextEx(g.assets.font16, txt, 16, 1);
-        DrawTextEx(g.assets.font16, txt, { VRES_W / 2.0f - ts.x / 2, 116 }, 16, 1, Color{200, 60, 60, 255});
-        const char* sub = "the wilds keep their secrets";
-        Vector2 sts = MeasureTextEx(g.assets.font8, sub, 8, 1);
-        DrawTextEx(g.assets.font8, sub, { VRES_W / 2.0f - sts.x / 2, 148 }, 8, 1, Color{160, 150, 170, 255});
-    }
-}
-
-void drawFled() {
-    DrawRectangle(0, 0, VRES_W, VRES_H, Fade(BLACK, 0.4f));
-    const char* txt = "Got away safely.";
-    Vector2 ts = MeasureTextEx(g.assets.font16, txt, 16, 1);
-    DrawTextEx(g.assets.font16, txt, { VRES_W / 2.0f - ts.x / 2, 120 }, 16, 1, Color{220, 226, 255, 255});
+    if (fmodf(gTime * 2.0f, 2.0f) < 1.2f)
+        drawTextCentered("SPACE to continue", VRES_W * 0.5f, y + h - 18,
+                         Color{ 200, 210, 240, 255 }, 8);
 }
 
 } // namespace
 
+// ------------------------------------------------------------ exports
+void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fieldMonsterId) {
+    battleStartImpl(kinds, zoneLevel, fieldMonsterId);
+}
+bool battleIsActive() { return gActive; }
+
+void battleUpdate(float dt) {
+    if (!gActive) return;
+    switch (gPhase) {
+        case BP_INTRO:       updateIntro(dt); break;
+        case BP_MAIN:        updateMain(dt); break;
+        case BP_MENU:        gTime += dt; updateMain(0.0f); updateMenuInput(); break;
+        case BP_MAGIC:       gTime += dt; updateMain(0.0f); updateMagicInput(); break;
+        case BP_ITEM:        gTime += dt; updateMain(0.0f); updateItemInput(); break;
+        case BP_TARGET_FOE:  gTime += dt; updateMain(0.0f); updateTargetFoe(); break;
+        case BP_TARGET_ALLY: gTime += dt; updateMain(0.0f); updateTargetAlly(); break;
+        case BP_VICTORY:     updateVictory(dt); break;
+        case BP_DEFEAT:      updateDefeat(dt); break;
+        case BP_FLED:        updateFled(dt); break;
+    }
+    // animate floaters in every phase
+    for (auto& f : gFloaters) f.t += dt;
+    gFloaters.erase(std::remove_if(gFloaters.begin(), gFloaters.end(),
+                                   [](const Floater& f) { return f.t > 1.15f; }),
+                    gFloaters.end());
+    if (g.shakeT > 0) g.shakeT -= dt;
+}
+
 void battleDraw() {
+    if (!gActive) return;
+    float sx = 0, sy = 0;
+    if (g.shakeT > 0) {
+        sx = sinf(gTime * 63.0f) * g.shakeMag;
+        sy = cosf(gTime * 51.0f) * g.shakeMag;
+    }
+    DrawRectangle(0, 0, VRES_W, VRES_H, Color{ 8, 10, 18, 255 });
+    // render everything into an offset camera
+    Camera2D cam{ { sx, sy }, { 0, 0 }, 0.0f, 1.0f };
+    BeginMode2D(cam);
     drawBattleBackground();
     drawEnemies();
     drawHeroes();
     drawProjectiles();
+    EndMode2D();
+
     drawFloaters();
-    for (int i = 0; i < 3; i++) drawHeroPanel(i);
-    if (gPhase == BP_MENU) drawMenuBox();
-    else if (gPhase == BP_MAGIC) drawMagicBox();
-    else if (gPhase == BP_ITEM) drawItemBox();
-    else if (gPhase == BP_TARGET_FOE || gPhase == BP_TARGET_ALLY) drawTargetHint();
-    if (gPhase == BP_INTRO) drawIntro();
-    else if (gPhase == BP_VICTORY) drawVictory();
-    else if (gPhase == BP_DEFEAT) drawDefeat();
-    else if (gPhase == BP_FLED) drawFled();
-    // banner: whose turn
-    if (gPhase == BP_MENU && gActing >= 0 && gBannerT > 0) { /* keep quiet */ }
-    // flashes
     if (gHitFlash > 0) DrawRectangle(0, 0, VRES_W, VRES_H, Fade(WHITE, gHitFlash * 0.35f));
-    if (gHeroHitFlash > 0) DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{255, 60, 40, 255}, gHeroHitFlash * 0.25f));
+
+    if (gPhase == BP_INTRO) {
+        drawIntro();
+    } else if (gPhase == BP_VICTORY) {
+        drawVictory();
+    } else if (gPhase == BP_DEFEAT) {
+        DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{ 24, 4, 8, 255 }, 0.55f));
+        drawTextCentered("DEFEAT", VRES_W * 0.5f, VRES_H * 0.5f - 8, Color{ 255, 190, 190, 255 }, 24);
+    } else if (gPhase == BP_FLED) {
+        DrawRectangle(0, 0, VRES_W, VRES_H, Fade(BLACK, 0.4f));
+        drawTextCentered("Escaped!", VRES_W * 0.5f, VRES_H * 0.5f - 8, Color{ 220, 230, 255, 255 }, 16);
+    } else {
+        for (int i = 0; i < 3; i++) drawHeroPanel(i);
+        if (gPhase == BP_MENU) drawMenuBox();
+        else if (gPhase == BP_MAGIC) drawMagicBox();
+        else if (gPhase == BP_ITEM) drawItemBox();
+        else if (gPhase == BP_TARGET_FOE)
+            drawTextCentered("choose a target", VRES_W * 0.5f, VRES_H - 22,
+                             Color{ 255, 236, 176, 255 }, 8);
+        else if (gPhase == BP_TARGET_ALLY)
+            drawTextCentered("choose a companion", VRES_W * 0.5f, VRES_H - 22,
+                             Color{ 255, 236, 176, 255 }, 8);
+    }
+    if (gBannerT > 0) {
+        float a = std::min(1.0f, gBannerT);
+        DrawRectangle(0, 6, VRES_W, 22, Fade(Color{ 8, 10, 24, 255 }, 0.7f * a));
+        char buf[96];
+        const char* zn = zoneNameAt(g.px, g.py);
+        snprintf(buf, sizeof(buf), "%s  -  zone level %d", zn, zoneLevelAt(g.px, g.py));
+        drawTextCentered(buf, VRES_W * 0.5f, 12, Fade(WHITE, a), 8);
+    }
 }
