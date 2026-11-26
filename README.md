@@ -12,6 +12,8 @@ Built with [raylib](https://github.com/raysan5/raylib). The art is adapted from
 **OpenRTP** RPG Maker-style tiles, characters and portraits (see
 [CREDITS.md](CREDITS.md)).
 
+![Elmswick, the village the game opens in](docs/screenshots/village.png)
+
 ## Play
 
 Download the latest build from the **Releases** page (or from the artifacts
@@ -69,6 +71,14 @@ of any CI run):
   the binary), title-screen *Continue*, autosave slot in the options page.
 - **Dialog and portraits** — every named NPC has an OpenRTP face, a typewriter
   dialog box, and the shop / inn / temple flows live inside it.
+
+### A look at it
+
+| | |
+|---|---|
+| ![Autumn dialog](docs/screenshots/dialog.png) | ![Mira's Sundries](docs/screenshots/shop.png) |
+| ![ATB battle](docs/screenshots/battle.png) | ![The wilds](docs/screenshots/wilds.png) |
+| ![Title screen](docs/screenshots/title.png) | |
 
 ## Build from source
 
