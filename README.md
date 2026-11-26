@@ -1,8 +1,8 @@
 # A Place for Agents
 
-**An endless JRPG through a world that grows as you explore it.**
+**An endless SNES-JRPG through a world that grows as you explore it.**
 
-You wake on a quiet meadow at the edge of a wild that has no "end of the map."
+You wake ina village.
 Walk in any direction and the world keeps generating — forests, rivers, frozen
 reaches, lonely hills — and here and there, a village with a cobbled plaza,
 an inn to warm your bones, and a shop that sells honest steel.
