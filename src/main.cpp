@@ -361,8 +361,27 @@ static void drawWildObject(WildKind kind, float wx, float wy, int variantSeed) {
 static void drawVillageOverlay() {
     if (!g.villageLoaded) return;
     const Village& v = g.village;
-    // cobble plaza
     int pcx = (int)floorf(v.cx), pcy = (int)floorf(v.cy);
+    // dirt paths: plaza -> each doorstep (Bresenham), drawn under the plaza
+    for (const HouseInst& h : v.houses) {
+        int x0 = pcx, y0 = pcy, x1 = h.tx, y1 = h.ty + 1;
+        int dx = (x1 >= x0) ? (x1 - x0) : (x0 - x1), dy = (y1 >= y0) ? (y1 - y0) : (y0 - y1);
+        int sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1;
+        int err = dx - dy, x = x0, y = y0;
+        for (int guard = 0; guard < 64; guard++) {
+            float ddx = x - v.cx, ddy = y - v.cy;
+            if (ddx * ddx + ddy * ddy > 3.1f * 3.1f) {
+                TileInfo pt = sampleTile(x, y);
+                if (pt.kind == TK_GRASS || pt.kind == TK_COBBLE)
+                    DrawTexture(g.assets.dirt, (int)(x * TILE - camX), (int)(y * TILE - camY), WHITE);
+            }
+            if (x == x1 && y == y1) break;
+            int e2 = 2 * err;
+            if (e2 > -dy) { err -= dy; x += sx; }
+            if (e2 < dx)  { err += dx; y += sy; }
+        }
+    }
+    // cobble plaza
     for (int ty = pcy - 4; ty <= pcy + 4; ty++) {
         for (int tx = pcx - 4; tx <= pcx + 4; tx++) {
             float dx = tx - v.cx, dy = ty - v.cy;
@@ -393,13 +412,6 @@ static void drawWorld() {
             }
             int sx = (int)(tx * TILE - camX), sy = (int)(ty * TILE - camY);
             DrawTexture(tex, sx, sy, WHITE);
-            // SNES shoreline: a dark lip of land where water meets dry ground
-            if (t.kind == TK_WATER) {
-                if (sampleTile(tx, ty - 1).kind != TK_WATER && sampleTile(tx, ty - 1).kind != TK_ICE)
-                    DrawRectangle(sx, sy, TILE, 2, Color{ 38, 52, 82, 200 });
-                if (sampleTile(tx - 1, ty).kind != TK_WATER && sampleTile(tx - 1, ty).kind != TK_ICE)
-                    DrawRectangle(sx, sy, 2, TILE, Fade(Color{38, 52, 82, 255}, 0.6f));
-            }
             // decorative tuft/flower overlays
             if (t.deco == 1) DrawTexture(g.assets.tuft[t.decoVariant], sx, sy, WHITE);
             else if (t.deco == 2) DrawTexture(g.assets.flower[t.decoVariant], sx, sy, WHITE);
@@ -477,8 +489,6 @@ static void drawWorld() {
                 if (h.variant == -1) tex = &g.assets.shop;
                 else if (h.variant == -2) tex = &g.assets.inn;
                 float feetX = h.tx * TILE - camX + TILE / 2.0f, feetY = (h.ty + 1) * TILE - camY;
-                DrawEllipse((int)feetX, (int)feetY - 1, (int)(tex->width * 0.46f), 6, Fade(Color{ 24, 20, 40, 255 }, 0.30f));
-                DrawEllipse((int)feetX, (int)feetY - 2, (int)(tex->width * 0.34f), 4, Fade(Color{ 20, 16, 34, 255 }, 0.34f));
                 DrawTexture(*tex, (int)(feetX - tex->width / 2), (int)(feetY - tex->height), WHITE);
                 break;
             }
@@ -539,14 +549,14 @@ static void drawWorld() {
                     float cyc = fmodf(g.walkAnimT, 3.14159f * 2.0f);
                     frame = (cyc < 1.05f) ? 1 : ((cyc < 2.1f) ? 2 : 0);
                 }
-                Rectangle src = { (float)frame * 16, (float)row * 24, 16, 24 };
+                Rectangle src = { (float)frame * 24, (float)row * 32, 24, 32 };
                 float feetX = g.px * TILE - camX, feetY = g.py * TILE - camY;
                 drawShadow(feetX, feetY + 1, 7, 2.5f);
-                Rectangle dst = { feetX - 16, feetY - 34, 32, 48 };
-                // 2x scale 16x24 -> 32x48
+                Rectangle dst = { feetX - 12, feetY - 32, 24, 32 };
+                // OpenRTP frames are 24x32 at native world scale.
                 Vector2 origin = { 0, 0 };
                 if (g.facing == 2 && g.sideFlip) {
-                    src.x = src.x + 16.0f; src.width = -16.0f;
+                    src.x = src.x + 24.0f; src.width = -24.0f;
                 }
                 DrawTexturePro(sheet, src, dst, origin, 0.0f, WHITE);
                 break;

@@ -1024,8 +1024,11 @@ def build_audio():
     print("audio done")
 
 def build_all():
-    build_tiles(); build_objects(); build_houses()
-    build_heroes(); build_enemies(); build_portraits(); build_icons(); build_fx(); build_title()
+    # Art is canonical in tools/build_art.py (art_terrain/art_objects/
+    # art_actors/art_misc). Delegate so this script never overwrites the
+    # SNES art with its older inline copies; audio stays here.
+    import build_art
+    build_art.main()
     build_audio()
     print("ALL ASSETS GENERATED")
 

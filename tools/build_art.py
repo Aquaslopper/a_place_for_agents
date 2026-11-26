@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """build_art.py — regenerate the SNES-style art in assets/ (tiles, sprites, icons, fx, title).
 
-Sizes are pinned to what src/core.cpp and src/main.cpp expect; the script
-asserts them so a change here can never silently break the renderer.
+Generated art is size-checked; vendored OpenRTP art is then adapted by
+import_openrtp.py, including its native 24x32 walking frames.
 
     python3 tools/build_art.py
 """
@@ -103,7 +103,10 @@ def main():
     save(M.fx_poof(), "fx", "poof.png")
     save(M.title_bg(), "title_bg.png")
 
-    print(f"wrote {len(written)} files")
+    # Adapt the vendored OpenRTP originals after generating the remaining art.
+    import import_openrtp
+    import_openrtp.main()
+    print(f"wrote {len(written)} files, then applied OpenRTP art")
 
 if __name__ == "__main__":
     main()

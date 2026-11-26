@@ -799,11 +799,11 @@ void drawHeroes() {
         Vector2 pos = heroBattlePos(i);
         Texture2D& sheet = g.assets.heroWalk[h.klass];
         float sc = 2.0f;
-        float fw = 16 * sc, fh = 24 * sc;
+        float fw = 24 * sc, fh = 32 * sc;
         float lunge = 0.0f;
         if (gLunge[i] > 0) { float p = 1.0f - gLunge[i] / 0.32f; lunge = sinf(p * 3.14159f) * 16.0f; }
         float bob = (!h.ko) ? sinf(gTime * 2.6f + i * 2.1f) * 1.5f : 0.0f;
-        Rectangle src = { 0, 48, 16, 24 };   // side idle
+        Rectangle src = { 0, 64, 24, 32 };   // OpenRTP side idle
         Rectangle dst = { pos.x - fw / 2 + lunge, pos.y - fh + bob, fw, fh };
         DrawEllipse((int)pos.x + (int)lunge, (int)pos.y + 2, 17, 4, Fade(BLACK, 0.35f));
         Color tint = h.ko ? Color{110, 110, 135, 255} : ((gHeroHitFlash > 0) ? Color{255, 200, 190, 255} : WHITE);
