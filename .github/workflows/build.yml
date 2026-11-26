@@ -28,7 +28,7 @@ jobs:
       - name: Package
         run: |
           cd build/bin
-          zip -r ../../APlaceForAgents-Linux.zip APlaceForAgents assets
+          zip -r "$GITHUB_WORKSPACE/APlaceForAgents-Linux.zip" APlaceForAgents assets
       - uses: actions/upload-artifact@v4
         with:
           name: APlaceForAgents-Linux
@@ -46,8 +46,8 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          cd build/bin/Release || cd build/bin
-          7z a ../../APlaceForAgents-Windows.zip APlaceForAgents.exe assets
+          cd build/bin/Release 2>/dev/null || cd build/bin
+          7z a "$GITHUB_WORKSPACE/APlaceForAgents-Windows.zip" APlaceForAgents.exe assets
       - uses: actions/upload-artifact@v4
         with:
           name: APlaceForAgents-Windows
