@@ -27,7 +27,7 @@ of any CI run):
 | Left mouse button | Walk to a point / click UI |
 | `E` | Enter a shop, inn or house when prompted |
 | `ESC` | Menu (resume, status, items, save, options) |
-| Mouse | Everything else — battles, shops, inn |
+| Mouse | Everything — click to move, battles, shops, inn, etc |
 | `F11`-ish | (window is resizable; game letterboxes) |
 
 ## What's in the base
