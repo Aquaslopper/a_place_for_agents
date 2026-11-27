@@ -56,6 +56,27 @@ def build_tiles():
     d.ellipse((10, 12, 12, 13), fill=(155, 157, 139, 255))
     save(pebble, 'tiles', 'pebble.png')
 
+# A separate, additive cave palette. These are native-resolution crops from
+# Jason Perry's CC0 Dungeon chipset, not replacements for existing tiles.
+def build_cave_art():
+    for name, x, y in [
+        ('cave_floor_0', 0, 12), ('cave_floor_1', 1, 12),
+        ('cave_floor_2', 2, 13), ('cave_floor_3', 1, 14),
+        ('cave_rock_0', 21, 0), ('cave_rock_1', 22, 0),
+        ('cave_rock_2', 23, 1), ('cave_rock_3', 12, 15),
+    ]:
+        save(tile(DUN, x, y), 'tiles', name + '.png')
+    # Complete formations, not individual fragments of neighbouring sprites.
+    for name, x, y, w, h in [
+        ('cave_stalagmite', 21, 8, 1, 2),
+        ('cave_stalagmite_small', 18, 9, 1, 1),
+        ('cave_crystal_blue', 22, 8, 1, 2),
+        ('cave_crystal_cluster', 20, 10, 2, 2),
+        ('cave_rock_pile', 18, 10, 2, 2),
+        ('cave_boulder', 22, 10, 2, 2),
+    ]:
+        save(trim(tcell(DUN, x, y, w, h, KEY_PINK)), 'sprites', name + '.png')
+
 # ================================================================= 2. objects
 def build_objects():
     """Trees, rocks, bushes, fences, street furniture and landmarks."""
@@ -491,6 +512,7 @@ def build_effects():
 # =====================================================================
 def main():
     build_tiles()
+    build_cave_art()
     build_objects()
     build_buildings()
     build_backdrops()

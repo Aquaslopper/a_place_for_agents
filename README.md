@@ -79,10 +79,11 @@ village windows and footstep dust give places a changing mood.
 - **Places worth finding.** Deterministic villages, inns, shops, temples,
 houses, camps, ruins, stone circles, towers, castles and chests appear across
 the generated world. Interiors have their own small scenes. Stone mouths in
-the hills open into **procedurally generated cavern dungeons**: BSP-cut room
-networks with loops, dressing, roaming inhabitants, treasure off the main
-path, multiple floors and a deep vault — always the same layout for the same
-seed. **To find a cave:** leave Elmswick by the west gate and follow the
+the hills open into **procedurally generated cavern dungeons**: a connected BSP backbone weathered into irregular chambers, alcoves and
+passages, natural rock and mineral formations, roaming inhabitants, treasure,
+multiple floors and a deep vault — always the same layout for the same seed.
+The rare deep crypt keeps its built stone halls. Cavern treasure, creature and
+stair locations remain compatible with earlier saves. **To find a cave:** leave Elmswick by the west gate and follow the
 causeway until the short northbound dirt spur to **Hollow Hill** (four floors).
 A second seeded mouth lies just east of the north road in Briarwood. Both
 are guaranteed; further hillside caverns use their own 64-tile sector survey,

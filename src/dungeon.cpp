@@ -1,10 +1,8 @@
 // dungeon.cpp — procedurally generated cavern dungeons
 //
-// Every cavern mouth in the wilds leads down into a seeded, BSP-cut network of
-// chambers and corridors: rooms with a purpose, loops instead of dead-end chains,
-// dressing in the empty corners, treasure off the main path, and a deep vault on
-// the final floor. Generation is a pure function of (worldSeed, site, floor), so
-// the same stairs always lead to the same halls.
+// A stable BSP backbone holds stairs, encounters and treasure. Natural caverns
+// grow an irregular, connected rock envelope around it after placement; crypts
+// retain their masonry. Both layers are deterministic for (seed, site, floor).
 #include "game.hpp"
 #include "world.hpp"
 #include "battle.hpp"
@@ -20,7 +18,9 @@ enum DunPropTex {
     DP_BARREL = 0, DP_CRATE, DP_PILLAR, DP_STATUE, DP_URN, DP_TORCH,
     DP_CANDLE, DP_LANTERN, DP_TABLE, DP_LONGTABLE, DP_STOOL, DP_KEG,
     DP_SHELF, DP_PLANT, DP_CRYSTAL, DP_MUSHROOM,
-    DP_BOULDER, DP_REEDS, DP_BUSH, DP_STUMP, DP_COUNT
+    DP_BOULDER, DP_REEDS, DP_BUSH, DP_STUMP,
+    DP_CAVE_FORM0, DP_CAVE_FORM1, DP_CAVE_FORM2, DP_CAVE_FORM3,
+    DP_CAVE_FORM4, DP_CAVE_FORM5, DP_COUNT
 };
 
 struct DunChest { int tx, ty; int item; int amount; int gil; uint64_t id; };
@@ -35,6 +35,8 @@ struct DunFloor {
     int downTx = -1, downTy = -1;
     std::vector<DunChest> chests;
     std::vector<DunMob>   mobs;
+    // Includes defeated spawn sites so weathering never follows the kill log.
+    std::vector<std::pair<int, int>> mobAnchors;
     std::vector<DunProp>  props;
     std::vector<std::pair<int, int>> sconces;   // wall cells holding a torch
 };
@@ -97,6 +99,8 @@ void texFootLocal(Texture2D t, float cx, float footY, Color tint = WHITE, float 
 }
 
 Texture2D* dunPropTexture(int tex) {
+    if (tex >= DP_CAVE_FORM0 && tex <= DP_CAVE_FORM5)
+        return &g.assets.caveFormation[tex - DP_CAVE_FORM0];
     switch (tex) {
         case DP_BARREL:    return &g.assets.barrel;
         case DP_CRATE:     return &g.assets.crate;
@@ -125,6 +129,8 @@ bool dunPropSolid(int tex) {
     switch (tex) {
         case DP_TORCH: case DP_CANDLE: case DP_LANTERN: case DP_MUSHROOM:
         case DP_REEDS: case DP_BUSH:
+        case DP_CAVE_FORM0: case DP_CAVE_FORM1: case DP_CAVE_FORM2:
+        case DP_CAVE_FORM3: case DP_CAVE_FORM4: case DP_CAVE_FORM5:
             return false;
         default:
             return true;
@@ -399,6 +405,127 @@ uint64_t mobIdAt(int tx, int ty, int floor, int salt) {
            (uint64_t)hash2i(tx + salt * 131, ty - salt * 17, D.seed ^ 0xF00Du);
 }
 
+// Weather the old traversable network only after placing its contents. The
+// old placement RNG and objective coordinates must remain untouched: saves
+// store chest and monster IDs derived from those coordinates, not a version.
+void weatherCavern(DunFloor& f) {
+    if (D.theme == TH_CRYPT) return;
+    const uint32_t salt = D.seed ^ (0x8128d91u * (uint32_t)(D.floor + 1));
+    const std::vector<uint8_t> original = f.tiles;
+    // Break up the square BSP outlines with shallow notches. Never cut near
+    // an objective, creature or existing prop. Reject the entire erosion pass
+    // if any formerly walkable cell becomes isolated behind a constriction.
+    for (int y = 2; y < f.h - 2; ++y) for (int x = 2; x < f.w - 2; ++x) {
+        if (original[dIdx(x,y,f.w)] != DT_FLOOR) continue;
+        int open = (original[dIdx(x-1,y,f.w)] == DT_FLOOR) + (original[dIdx(x+1,y,f.w)] == DT_FLOOR) +
+                   (original[dIdx(x,y-1,f.w)] == DT_FLOOR) + (original[dIdx(x,y+1,f.w)] == DT_FLOOR);
+        if (open != 3 || hash2i(x,y,salt ^ 0x947u) % 100u >= 28u) continue;
+        auto close = [x,y](int px,int py) { return abs(x-px) <= 1 && abs(y-py) <= 1; };
+        bool reserved = close(f.entryTx,f.entryTy) || (f.downTx >= 0 && close(f.downTx,f.downTy));
+        for (const auto& c : f.chests) if (close(c.tx,c.ty)) reserved = true;
+        for (const auto& m : f.mobAnchors) if (close(m.first,m.second)) reserved = true;
+        for (const auto& p : f.props) if (close((int)p.x,(int)p.y)) reserved = true;
+        if (!reserved) f.tiles[dIdx(x,y,f.w)] = DT_WALL;
+    }
+    auto connected = [&]() {
+        std::vector<uint8_t> seen(f.tiles.size(), 0);
+        std::vector<int> q{dIdx(f.entryTx, f.entryTy, f.w)};
+        seen[q[0]] = 1;
+        const int dirs[4][2] = {{1,0}, {-1,0}, {0,1}, {0,-1}};
+        for (size_t i = 0; i < q.size(); ++i) for (const auto& dir : dirs) {
+            int x = q[i] % f.w + dir[0], y = q[i] / f.w + dir[1];
+            if (!cellOpenIn(f,x,y) || dunBlocked(x+0.5f,y+0.5f,0.28f)) continue;
+            int idx = dIdx(x,y,f.w);
+            if (!seen[idx]) { seen[idx] = 1; q.push_back(idx); }
+        }
+        for (int y = 0; y < f.h; ++y) for (int x = 0; x < f.w; ++x)
+            if (cellOpenIn(f,x,y) && !dunBlocked(x+0.5f,y+0.5f,0.28f) && !seen[dIdx(x,y,f.w)])
+                return false;
+        return true;
+    };
+    if (!connected()) f.tiles = original;
+    const std::vector<uint8_t> notched = f.tiles;
+    // Each added cell touches the previous pass, so the weathered envelope
+    // grows into connected alcoves instead of generating isolated islands.
+    for (int pass = 0; pass < 2; ++pass) {
+        std::vector<uint8_t> next = f.tiles;
+        for (int y = 2; y < f.h - 2; ++y) for (int x = 2; x < f.w - 2; ++x) {
+            if (cellOpenIn(f, x, y) || (original[dIdx(x,y,f.w)] == DT_FLOOR &&
+                                         notched[dIdx(x,y,f.w)] == DT_WALL)) continue;
+            int cardinal = cellOpenIn(f,x-1,y) + cellOpenIn(f,x+1,y) +
+                           cellOpenIn(f,x,y-1) + cellOpenIn(f,x,y+1);
+            if (!cardinal) continue;
+            int near = cardinal + cellOpenIn(f,x-1,y-1) + cellOpenIn(f,x+1,y-1) +
+                       cellOpenIn(f,x-1,y+1) + cellOpenIn(f,x+1,y+1);
+            // The coarse field makes bulges rather than single-pixel noise;
+            // a finer field adds small, fractured outlines.
+            unsigned coarse = hash2i(x / 3, y / 3, salt + pass * 97u) % 100u;
+            unsigned fine = hash2i(x, y, salt + pass * 337u) % 100u;
+            int threshold = (pass == 0 ? 52 : 24) + (near >= 4 ? 18 : 0);
+            if ((int)((coarse * 2 + fine) / 3) < threshold)
+                next[dIdx(x, y, f.w)] = DT_FLOOR;
+        }
+        f.tiles.swap(next);
+    }
+
+    // An old solid prop may stand at the mouth of a newly opened pocket.
+    // Keep only new cells reachable with the same clearance as movement.
+    std::vector<uint8_t> seen(f.tiles.size(), 0);
+    std::vector<int> q{dIdx(f.entryTx, f.entryTy, f.w)};
+    seen[q[0]] = 1;
+    const int dirs[4][2] = {{1,0}, {-1,0}, {0,1}, {0,-1}};
+    for (size_t i = 0; i < q.size(); ++i) {
+        int x = q[i] % f.w, y = q[i] / f.w;
+        for (const auto& dir : dirs) {
+            int nx = x + dir[0], ny = y + dir[1];
+            if (!cellOpenIn(f, nx, ny) || dunBlocked(nx + 0.5f, ny + 0.5f, 0.28f)) continue;
+            int idx = dIdx(nx, ny, f.w);
+            if (!seen[idx]) { seen[idx] = 1; q.push_back(idx); }
+        }
+    }
+    for (size_t i = 0; i < f.tiles.size(); ++i)
+        if (original[i] == DT_WALL && !seen[i]) f.tiles[i] = DT_WALL;
+
+    // Natural caves may have traces of visitors, but not a room full of
+    // tables and shelves. Removing these after placement does not alter IDs.
+    f.props.erase(std::remove_if(f.props.begin(), f.props.end(), [](const DunProp& p) {
+        return p.tex == DP_TABLE || p.tex == DP_LONGTABLE || p.tex == DP_STOOL ||
+               p.tex == DP_SHELF || p.tex == DP_PLANT || p.tex == DP_PILLAR;
+    }), f.props.end());
+
+    // Rebuild wall lights against the expanded boundary, not the buried BSP
+    // edges. Natural caverns are sparsely lit; the party carries a lantern.
+    f.sconces.clear();
+    for (int y = 1; y < f.h - 1; ++y) for (int x = 1; x < f.w - 1; ++x) {
+        if (cellOpenIn(f, x, y) || !cellOpenIn(f, x, y + 1)) continue;
+        if (hash2i(x, y, salt ^ 0x731u) % 37u == 0u)
+            f.sconces.push_back({x, y});
+    }
+
+    // Lumps and dripstone sit at rock margins, where they frame passages
+    // rather than block them. They are visual dressing, never collision.
+    for (int y = 2; y < f.h - 2; ++y) for (int x = 2; x < f.w - 2; ++x) {
+        if (!cellOpenIn(f, x, y)) continue;
+        if (cellOpenIn(f,x-1,y) && cellOpenIn(f,x+1,y) &&
+            cellOpenIn(f,x,y-1) && cellOpenIn(f,x,y+1)) continue;
+        uint32_t h = hash2i(x, y, salt ^ 0xa121u);
+        if (h % 13u != 0u) continue;
+        auto close = [x,y](int px, int py) { return abs(x-px) <= 1 && abs(y-py) <= 1; };
+        if (close(f.entryTx, f.entryTy) || (f.downTx >= 0 && close(f.downTx, f.downTy))) continue;
+        bool reserved = false;
+        for (const auto& c : f.chests) if (close(c.tx, c.ty)) { reserved = true; break; }
+        for (const auto& m : f.mobAnchors) if (close(m.first, m.second)) { reserved = true; break; }
+        if (reserved) continue;
+        // Temperate caves favour dripstone and fallen rock; wet and icy
+        // galleries also expose crystals. Large boulders are rarer.
+        static const int dry[] = {0, 1, 4, 0, 1, 5};
+        static const int wet[] = {0, 1, 2, 3, 2, 5};
+        int choice = (int)((h >> 8) % 6u);
+        int form = (D.theme == TH_FROST || D.theme == TH_MIRE) ? wet[choice] : dry[choice];
+        addProp(f, DP_CAVE_FORM0 + form, x, y, 0.5f, 0.5f);
+    }
+}
+
 void generateFloor() {
     Rng rng(D.seed ^ (0x51f15eu * (uint32_t)(D.floor + 1)) ^ (D.startCavern ? 0xa11u : 0u));
     DunFloor f;
@@ -671,6 +798,7 @@ void generateFloor() {
             EnemyKind kind = pickDungeonEnemy(rng, D.zoneBase + D.floor * 2 + 2);
             float phase = rng.f() * 6.28f;
             ++placedMobs;
+            F.mobAnchors.push_back({gx, gy});
             if (g.defeatedMonsters.count(mobIdAt(gx, gy, D.floor, 90 + k))) continue;
             DunMob m;
             m.id = mobIdAt(gx, gy, D.floor, 90 + k);
@@ -715,6 +843,7 @@ void generateFloor() {
         uint64_t id = mobIdAt(mx, my, D.floor, 0);
         if (!mobSites.insert(id).second) continue;
         ++placedMobs;
+        F.mobAnchors.push_back({mx, my});
         if (g.defeatedMonsters.count(id)) continue;
         DunMob m;
         m.id = id;
@@ -724,6 +853,7 @@ void generateFloor() {
         F.mobs.push_back(m);
     }
 
+    weatherCavern(F);
     D.encounterGrace = 2.0f;
 }
 
@@ -1201,11 +1331,47 @@ void dungeonDraw() {
     Texture2D brickTex = g.assets.dunWall[D.theme];
     if (brickTex.id == 0) brickTex = g.assets.brickFloor[1].id ? g.assets.brickFloor[1] : g.assets.brickFloor[0];
 
+    // Mineral tints preserve a shared rock material while making the seven
+    // natural biomes distinct. The Deep Crypt keeps its existing masonry.
+    const Color caveTint[TH_COUNT] = {
+        {175,190,158,255}, {184,169,151,255}, {220,192,150,255},
+        {143,182,165,255}, {183,186,181,255}, {168,196,222,255},
+        {226,194,153,255}, WHITE
+    };
+    bool natural = D.theme != TH_CRYPT && g.assets.caveFloor[0].id && g.assets.caveRock[0].id;
     // --- ground layer
     for (int ty = y0; ty <= y1; ty++) {
         for (int tx = x0; tx <= x1; tx++) {
             float sx = tx * TILE - camX, sy = ty * TILE - camY;
-            if (cellOpen(tx, ty)) {
+            if (natural && inBounds(tx, ty)) {
+                uint32_t material = hash2i(tx, ty, D.seed ^ (uint32_t)D.floor * 1877u);
+                Color tint = caveTint[D.theme];
+                if (cellOpen(tx, ty)) {
+                    Texture2D t = g.assets.caveFloor[material % 4u];
+                    if (!t.id) t = g.assets.caveFloor[0];
+                    DrawTexturePro(t, {0,0,(float)t.width,(float)t.height},
+                                   {sx,sy,TILE,TILE}, {0,0}, 0, tint);
+                    // Narrow contact shadows make the boundary read as rock
+                    // overhanging a floor, without changing collision.
+                    if (!cellOpen(tx, ty-1))
+                        DrawRectangle((int)sx, (int)sy, TILE, 3, Fade(BLACK, 0.32f));
+                    if (!cellOpen(tx-1, ty))
+                        DrawRectangle((int)sx, (int)sy, 2, TILE, Fade(BLACK, 0.18f));
+                    if (D.theme == TH_FROST && material % 19u == 0u && g.assets.iceCrack.id)
+                        DrawTexturePro(g.assets.iceCrack, {0,0,(float)g.assets.iceCrack.width,(float)g.assets.iceCrack.height},
+                                       {sx,sy,TILE,TILE}, {0,0}, 0, Fade(WHITE,0.45f));
+                } else {
+                    bool exposed = cellOpen(tx,ty+1) || cellOpen(tx-1,ty) || cellOpen(tx+1,ty) || cellOpen(tx,ty-1);
+                    Texture2D t = g.assets.caveRock[material % 4u];
+                    if (!t.id) t = g.assets.caveRock[0];
+                    Color rock = exposed ? tint : Color{(unsigned char)(tint.r * 0.54f),
+                        (unsigned char)(tint.g * 0.54f), (unsigned char)(tint.b * 0.54f), 255};
+                    DrawTexturePro(t, {0,0,(float)t.width,(float)t.height},
+                                   {sx,sy,TILE,TILE}, {0,0}, 0, rock);
+                    if (cellOpen(tx,ty+1))
+                        DrawRectangle((int)sx, (int)sy + 14, TILE, 2, Fade(BLACK, 0.35f));
+                }
+            } else if (cellOpen(tx, ty)) {
                 if (floorTex.id)
                     DrawTexturePro(floorTex, { 0, 0, (float)floorTex.width, (float)floorTex.height },
                                    { sx, sy, TILE, TILE }, { 0, 0 }, 0.0f, WHITE);

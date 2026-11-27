@@ -35,9 +35,20 @@ Source: [OpenRTP, revision `993d88c`](https://github.com/EasyRPG/RTP/tree/993d88
 
 Additional original artwork and synthesized UI/combat sound effects in `tools/` are CC0 by the repository's authors. That dedication does **not** replace the licenses of any upstream material used in a composite.
 
+The additional `cave_floor_*`, `cave_rock_*` tiles and `cave_stalagmite*`,
+`cave_crystal*`, `cave_rock_pile` and `cave_boulder` sprites are
+native-resolution crops of Jason Perry's **CC0** OpenRTP
+`ChipSet/Dungeon.png`, extracted by `build_cave_art()` in
+`tools/import_openrtp.py`. Existing OpenRTP art is preserved. His
+[Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles)
+are explicitly offered in RM2k/3 chipset format for EasyRPG under CC0.
+
 ## Visual references, not game assets
 
 - [Potos Village](https://www.snesmaps.com/maps/SecretOfMana/002bPotosVillageMap.html) and the [Pandora–Potos–Water Palace path](https://www.snesmaps.com/maps/SecretOfMana/003bPandoraPotosWaterPalacePathMap.html), *Secret of Mana*, via SNESMaps. The study was about **walking scale and layout**: roads meet doors and cross streams at specific places; vegetation frames clearings; banks and cliff faces continue across tiles. No map or graphics from that game are distributed here.
+- [NPS: Solution Caves](https://www.nps.gov/subjects/caves/solution-caves.htm) and [NPS: Cave Geology in Depth](https://www.nps.gov/grba/planyourvisit/cave-geology-in-depth.htm): water follows fractures, widens passages, and leaves dripstone and mineral formations. These informed the chamber/passage edges and cave dressing, not any copied graphics.
+- [Generating layout for complex cave-like levels](https://yadda.icm.edu.pl/baztech/element/bwmeta1.element.baztech-1a626cf9-2d16-40a1-a6d0-a01bc4361c12/c/Izabella_Antoniuk17.pdf): an authored schematic backbone combined with naturalistic generation and explicit connectivity. Here the existing seeded BSP network supplies the stable backbone; the weathering pass adds irregularity while preserving objective locations and connected travel.
+- [EasyAdditions: TileSheet #0000](https://kotatsuakira.itch.io/easyadd-tilesheet0000) is another CC0 OpenRTP-compatible resource identified during the survey, but is **not** included in the game.
 - [Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles) and the [RM2k/3 chipset template guide](https://www.deviantart.com/jojogape/art/RPG-Maker-2000-and-2003-Tileset-Template-v2-327699881). Distinguish overworld symbols, full exterior objects, interior furnishings and terrain blocks. The field atlas is a new corner-mask implementation, not an emulator of the original autotiler.
 
 ## Engine and font

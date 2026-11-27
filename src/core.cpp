@@ -397,6 +397,19 @@ bool loadAllAssets() {
     a.arcaneFloor = loadTex(d, "tiles/arcane.png", false);
     a.dirtFloor = loadTex(d, "tiles/dirt.png", false);
     a.iceCrack = loadTex(d, "tiles/ice_crack.png", false);
+    // Additive native OpenRTP cave materials; old tiles remain available for crypts.
+    const char* caveFloors[] = {"tiles/cave_floor_0.png", "tiles/cave_floor_1.png",
+                                "tiles/cave_floor_2.png", "tiles/cave_floor_3.png"};
+    const char* caveRocks[] = {"tiles/cave_rock_0.png", "tiles/cave_rock_1.png",
+                               "tiles/cave_rock_2.png", "tiles/cave_rock_3.png"};
+    const char* caveForms[] = {"sprites/cave_stalagmite.png", "sprites/cave_stalagmite_small.png",
+                               "sprites/cave_crystal_blue.png", "sprites/cave_crystal_cluster.png",
+                               "sprites/cave_rock_pile.png", "sprites/cave_boulder.png"};
+    for (int i = 0; i < 4; ++i) {
+        a.caveFloor[i] = loadTex(d, caveFloors[i], false);
+        a.caveRock[i] = loadTex(d, caveRocks[i], false);
+    }
+    for (int i = 0; i < 6; ++i) a.caveFormation[i] = loadTex(d, caveForms[i], false);
     // per-theme floor atlas (each theme picks a distinct base tile; tint adds mood)
     a.dunFloor[TH_MOSSY]     = a.stoneFloor.id ? a.stoneFloor : a.dungeonFloor;
     a.dunFloor[TH_ROOTED]    = a.dirtFloor.id ? a.dirtFloor : a.stoneFloor;
