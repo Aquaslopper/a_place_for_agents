@@ -24,12 +24,13 @@ Download a build from the **Releases** page or the artifacts of a CI run:
   It opens as a normal window, without a console window beside it.
 - **Linux:** `APlaceForAgents-Linux.zip` — run `./APlaceForAgents`.
 
-The game draws to a 512×288 pixel-art canvas. It preserves the canvas aspect
-ratio when resized, uses whole-number pixel scaling on larger displays, and
-centres the picture rather than stretching it to fit unusual window shapes.
-The optional **Soft CRT** treatment is off by default; enable it in
-**Esc → Options** for faint, image-aligned scanline shading. Clean pixels are
-always available.
+The game renders to an aspect-adaptive pixel-art canvas (512×288 at 16:9,
+expanding the field of view cleanly on wider or taller windows instead of
+adding black letterbox bars or distorting square pixels) and blits to the full
+window via integer pre-upscaling for crisp pixel edges at any resolution or
+borderless fullscreen (`F11` or `Alt+Enter`). The optional **Soft CRT**
+treatment is off by default; enable it in **Esc → Options** for faint,
+image-aligned scanline shading. Clean pixels are always available.
 
 ### Controls
 
@@ -41,7 +42,7 @@ always available.
 | `Space` / `E` / `Enter` | Talk, open a chest, enter a door, or advance dialogue |
 | `Esc` / `Tab` | Open or close the pause menu |
 | Mouse | Use menus, shops and battle commands |
-| `F11` | Toggle fullscreen |
+| `F11` / `Alt+Enter` | Toggle borderless fullscreen |
 
 ### First routes from the Elmswick well
 

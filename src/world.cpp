@@ -7,6 +7,7 @@
 #include <limits>
 #include <string>
 #include <algorithm>
+#include <set>
 
 // ================================================================ hashing
 uint32_t hash2i(int x, int y, uint32_t seed) {
@@ -48,12 +49,37 @@ static float elevationAt(float x, float y, uint32_t seed) {
 }
 static float temperatureAt(float x, float y, uint32_t seed) {
     float t = fbm(x * 0.010f + 313.1f, y * 0.010f + 47.9f, seed ^ 0x7e47u, 3);
-    // colder far to the north, warmer to the south
     t += (y < 0 ? -0.05f : 0.04f);
     return t;
 }
 float moistureAt(float x, float y) {
     return fbm(x * 0.022f + 91.7f, y * 0.022f + 17.3f, g.worldSeed ^ 0x5eedu, 4);
+}
+
+// Domain-warped canopy density shared by ground shading AND tree grove placement
+// so dark forest turf / fallen leaves sit directly beneath tree crowns.
+static float canopyDensityAt(int tx, int ty, uint32_t seed) {
+    float x = (float)tx, y = (float)ty;
+    float wx = x + (smoothNoise(x * 0.052f, y * 0.052f, seed ^ 0x1234u) - 0.5f) * 7.5f;
+    float wy = y + (smoothNoise(x * 0.052f + 41.3f, y * 0.052f - 19.7f, seed ^ 0x5678u) - 0.5f) * 7.5f;
+    float g0 = smoothNoise(wx * 0.088f, wy * 0.088f, seed ^ 0x61a4u);
+    float g1 = smoothNoise(wx * 0.195f, wy * 0.195f, seed ^ 0x9bcdu);
+    float grove = g0 * 0.64f + g1 * 0.36f;
+    // Meandering sunlit glade ribbons so deep woods always stay navigable and scenic
+    float ribbon = fabsf(smoothNoise(wx * 0.044f + 73.1f, wy * 0.044f - 28.4f, seed ^ 0xbeefu) - 0.5f);
+    if (ribbon < 0.075f) {
+        float k = ribbon / 0.075f;
+        grove *= (0.35f + 0.65f * k * k);
+    }
+    return grove;
+}
+
+static float brookCenterAt(float x, uint32_t seed) {
+    int sector = (int)floorf((x + 32.0f) / 64.0f);
+    int ford = sector * 64 + (sector ? (int)(hash2i(sector, 3, seed) % 19) - 9 : 0);
+    float fx = ((int)floorf(x) == ford + 1) ? (float)ford : x;
+    return 18.5f + 1.6f * sinf(fx * 0.13f) + std::min(1.0f, fabsf(fx) / 64.0f) *
+           (smoothNoise(fx * 0.021f, 31.7f, seed ^ 0x7368u) - 0.5f) * 22.0f;
 }
 
 static void flattenSite(float x, float y, float cx, float cy, float innerR, float outerR,
@@ -73,20 +99,14 @@ static void flattenSite(float x, float y, float cx, float cy, float innerR, floa
     }
 }
 
-// Keep Elmswick and the three quest landmark clearings always walkable on any seed.
 static void flattenSpecialSites(float x, float y, float& e, float& t, float& m) {
-    // Elmswick meadow
-    flattenSite(x, y, 0.0f, 0.0f, 26.0f, 34.0f, e, t, m, 0.52f, 0.55f, 0.58f);
-    // Northern Castle courtyard
+    flattenSite(x, y, 0.0f, 0.0f, 22.0f, 30.0f, e, t, m, 0.52f, 0.55f, 0.58f);
     flattenSite(x, y, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY, 12.0f, 19.0f,
                 e, t, m, 0.54f, 0.27f, 0.48f);
-    // Standing Stones (Lost Locket)
     flattenSite(x, y, (float)LOCKET_SITE_TX, (float)LOCKET_SITE_TY, 8.0f, 14.0f,
                 e, t, m, 0.52f, 0.54f, 0.52f);
-    // Old Watchtower (Rusty Key)
     flattenSite(x, y, (float)TOWER_SITE_TX, (float)TOWER_SITE_TY, 7.0f, 13.0f,
                 e, t, m, 0.53f, 0.50f, 0.50f);
-
 }
 
 static bool nearSpecialSite(int tx, int ty) {
@@ -100,22 +120,19 @@ static bool nearSpecialSite(int tx, int ty) {
     return false;
 }
 
-// A river, an orchard road, and three readable journeys out of town. Climate
-// still controls the far world; nearby story sites have distinctive catchments
-// on *every* seed. Biome is retained even on a road, bridge or patch of snow.
 static Biome climate(int tx, int ty, float e, float t, float m, float patch) {
     auto basin = [&](int cx, int cy, float rx, float ry) {
-        float dx = (tx-cx)/rx, dy = (ty-cy)/ry;
-        return dx*dx + dy*dy < 0.86f + 0.28f*patch;
+        float dx = (tx - cx) / rx, dy = (ty - cy) / ry;
+        return dx * dx + dy * dy < 0.86f + 0.28f * patch;
     };
-    if (abs(tx) < 18 && ty > -17 && ty < 19) return BI_MEADOW;
+    if (abs(tx) < 19 && ty > -18 && ty < 18) return BI_MEADOW;
     if (basin(32, 39, 30, 23)) return BI_AMBER;
     if (basin(-44, -11, 30, 19)) return BI_FEN;
     if (basin(-26, 64, 30, 21)) return BI_DUNES;
     if (basin(0, -113, 40, 29)) return BI_FROST;
     if (basin(0, -80, 32, 19)) return BI_HEATH;
     if (basin(0, -43, 26, 22)) return BI_FOREST;
-    if (tx*float(tx) + ty*float(ty) < 26*26) return BI_MEADOW;
+    if (tx * float(tx) + ty * float(ty) < 24 * 24) return BI_MEADOW;
     if (t < 0.33f || (t < 0.50f && e > 0.78f)) return BI_FROST;
     if (t > 0.58f && m < 0.47f) return BI_DUNES;
     if (m > 0.56f && e < 0.47f) return BI_FEN;
@@ -125,106 +142,185 @@ static Biome climate(int tx, int ty, float e, float t, float m, float patch) {
     return BI_MEADOW;
 }
 
-// 0 = no trail, 1 = N/S planks, 2 = E/W planks. Two cells wide even on
-// bends. Trails reach the *approach* of each quest object, not just its sector.
+// 0 = no trail, 1 = N/S planks, 2 = E/W planks. Two cells wide even on bends.
 static int trailAt(int x, int y) {
-    if (y <= -15 && y >= BOSS_CASTLE_TY+7) {
-        float u = (float)(-15-y)/(-15-BOSS_CASTLE_TY-7);
-        int bend = (int)roundf(sinf(3.14159f*u)*(5*sinf(u*13.f)+3*sinf(u*7.f)));
-        if (x==bend || x==bend+1) return 1;
+    // North Road: Elmswick north gate (0..1, -15) -> Castle of Elm gate (0..1, -137)
+    if (y <= -15 && y >= BOSS_CASTLE_TY + 7) {
+        float u = (float)(-15 - y) / (float)(-15 - (BOSS_CASTLE_TY + 7));
+        int bend = (int)roundf(sinf(3.14159265f * u) * (4.5f * sinf(u * 12.566f) + 2.5f * sinf(u * 6.283f)));
+        if (x == bend || x == bend + 1) return 1;
     }
-    if ((x==0 || x==1) && y>=11 && y<=25) return 1;
-    if (y>=25 && y<=64) {  // the dry road forks off on the south bank
-        float u=(y-25)/39.f;
-        int bend=(int)roundf(-26.f*fade(u));
-        if (x==bend || x==bend+1) return 1;
+    // South Highway across Millbrook Bridge (0..1, 13..25)
+    if ((x == 0 || x == 1) && y >= 13 && y <= 25) return 1;
+    // Southwest Sunscorch branch from south bank crossroads
+    if (y >= 25 && y <= 66) {
+        float u = (float)(y - 25) / 41.0f;
+        int bend = (int)roundf(-26.0f * fade(u) + 2.0f * sinf(u * 9.4247f));
+        if (x == bend || x == bend + 1) return 1;
     }
+    // Southeast Amberwood trail to the Standing Stones clearing
     if (x >= 0 && x <= LOCKET_SITE_TX) {
-        float u = (float)x / LOCKET_SITE_TX;
-        int cy = 24 + (int)roundf(24*fade(u) + 2*sinf(u*12.56f)*sinf(u*3.14f));
-        if (y == cy || y == cy+1) return 2;
+        float u = (float)x / (float)LOCKET_SITE_TX;
+        int cy = 24 + (int)roundf(25.0f * fade(u) + 2.2f * sinf(u * 12.566f) * sinf(u * 3.14159f));
+        if (y == cy || y == cy + 1) return 2;
     }
-    if (x <= -8 && x >= TOWER_SITE_TX) {
-        float u = (float)(-x-8) / (-TOWER_SITE_TX-8);
-        int cy = (int)roundf((TOWER_CHEST_TY+1)*fade(u) + 2*sinf(u*9.42f));
-        if (y == cy || y == cy+1) return 2;
+    // West Mirefen causeway from Elmswick west gate (-15, 0..1) to the Old Watchtower
+    if (x <= -15 && x >= TOWER_SITE_TX + 3) {
+        float u = (float)(-15 - x) / (float)(-15 - (TOWER_SITE_TX + 3));
+        int cy = (int)roundf((TOWER_CHEST_TY)*fade(u) + 2.0f * sinf(u * 9.4247f) * sinf(u * 3.14159f));
+        if (y == cy || y == cy + 1) return 2;
     }
     return 0;
+}
+
+static bool nearTrail(int tx, int ty, int r) {
+    for (int dy = -r; dy <= r; dy++)
+        for (int dx = -r; dx <= r; dx++)
+            if (trailAt(tx + dx, ty + dy) != 0) return true;
+    return false;
 }
 
 static GroundTile generateGround(int tx, int ty) {
     GroundTile out;
     float x = (float)tx, y = (float)ty;
     uint32_t seed = g.worldSeed;
-    float e = elevationAt(x,y,seed), t = temperatureAt(x,y,seed), m = moistureAt(x,y);
-    flattenSpecialSites(x,y,e,t,m);
-    float patch = smoothNoise(x*0.095f, y*0.095f, seed ^ 0x4921u);
-    uint32_t h = hash2i(tx,ty,seed ^ 0x9a11u);
-    out.biome = climate(tx,ty,e,t,m,patch);
+    float e = elevationAt(x, y, seed), t = temperatureAt(x, y, seed), m = moistureAt(x, y);
+    flattenSpecialSites(x, y, e, t, m);
+    float patch = smoothNoise(x * 0.095f, y * 0.095f, seed ^ 0x4921u);
+    float canopy = canopyDensityAt(tx, ty, seed);
+    uint32_t h = hash2i(tx, ty, seed ^ 0x9a11u);
+    out.biome = climate(tx, ty, e, t, m, patch);
     out.variant = (uint8_t)((h >> 8) % 3);
-    const GroundKind soils[] = {G_GRASS, G_GRASS_DARK, G_AMBER, G_SWAMP, G_HEATH, G_SNOW, G_SAND};
-    out.kind = soils[out.biome];
-    // Composition within a biome: pools in reed beds, bare clearings under
-    // amber canopies, wind-scoured flats backed by raised sandstone shelves.
-    if (out.biome==BI_AMBER && patch>0.56f) out.kind=G_LEAVES;
-    if (out.biome==BI_DUNES && patch>0.47f) out.kind=G_RIPPLES;
-    if (out.biome==BI_FOREST && patch<0.38f) out.kind=G_GRASS;
-    if (out.biome==BI_FROST) {
-        if (patch<0.25f && e<0.55f) out.kind=G_ICE;
-        else if (patch>0.66f && !nearSpecialSite(tx,ty)) out.kind=G_ROCK;
-    } else if (out.biome==BI_FEN) {
-        if (patch<0.23f || e<0.28f) out.kind=G_WATER;
-        else if (patch>0.63f) out.kind=G_GRASS_DARK;
-    } else if (e<0.325f) out.kind=e<0.265f ? G_DEEP : G_WATER;
-    else if (e<0.368f && out.biome!=BI_DUNES) out.kind=G_BEACH;
-    else if (e>0.755f || (out.biome==BI_HEATH && patch>0.68f) ||
-             (out.biome==BI_DUNES && patch>0.71f)) out.kind=G_ROCK;
 
-    // The Millbrook winds past Elmswick's south gardens. Crossings are
-    // structural (walkable bridge cells), not a picture painted over water.
-    int sector = (int)floorf((x + 32) / 64);
+    const GroundKind soils[] = { G_GRASS, G_GRASS_DARK, G_AMBER, G_SWAMP, G_HEATH, G_SNOW, G_SAND };
+    out.kind = soils[out.biome];
+
+    // Couple ground shading directly to tree canopy so every woodland copse
+    // casts autotiled dark forest turf or golden leaf-litter beneath its crowns.
+    if (out.biome == BI_MEADOW && canopy > 0.56f && (tx * tx + ty * ty) > 19 * 19) out.kind = G_GRASS_DARK;
+    if (out.biome == BI_AMBER && canopy > 0.43f) out.kind = G_LEAVES;
+    if (out.biome == BI_DUNES && patch > 0.47f) out.kind = G_RIPPLES;
+    if (out.biome == BI_FOREST && canopy < 0.40f) out.kind = G_GRASS;
+
+    // Stepped SNES rocky bluffs & hillside outcrops (rendered with 3D cliff faces via relief.png)
+    float ridge = fbm(x * 0.062f + 19.3f, y * 0.082f - 41.7f, seed ^ 0x31ffu, 3);
+    float shelf = smoothNoise(x * 0.13f - 7.1f, y * 0.13f + 13.9f, seed ^ 0x8821u);
+    float brook = brookCenterAt(x, seed);
+    float bank = fabsf(y - brook);
+    bool keepClearForTownOrRoad = ((tx * tx + ty * ty) < 22 * 22) || nearSpecialSite(tx, ty) ||
+                                  nearTrail(tx, ty, 2) || bank < 4.5f;
+
+    if (out.biome == BI_FROST) {
+        if (patch < 0.24f && e < 0.55f) out.kind = G_ICE;
+        else if (!keepClearForTownOrRoad && ((ridge > 0.62f && shelf > 0.50f) || patch > 0.70f)) out.kind = G_ROCK;
+    } else if (out.biome == BI_FEN) {
+        if (patch < 0.24f || e < 0.29f) out.kind = G_WATER;
+        else if (canopy > 0.48f) out.kind = G_GRASS_DARK;
+    } else if (e < 0.325f) {
+        out.kind = e < 0.265f ? G_DEEP : G_WATER;
+    } else if (e < 0.368f && out.biome != BI_DUNES) {
+        out.kind = G_BEACH;
+    } else if (!keepClearForTownOrRoad) {
+        if (e > 0.745f ||
+            ((out.biome == BI_HEATH || out.biome == BI_DUNES) && ridge > 0.61f && shelf > 0.50f) ||
+            ((out.biome == BI_MEADOW || out.biome == BI_FOREST || out.biome == BI_AMBER) &&
+             ridge > 0.68f && shelf > 0.55f)) {
+            out.kind = G_ROCK;
+        }
+    }
+
+    // Millbrook River & structural crossings
+    int sector = (int)floorf((x + 32.0f) / 64.0f);
     int ford = sector * 64 + (sector ? (int)(hash2i(sector, 3, seed) % 19) - 9 : 0);
-    float fx = tx == ford+1 ? (float)ford : x;  // level both abutments
-    float brook = 17.f + 1.8f*sinf(fx*0.14f) + std::min(1.f, fabsf(fx)/60.f)*
-                  (smoothNoise(fx*0.021f, 31.7f, seed^0x7368u)-0.5f)*24.f;
-    float bank = fabsf(y-brook);
-    if (bank < 2.15f && !nearSpecialSite(tx,ty)) out.kind = G_WATER;
-    int trail = trailAt(tx,ty);
-    if ((tx == ford || tx == ford+1) && bank < 5.0f) trail = 1;
+    if (bank < 2.10f && !nearSpecialSite(tx, ty)) out.kind = G_WATER;
+    else if (bank < 3.15f && !nearSpecialSite(tx, ty) && out.kind == G_GRASS && patch > 0.48f)
+        out.kind = G_GRASS_DARK;
+
+    int trail = trailAt(tx, ty);
+    if ((tx == ford || tx == ford + 1) && bank < 4.6f) trail = 1;
     if (trail) {
         bool wet = out.kind == G_WATER || out.kind == G_DEEP;
         out.kind = wet ? (trail == 1 ? G_BRIDGE_NS : G_BRIDGE_EW) : G_DIRT;
         return out;
     }
-    if (abs(tx-BOSS_CASTLE_TX) <= 6 && ty >= BOSS_CASTLE_TY-4 && ty <= BOSS_CASTLE_TY+7) {
-        out.kind = (abs(tx-BOSS_CASTLE_TX)<=2 && ty>BOSS_CASTLE_TY) ? G_COBBLE : G_FLOOR;
+
+    // Castle of Elm grand stone courtyard & rocky rampart shoulders
+    if (abs(tx - BOSS_CASTLE_TX) <= 9 && ty >= BOSS_CASTLE_TY - 6 && ty <= BOSS_CASTLE_TY + 7) {
+        int dx = abs(tx - BOSS_CASTLE_TX);
+        if (dx <= 6 && ty >= BOSS_CASTLE_TY - 4) {
+            out.kind = (dx <= 2 && ty > BOSS_CASTLE_TY) ? G_COBBLE : G_FLOOR;
+            return out;
+        }
+        if ((dx >= 7 && ty <= BOSS_CASTLE_TY + 4) || ty <= BOSS_CASTLE_TY - 5) {
+            out.kind = G_ROCK;
+            return out;
+        }
+    }
+
+    // Standing Stones ancient paved ring (52, 46)
+    {
+        float dx = x - (float)LOCKET_SITE_TX, dy = y - (float)(LOCKET_SITE_TY + 0.5f);
+        float r2 = dx * dx + dy * dy;
+        if (r2 <= 2.4f * 2.4f) { out.kind = G_FLOOR; return out; }
+        if (r2 <= 4.2f * 4.2f) { out.kind = G_COBBLE; return out; }
+    }
+
+    // Old Watchtower raised cobbled keep & marsh moat (-64, -20)
+    {
+        int dx = tx - TOWER_SITE_TX, dy = ty - TOWER_SITE_TY;
+        if (abs(dx) <= 3 && dy >= -2 && dy <= 3) {
+            out.kind = (abs(dx) <= 1 && dy >= 1) ? G_COBBLE : G_FLOOR;
+            return out;
+        }
+        if (abs(dx) <= 5 && dy >= -4 && dy <= 5) {
+            // Leave eastern causeway approach open
+            if (!(dx >= 3 && (ty == TOWER_CHEST_TY || ty == TOWER_CHEST_TY + 1))) {
+                out.kind = G_WATER;
+                if ((h & 7) == 0) out.deco = 4;
+                return out;
+            } else {
+                out.kind = G_BRIDGE_EW;
+                return out;
+            }
+        }
+    }
+
+    if (nearSpecialSite(tx, ty) && (out.kind == G_ROCK || out.kind == G_WATER || out.kind == G_DEEP))
+        out.kind = soils[out.biome];
+
+    // Hedrick's fenced kitchen turnip plot in southwest Elmswick
+    if (tx >= -13 && tx <= -9 && ty >= 9 && ty <= 11) {
+        out.kind = G_SOIL;
+        out.deco = 5;
         return out;
     }
-    if (nearSpecialSite(tx,ty) && (out.kind == G_ROCK || out.kind == G_WATER || out.kind == G_DEEP))
-        out.kind = soils[out.biome];
-    if (((tx>=-13 && tx<=-8) || (tx>=9 && tx<=13)) && ty>=10 && ty<=12) {
-        out.kind = G_SOIL; out.deco = 5; return out;
-    }
-    float d = (float)(h & 0xffff)/65536.f;
-    out.decoVariant = (uint8_t)((h>>16)%3);
+
+    float d = (float)(h & 0xffff) / 65536.0f;
+    out.decoVariant = (uint8_t)((h >> 16) % 3);
     if (out.kind == G_GRASS || out.kind == G_GRASS_DARK) {
-        if (patch > 0.57f && d < 0.18f) out.deco = 2;
-        else if (patch > 0.32f && d < 0.14f) out.deco = 1;
-    } else if (out.kind == G_WATER && (out.biome == BI_FEN || bank < 2.2f) && d < 0.10f) out.deco = 4;
-    else if ((out.kind == G_HEATH || out.kind == G_BEACH || out.kind == G_SAND) && d < 0.07f) out.deco = 3;
+        bool treelineSkirt = (canopy > 0.36f && canopy < 0.55f);
+        if ((treelineSkirt || bank < 4.2f) && d < 0.24f) out.deco = 2; // wildflowers along treelines & banks
+        else if (patch > 0.54f && d < 0.16f) out.deco = 2;
+        else if (d < 0.14f) out.deco = 1;
+    } else if (out.kind == G_AMBER || out.kind == G_LEAVES) {
+        if (d < 0.10f) out.deco = 1;
+    } else if (out.kind == G_WATER && (out.biome == BI_FEN || bank < 2.2f) && d < 0.16f) {
+        out.deco = 4; // water lilies
+    } else if ((out.kind == G_HEATH || out.kind == G_BEACH || out.kind == G_SAND) && d < 0.08f) {
+        out.deco = 3; // pebbles
+    }
     return out;
 }
 
 GroundTile sampleGround(int tx, int ty) {
-    // A bounded direct-mapped cache: sampling never depends on the camera,
-    // loaded village or visit order. Shared by navigation, painting and music.
-    struct Entry { int x=0,y=0; uint32_t seed=0; bool valid=false; GroundTile tile; };
+    struct Entry { int x = 0, y = 0; uint32_t seed = 0; bool valid = false; GroundTile tile; };
     static Entry cache[8192];
-    Entry& c = cache[((uint32_t)ty*131u + (uint32_t)tx) & 8191];
-    if (!c.valid || c.x!=tx || c.y!=ty || c.seed!=g.worldSeed)
-        c = {tx,ty,g.worldSeed,true,generateGround(tx,ty)};
+    Entry& c = cache[((uint32_t)ty * 131u + (uint32_t)tx) & 8191];
+    if (!c.valid || c.x != tx || c.y != ty || c.seed != g.worldSeed)
+        c = { tx, ty, g.worldSeed, true, generateGround(tx, ty) };
     return c.tile;
 }
+
 static bool groundWalkable(GroundKind k) {
     return k != G_WATER && k != G_DEEP && k != G_ROCK;
 }
@@ -232,6 +328,7 @@ static bool groundWalkable(GroundKind k) {
 bool villageDecoSolid(int kind) {
     switch (kind) {
         case VD_SHADE_TREE:
+        case VD_PINE:
         case VD_WELL:
         case VD_SIGN:
         case VD_BENCH:
@@ -243,19 +340,35 @@ bool villageDecoSolid(int kind) {
         case VD_URN:
         case VD_FENCE_H:
         case VD_FENCE_V:
+        case VD_FENCE_GATE:
+        case VD_GATE:
         case VD_TEMPLE_PILLAR:
         case VD_CRATE:
         case VD_TABLE:
+        case VD_LONGTABLE:
         case VD_BUCKET:
         case VD_FLOWERBED:
+        case VD_MAILBOX:
+        case VD_NOTICEBOARD:
+        case VD_ROCK:
+        case VD_STUMP:
             return true;
         default:
-            return false;
+            return false; // VD_PLANT, VD_BUSH, VD_FLOWER_BUSH, VD_LADDER stay walkable/brushable
     }
 }
 
-// Resolve a procedural landmark identically for rendering, collision and props.
-// Sector candidates are intentionally independent of visit order.
+float villageDecoCenterX(const Village::Deco& d) {
+    int dx = (int)floorf(d.x + 0.5f);
+    if (d.kind == VD_WELL || d.kind == VD_BENCH || d.kind == VD_FLOWERBED || d.kind == VD_FENCE_GATE) {
+        // 2-tile wide [dx-1 .. dx]: exact pixel midpoint is dx * TILE
+        return (float)(dx * TILE);
+    }
+    // 1-tile [dx] or 3-tile [dx-1 .. dx+1]: exact pixel midpoint is (dx + 0.5) * TILE
+    return ((float)dx + 0.5f) * (float)TILE;
+}
+
+// ================================================================ landmarks
 static bool proceduralLandmark(int sx, int sy, Landmark& out) {
     const int sector = 128;
     uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
@@ -263,7 +376,6 @@ static bool proceduralLandmark(int sx, int sy, Landmark& out) {
     int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
     int ly = sy * sector + sector / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
     if ((float)lx * lx + (float)ly * ly < 42.0f * 42.0f) return false;
-    // Leave room for the full story-site clearings, not just their centres.
     if ((abs(lx - BOSS_CASTLE_TX) < 20 && abs(ly - BOSS_CASTLE_TY) < 20) ||
         (abs(lx - LOCKET_SITE_TX) < 16 && abs(ly - LOCKET_SITE_TY) < 16) ||
         (abs(lx - TOWER_SITE_TX) < 15 && abs(ly - TOWER_SITE_TY) < 15)) return false;
@@ -280,8 +392,6 @@ static bool proceduralLandmark(int sx, int sy, Landmark& out) {
 static bool proceduralLandmarkNear(int tx, int ty, int radius, Landmark& out) {
     const int sector = 128;
     int sx = (int)floorf((float)tx / sector), sy = (int)floorf((float)ty / sector);
-    // Candidates are at least 44 tiles from a sector edge; a single sector
-    // suffices for the small footprint/clearing radii used here.
     uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
     if ((h % 100) >= 50) return false;
     int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
@@ -290,33 +400,101 @@ static bool proceduralLandmarkNear(int tx, int ty, int radius, Landmark& out) {
     return proceduralLandmark(sx, sy, out);
 }
 
+void expandLandmarkParts(const Landmark& lm, std::vector<LandmarkPart>& out) {
+    out.clear();
+    bool isBossCastle = (lm.kind == LK_CASTLE && lm.tx == BOSS_CASTLE_TX && lm.ty == BOSS_CASTLE_TY);
+    bool isStoryStones = (lm.kind == LK_STONES && lm.tx == LOCKET_SITE_TX && lm.ty == LOCKET_SITE_TY);
+    bool isStoryTower = (lm.kind == LK_TOWER && lm.tx == TOWER_SITE_TX && lm.ty == TOWER_SITE_TY);
+
+    switch (lm.kind) {
+        case LK_CASTLE:
+            out.push_back({ LP_CASTLE, lm.tx, lm.ty, 5 });
+            if (isBossCastle) {
+                out.push_back({ LP_PILLAR, lm.tx - 4, lm.ty + 2, 1 });
+                out.push_back({ LP_PILLAR, lm.tx + 4, lm.ty + 2, 1 });
+                out.push_back({ LP_PILLAR, lm.tx - 4, lm.ty + 5, 1 });
+                out.push_back({ LP_PILLAR, lm.tx + 4, lm.ty + 5, 1 });
+                out.push_back({ LP_TORCH,  lm.tx - 3, lm.ty + 3, 1 });
+                out.push_back({ LP_TORCH,  lm.tx + 3, lm.ty + 3, 1 });
+                out.push_back({ LP_TORCH,  lm.tx - 3, lm.ty + 6, 1 });
+                out.push_back({ LP_TORCH,  lm.tx + 3, lm.ty + 6, 1 });
+            } else {
+                out.push_back({ LP_TORCH, lm.tx - 3, lm.ty + 1, 1 });
+                out.push_back({ LP_TORCH, lm.tx + 3, lm.ty + 1, 1 });
+            }
+            break;
+        case LK_TOWER:
+            out.push_back({ LP_TOWER, lm.tx, lm.ty, 3 });
+            if (isStoryTower) {
+                out.push_back({ LP_RUIN_ARCH, lm.tx - 2, lm.ty + 2, 1 });
+                out.push_back({ LP_BARREL,    lm.tx + 2, lm.ty,     1 });
+                out.push_back({ LP_TORCH,     lm.tx + 2, lm.ty + 2, 1 });
+            } else {
+                out.push_back({ LP_TORCH, lm.tx + 2, lm.ty + 1, 1 });
+            }
+            break;
+        case LK_STONES:
+            out.push_back({ LP_STATUE, lm.tx, lm.ty, 1 });
+            out.push_back({ LP_PILLAR, lm.tx - 3, lm.ty - 1, 1 });
+            out.push_back({ LP_PILLAR, lm.tx + 3, lm.ty - 1, 1 });
+            out.push_back({ LP_PILLAR, lm.tx - 2, lm.ty + 2, 1 });
+            out.push_back({ LP_PILLAR, lm.tx + 2, lm.ty + 2, 1 });
+            if (isStoryStones) {
+                out.push_back({ LP_TORCH, lm.tx - 1, lm.ty - 2, 1 });
+                out.push_back({ LP_TORCH, lm.tx + 1, lm.ty - 2, 1 });
+            }
+            break;
+        case LK_RUINS:
+            out.push_back({ LP_RUIN_ARCH, lm.tx - 2, lm.ty, 2 });
+            out.push_back({ LP_MONUMENT,  lm.tx + 1, lm.ty, 2 });
+            out.push_back({ LP_PILLAR,    lm.tx + 3, lm.ty - 1, 1 });
+            break;
+        case LK_CAMP:
+            out.push_back({ LP_TENT,     lm.tx - 1, lm.ty - 1, 3 });
+            out.push_back({ LP_CAMPFIRE, lm.tx,     lm.ty + 1, 1 });
+            out.push_back({ LP_CAULDRON, lm.tx + 2, lm.ty,     1 });
+            out.push_back({ LP_BARREL,   lm.tx - 3, lm.ty,     1 });
+            break;
+        default:
+            break;
+    }
+}
+
+static bool partBlocksCell(const LandmarkPart& p, int tx, int ty) {
+    switch (p.part) {
+        case LP_CASTLE:
+            return tx >= p.tx - 2 && tx <= p.tx + 2 && ty >= p.ty - 3 && ty <= p.ty;
+        case LP_TOWER:
+            return tx >= p.tx - 1 && tx <= p.tx + 1 && ty >= p.ty - 1 && ty <= p.ty;
+        case LP_TENT:
+            return tx >= p.tx - 1 && tx <= p.tx + 1 && ty >= p.ty - 1 && ty <= p.ty;
+        case LP_RUIN_ARCH:
+        case LP_MONUMENT:
+            if (p.spanW == 2) return ty == p.ty && (tx == p.tx - 1 || tx == p.tx);
+            return tx == p.tx && ty == p.ty;
+        default:
+            return tx == p.tx && ty == p.ty;
+    }
+}
+
 static bool landmarkCellBlocked(int tx, int ty) {
-    // Northern Castle keep (anchored at BOSS_CASTLE_TX, BOSS_CASTLE_TY)
-    if (tx >= BOSS_CASTLE_TX - 2 && tx <= BOSS_CASTLE_TX + 2 &&
-        ty >= BOSS_CASTLE_TY - 3 && ty <= BOSS_CASTLE_TY)
-        return true;
-    // Standing Stones centre statue
-    if (tx == LOCKET_SITE_TX && ty == LOCKET_SITE_TY) return true;
-    // Old Watchtower base
-    if (tx >= TOWER_SITE_TX - 1 && tx <= TOWER_SITE_TX + 1 &&
-        ty >= TOWER_SITE_TY - 1 && ty <= TOWER_SITE_TY)
-        return true;
     Landmark lm;
-    if (proceduralLandmarkNear(tx, ty, 4, lm)) {
-        int dx = tx - lm.tx, dy = ty - lm.ty;
-        switch (lm.kind) {
-            case LK_TOWER: return abs(dx) <= 1 && dy >= -1 && dy <= 0;
-            case LK_CASTLE: return abs(dx) <= 2 && dy >= -3 && dy <= 0;
-            case LK_STONES: return dy == 0 && (dx == 0 || abs(dx) == 2);
-            case LK_CAMP: return dy == 0 && abs(dx) <= 1;
-            case LK_RUINS: return dy == 0 && abs(dx) <= 2;
-            default: break;
-        }
+    if (!landmarkNear(tx, ty, lm)) return false;
+    std::vector<LandmarkPart> parts;
+    expandLandmarkParts(lm, parts);
+    for (const auto& p : parts) {
+        if (partBlocksCell(p, tx, ty)) return true;
     }
     return false;
 }
 
 bool cellWalkable(int tx, int ty) {
+    if (g.villageLoaded) {
+        for (const auto& rc : g.village.rocks) {
+            if (rc.first == tx && rc.second == ty) return false;
+        }
+    }
+
     GroundTile gt = sampleGround(tx, ty);
     if (!groundWalkable(gt.kind)) return false;
     if (landmarkCellBlocked(tx, ty)) return false;
@@ -330,15 +508,18 @@ bool cellWalkable(int tx, int ty) {
 
     if (g.villageLoaded) {
         for (const Building& b : g.village.buildings) {
-            int x0 = b.tx - b.w / 2, y0 = b.ty - b.h + 1;
-            if (tx >= x0 && tx <= x0 + b.w - 1 && ty >= y0 && ty <= b.ty) return false;
+            int x0 = buildingX0(b), y0 = buildingY0(b);
+            if (tx >= x0 && tx < x0 + b.w && ty >= y0 && ty <= b.ty) return false;
         }
         for (const auto& d : g.village.decos) {
             if (!villageDecoSolid(d.kind)) continue;
             int dx = (int)floorf(d.x + 0.5f), dy = (int)floorf(d.y + 0.5f);
-            if (d.kind == VD_WELL || d.kind == VD_FLOWERBED || d.kind == VD_BENCH) {
-                // 2-tile wide street furniture centered on d.x
+            if (d.kind == VD_WELL) {
+                if ((ty == dy || ty == dy - 1) && (tx == dx || tx == dx - 1)) return false;
+            } else if (d.kind == VD_FLOWERBED || d.kind == VD_BENCH || d.kind == VD_FENCE_GATE) {
                 if (ty == dy && (tx == dx || tx == dx - 1)) return false;
+            } else if (d.kind == VD_LONGTABLE || d.kind == VD_GATE) {
+                if (ty == dy && tx >= dx - 1 && tx <= dx + 1) return false;
             } else {
                 if (tx == dx && ty == dy) return false;
             }
@@ -359,75 +540,156 @@ bool positionBlocked(float x, float y, float r) {
 bool inVillage(float x, float y) {
     if (!g.villageLoaded) return false;
     float dx = x - g.village.cx, dy = y - g.village.cy;
-    return dx * dx + dy * dy < 18.0f * 18.0f;
+    return dx * dx + dy * dy < 19.0f * 19.0f;
 }
 bool nearStartVillage(float x, float y) {
     return (x * x + y * y) < 30.0f * 30.0f;
 }
 
 // ================================================================ props
-// A local priority test keeps tree trunks apart without depending on generation
-// order or chunk boundaries. Other, smaller plants may grow between them.
-static bool treeCandidate(int tx, int ty) {
-    uint32_t priority = hash2i(tx, ty, g.worldSeed ^ 0x4f3e57u);
-    if (priority > 0x70000000u) return false;
-    for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
-        if (!dx && !dy) continue;
-        uint32_t other = hash2i(tx + dx, ty + dy, g.worldSeed ^ 0x4f3e57u);
-        if (other < priority || (other == priority && (dy < 0 || (dy == 0 && dx < 0))))
-            return false;
-    }
-    return true;
+// SNES grove placement:
+// - Broadleaf crowns (40x39 px) pack on a staggered 2-tile canopy lattice so
+//   adjacent crowns overlap by 12-20 px into lush layered forest walls while
+//   keeping every grove solid and grounded.
+// - Narrow conifers (16x32 px) pack on a tight staggered weave so evergreens
+//   stand shoulder-to-shoulder in tiered ranks instead of lonely toothpicks.
+static bool broadleafSlot(int tx, int ty, float grove, float hf) {
+    bool evenRow = ((ty & 1) == 0);
+    int xm = ((tx % 2) + 2) % 2;
+    if (evenRow && xm == 0) return hf < 0.88f;
+    if (!evenRow && xm == 1 && grove > 0.56f) return hf < 0.78f;
+    return false;
+}
+
+static bool coniferSlot(int tx, int ty, float grove, float hf) {
+    int parity = ((tx + (ty & 1)) & 1);
+    if (parity == 0) return hf < 0.90f;
+    if (grove > 0.64f && (ty & 1) == 0) return hf < 0.52f;
+    return false;
 }
 
 PropKind propAt(int tx, int ty) {
     if (g.villageLoaded && inVillage((float)tx + 0.5f, (float)ty + 0.5f)) return P_NONE;
+
+    // Sacred ring of ancient amber oaks framing the Standing Stones glade
+    {
+        int dx = tx - LOCKET_SITE_TX, dy = ty - LOCKET_SITE_TY;
+        int r2 = dx * dx + dy * dy;
+        if (r2 >= 30 && r2 <= 46 && !nearTrail(tx, ty, 1) && !(abs(dx) <= 2 && dy >= 2)) {
+            if (((tx + ty) & 1) == 0 && hashf(tx, ty, g.worldSeed ^ 0x5704u) < 0.68f)
+                return ((tx ^ ty) & 2) ? P_AMBER_OAK : P_COPPER_OAK;
+        }
+    }
     if (nearSpecialSite(tx, ty)) return P_NONE;
+
     Landmark lm;
-    if (proceduralLandmarkNear(tx, ty, 4, lm)) return P_NONE;
+    if (proceduralLandmarkNear(tx, ty, 5, lm)) return P_NONE;
+    if (nearTrail(tx, ty, 1)) return P_NONE;
+
     GroundTile gt = sampleGround(tx, ty);
+    if (gt.kind == G_DIRT || gt.kind == G_BRIDGE_NS || gt.kind == G_BRIDGE_EW ||
+        gt.kind == G_COBBLE || gt.kind == G_FLOOR || gt.kind == G_SOIL ||
+        gt.kind == G_WATER || gt.kind == G_DEEP || gt.kind == G_ICE)
+        return P_NONE;
+
     uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0x77ee5u);
     float hf = (float)h / 4294967295.0f;
-    float grove = smoothNoise(tx * 0.065f, ty * 0.065f, g.worldSeed ^ 0x61a4u);
+    float grove = canopyDensityAt(tx, ty, g.worldSeed);
+
+    // Millbrook riverbank framing: weeping willows, reed clumps & river stones
+    float brook = brookCenterAt((float)tx, g.worldSeed);
+    float bank = fabsf((float)ty - brook);
+    if (bank >= 2.15f && bank <= 3.85f && abs(tx) > 3) {
+        if (bank < 2.95f && hf < 0.24f) return P_REEDS;
+        if (bank >= 2.75f && broadleafSlot(tx, ty, 0.62f, hf) && hf < 0.28f) return P_WILLOW;
+        if (hf > 0.965f) return P_ROCK0;
+    }
+
+    // Cliff-toe boulders & shrubs tucked cleanly against G_ROCK escarpments
+    bool rockNorth = (sampleGround(tx, ty - 1).kind == G_ROCK);
+    if (gt.kind != G_ROCK && rockNorth) {
+        if (hf < 0.22f) return (PropKind)(P_ROCK0 + (h % 3));
+        if (hf < 0.36f && gt.biome != BI_DUNES && gt.biome != BI_FROST) return P_BUSH_PLAIN;
+    }
+
     switch (gt.kind) {
         case G_GRASS:
-        case G_GRASS_DARK:
-            if (grove > (gt.biome == BI_FOREST ? 0.17f : 0.54f) && treeCandidate(tx, ty)) {
-                if (gt.biome == BI_FOREST && ((h>>8)%3)) return (PropKind)(P_PINE0 + h%3);
-                return (PropKind)(P_TREE0 + h%3);
+        case G_GRASS_DARK: {
+            float thresh = (gt.biome == BI_FOREST) ? 0.42f : 0.57f;
+            if (grove > thresh) {
+                if (gt.biome == BI_FOREST && ((h >> 8) % 3) != 0) {
+                    if (coniferSlot(tx, ty, grove, hf)) return (PropKind)(P_PINE0 + (h % 3));
+                } else {
+                    if (broadleafSlot(tx, ty, grove, hf)) return (PropKind)(P_TREE0 + (h % 3));
+                }
+                if (hf > 0.92f) return (gt.biome == BI_FOREST) ? P_MUSHROOM : P_BUSH_PLAIN;
+                if (hf < 0.03f) return P_STUMP;
+            } else if (grove > thresh - 0.085f) {
+                // Lush undergrowth skirt hugging the outer edge of every copse
+                if (hf < 0.16f) return ((h >> 5) & 1) ? P_BUSH : P_BUSH_PLAIN;
+                if (hf > 0.955f) return (gt.biome == BI_FOREST) ? P_MUSHROOM : P_ROCK0;
+                if (hf > 0.935f && hf <= 0.955f) return P_STUMP;
+            } else {
+                // Open sunlit glade: breathable space with rare solitary landmark oaks/stones
+                if (hf < 0.006f && broadleafSlot(tx, ty, 0.5f, 0.1f)) return (PropKind)(P_TREE0 + (h % 3));
+                if (hf > 0.992f) return P_ROCK0;
+                if (hf > 0.984f && hf <= 0.992f) return P_BUSH;
             }
-            if (hf < 0.014f) return P_ROCK0;
-            if (hf < 0.022f + grove * 0.055f) return P_BUSH_PLAIN;
-            if (hf > 0.993f && grove > 0.48f) return P_STUMP;
-            if (hf > 0.96f && gt.biome == BI_FOREST) return P_MUSHROOM;
-            if (hf > 0.982f && grove < 0.50f) return P_BUSH;
             break;
+        }
         case G_AMBER:
-        case G_LEAVES:
-            if (grove > 0.21f && treeCandidate(tx,ty)) return (h%4 ? P_AMBER_OAK : P_COPPER_OAK);
-            if (hf < 0.022f) return P_MUSHROOM;
-            if (hf > 0.986f) return P_STUMP;
+        case G_LEAVES: {
+            if (grove > 0.43f) {
+                if (broadleafSlot(tx, ty, grove, hf)) return (h % 4) ? P_AMBER_OAK : P_COPPER_OAK;
+                if (hf < 0.06f) return P_MUSHROOM;
+                if (hf > 0.965f) return P_STUMP;
+            } else if (grove > 0.34f) {
+                if (hf < 0.13f) return P_BUSH_PLAIN;
+                if (hf > 0.955f) return P_MUSHROOM;
+                if (hf > 0.935f && hf <= 0.955f) return P_ROCK1;
+            } else {
+                if (hf < 0.006f && broadleafSlot(tx, ty, 0.5f, 0.1f)) return P_AMBER_OAK;
+                if (hf > 0.990f) return P_STUMP;
+            }
             break;
-        case G_SNOW:
-            if (grove > 0.33f && treeCandidate(tx,ty)) return P_TREE_SNOW;
-            if (hf > 0.986f) return P_CRYSTAL;
+        }
+        case G_SNOW: {
+            if (grove > 0.47f) {
+                if (coniferSlot(tx, ty, grove, hf)) return P_TREE_SNOW;
+                if (hf > 0.96f) return P_ROCK2;
+            } else if (grove > 0.38f) {
+                if (hf < 0.07f) return P_ROCK2;
+                if (hf > 0.975f) return P_CRYSTAL;
+            } else if (hf > 0.991f) {
+                return P_CRYSTAL;
+            }
             break;
-        case G_HEATH:
-            if (grove > 0.44f && treeCandidate(tx,ty)) return P_PINE2;
-            if (hf > 0.974f) return P_ROCK2;
+        }
+        case G_HEATH: {
+            if (grove > 0.50f) {
+                if (coniferSlot(tx, ty, grove, hf)) return (h & 1) ? P_PINE2 : P_PINE1;
+                if (hf > 0.94f) return P_ROCK2;
+            } else if (grove > 0.40f) {
+                if (hf < 0.10f) return (PropKind)(P_ROCK0 + (h % 3));
+                if (hf > 0.95f) return P_BUSH_PLAIN;
+            } else if (hf > 0.985f) {
+                return P_BOULDER;
+            }
             break;
+        }
         case G_ROCK:
-            if (hf < 0.045f) return P_BOULDER;
-            if (hf > 0.987f) return P_CRYSTAL;
+            if (hf < 0.055f) return P_BOULDER;
+            if (hf > 0.985f) return P_CRYSTAL;
             break;
         case G_SAND:
         case G_RIPPLES:
-            if (hf < 0.035f && grove > 0.32f) return P_YUCCA;
-            if (hf > 0.986f) return P_ROCK1;
+            if (grove > 0.48f && hf < 0.09f) return P_YUCCA;
+            if (hf > 0.984f) return P_ROCK1;
             break;
         case G_SWAMP:
-            if (grove > 0.42f && treeCandidate(tx,ty)) return h%3 ? P_WILLOW : P_DEADTREE;
-            if (hf < 0.09f + grove*0.08f) return P_REEDS;
+            if (grove > 0.46f && broadleafSlot(tx, ty, grove, hf)) return (h % 3) ? P_WILLOW : P_DEADTREE;
+            if (hf < 0.12f + grove * 0.10f) return P_REEDS;
+            if (hf > 0.985f) return P_MUSHROOM;
             break;
         default: break;
     }
@@ -485,23 +747,37 @@ void villageDecoTexture(int kind, int variant, Texture2D*& tex, int& w, int& h) 
         case VD_URN: t = &g.assets.urn; break;
         case VD_FENCE_H: t = &g.assets.fence; break;
         case VD_FENCE_V: t = &g.assets.fencePost; break;
+        case VD_FENCE_GATE: t = &g.assets.fenceGate; break;
         case VD_GATE: t = &g.assets.gate; break;
         case VD_TEMPLE_PILLAR: t = &g.assets.pillar; break;
         case VD_HOUSE: t = (variant >= 0 && variant < 5) ? &g.assets.house[variant] : &g.assets.house[0]; break;
+        case VD_PINE: {
+            Biome b = sampleGround(g.village.cx, g.village.cy).biome;
+            t = (b == BI_FROST) ? &g.assets.treeSnow : &g.assets.pine[(variant >= 0 ? variant : 0) % 3];
+            break;
+        }
         case VD_SHADE_TREE: {
             switch (sampleGround(g.village.cx, g.village.cy).biome) {
-                case BI_AMBER: t = variant%3 ? &g.assets.amberOak : &g.assets.copperOak; break;
-                case BI_FOREST: case BI_HEATH: t = &g.assets.pine[variant%3]; break;
+                case BI_AMBER: t = (variant % 3) ? &g.assets.amberOak : &g.assets.copperOak; break;
+                case BI_FOREST:
+                case BI_HEATH: t = (variant & 1) ? &g.assets.tree[variant % 3] : &g.assets.pine[variant % 3]; break;
                 case BI_FROST: t = &g.assets.treeSnow; break;
-                case BI_FEN: t = &g.assets.willow; break;
+                case BI_FEN:   t = &g.assets.willow; break;
                 case BI_DUNES: t = &g.assets.yucca; break;
-                default: t = &g.assets.tree[variant%3]; break;
+                default:       t = &g.assets.tree[(variant >= 0 ? variant : 0) % 3]; break;
             }
             break;
         }
         case VD_CRATE: t = &g.assets.crate; break;
         case VD_TABLE: t = &g.assets.table; break;
+        case VD_LONGTABLE: t = (g.assets.longtable.id != 0) ? &g.assets.longtable : &g.assets.table; break;
         case VD_BUCKET: t = &g.assets.bucket; break;
+        case VD_MAILBOX: t = (g.assets.mailbox.id != 0) ? &g.assets.mailbox : &g.assets.sign; break;
+        case VD_NOTICEBOARD: t = (g.assets.noticeboard.id != 0) ? &g.assets.noticeboard : &g.assets.sign; break;
+        case VD_BUSH: t = &g.assets.bush[1]; break;
+        case VD_FLOWER_BUSH: t = &g.assets.bush[0]; break;
+        case VD_ROCK: t = &g.assets.rock[(variant >= 0 ? variant : 0) % 3]; break;
+        case VD_STUMP: t = &g.assets.stump; break;
         default: break;
     }
     tex = t;
@@ -527,7 +803,6 @@ std::string compassHint(float fromX, float fromY, float toX, float toY) {
     float dx = toX - fromX, dy = toY - fromY;
     int dist = (int)roundf(sqrtf(dx * dx + dy * dy));
     if (dist < 6) return "here";
-    // atan2(dy, dx): 0=E, +pi/2=S, -pi/2=N, pi=W
     float ang = atan2f(dy, dx) * 180.0f / 3.14159265f;
     const char* dir = "E";
     if (ang >= -22.5f && ang < 22.5f) dir = "E";
@@ -558,21 +833,71 @@ static bool siteFit(int cx, int cy, int R) {
 }
 
 static bool buildingsOverlap(const Building& a, const Building& b, int pad = 2) {
-    int ax0 = a.tx - a.w / 2 - pad, ax1 = a.tx - a.w / 2 + a.w - 1 + pad;
-    int ay0 = a.ty - a.h + 1 - pad, ay1 = a.ty + 1 + pad;
-    int bx0 = b.tx - b.w / 2,       bx1 = b.tx - b.w / 2 + b.w - 1;
-    int by0 = b.ty - b.h + 1,       by1 = b.ty + 1;
+    int ax0 = buildingX0(a) - pad, ax1 = buildingX0(a) + a.w - 1 + pad;
+    int ay0 = buildingY0(a) - pad, ay1 = a.ty + 1 + pad;
+    int bx0 = buildingX0(b),       bx1 = buildingX0(b) + b.w - 1;
+    int by0 = buildingY0(b),       by1 = b.ty + 1;
     return !(ax1 < bx0 || ax0 > bx1 || ay1 < by0 || ay0 > by1);
 }
 
-static bool decoHitsBuildingOrDoor(const Village& v, float dx, float dy) {
-    int tx = (int)floorf(dx + 0.5f), ty = (int)floorf(dy + 0.5f);
+static bool cellReservedInVillage(const Village& v, int tx, int ty, int doorPad = 1) {
     for (const Building& b : v.buildings) {
-        int x0 = b.tx - b.w / 2 - 1, x1 = b.tx - b.w / 2 + b.w;
-        int y0 = b.ty - b.h, y1 = b.ty + 2;
+        int x0 = buildingX0(b) - 1, x1 = buildingX0(b) + b.w;
+        int y0 = buildingY0(b) - 1, y1 = b.ty + doorPad + 1;
         if (tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1) return true;
     }
+    auto inVec = [&](const std::vector<std::pair<int, int>>& vec) {
+        return std::find(vec.begin(), vec.end(), std::make_pair(tx, ty)) != vec.end();
+    };
+    if (inVec(v.paths) || inVec(v.plaza) || inVec(v.court) || inVec(v.soil) || inVec(v.rocks))
+        return true;
+    GroundKind gk = sampleGround(tx, ty).kind;
+    if (!groundWalkable(gk) || gk == G_DIRT || gk == G_BRIDGE_NS || gk == G_BRIDGE_EW || gk == G_SOIL)
+        return true;
+    for (const auto& d : v.decos) {
+        int dx = (int)floorf(d.x + 0.5f), dy = (int)floorf(d.y + 0.5f);
+        if (abs(tx - dx) <= 1 && abs(ty - dy) <= 1 && (d.kind == VD_WELL || d.kind == VD_LONGTABLE))
+            return true;
+        if (tx == dx && ty == dy) return true;
+    }
     return false;
+}
+
+// Orthogonal / gently stepped 2-tile street builder (classic SNES town lanes, never jagged diagonals)
+static void paveStreetL(std::vector<std::pair<int, int>>& paths, int x0, int y0, int x1, int y1, bool horizFirst) {
+    auto add2 = [&](int x, int y, bool ns) {
+        paths.push_back({ x, y });
+        if (ns) paths.push_back({ x + 1, y });
+        else    paths.push_back({ x, y + 1 });
+    };
+    if (horizFirst) {
+        int sx = (x0 <= x1) ? 1 : -1;
+        for (int x = x0; ; x += sx) {
+            add2(x, y0, false);
+            if (x == x1) break;
+        }
+        int sy = (y0 <= y1) ? 1 : -1;
+        for (int y = y0; ; y += sy) {
+            add2(x1, y, true);
+            if (y == y1) break;
+        }
+    } else {
+        int sy = (y0 <= y1) ? 1 : -1;
+        for (int y = y0; ; y += sy) {
+            add2(x0, y, true);
+            if (y == y1) break;
+        }
+        int sx = (x0 <= x1) ? 1 : -1;
+        for (int x = x0; ; x += sx) {
+            add2(x, y1, false);
+            if (x == x1) break;
+        }
+    }
+}
+
+static void dedupCells(std::vector<std::pair<int, int>>& cells) {
+    std::sort(cells.begin(), cells.end());
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
 }
 
 void buildStartVillage(Village& v, uint32_t seed) {
@@ -583,123 +908,276 @@ void buildStartVillage(Village& v, uint32_t seed) {
     v.name = "Elmswick";
     v.seed = seed ^ 0x5171u;
 
-    auto addHouse = [&](int kind, int tx, int ty) {
+    auto addBuilding = [&](int kind, int tx, int ty) {
         Building b;
         b.kind = kind;
         b.tx = tx; b.ty = ty;
-        b.w = (kind == 7) ? 5 : 4;
+        b.w = (kind >= 5) ? 5 : 4;   // shop/inn/temple/manor = 5 tiles (70-78px), cottages = 4 tiles (64px)
         b.h = (kind == 7) ? 4 : 3;
         b.sprite = kind;
         v.buildings.push_back(b);
     };
-    addHouse(5, -8, -1);      // shop, west of the plaza
-    addHouse(6, 8, -1);       // inn, east of the plaza
-    addHouse(7, 0, -11);      // temple, north
-    addHouse(0, -12, -8);
-    addHouse(1, 12, -8);
-    addHouse(2, -12, 5);
-    addHouse(3, 12, 5);
-    addHouse(4, -5, 10);
-    addHouse(0, 6, 10);
 
-    // plaza cobbles
-    for (int ty = -4; ty <= 4; ty++)
-        for (int tx = -5; tx <= 5; tx++) {
-            float dx = (float)tx / 5.0f, dy = (float)ty / 4.0f;
-            if (dx * dx + dy * dy <= 1.0f) v.plaza.push_back({ tx, ty });
+    // Asymmetric, zoned SNES town districts:
+    addBuilding(5, -8, -1);     // 0: Mira's Sundries (Market West)       [-10..-6, -3..-1], door (-8, 0)
+    addBuilding(6,  8,  1);     // 1: The Sleeping Stag Inn (East Patio)  [  6..10, -1.. 1], door ( 8, 2)
+    addBuilding(7, -1, -10);    // 2: Chapel of the Meadow (North Ridge)  [ -3.. 1,-13..-10], door (-1,-9)
+    addBuilding(8, -9, -7);     // 3: Elder's Hall / Field Office (NW)    [-11..-7, -9..-7], door (-9,-6)
+    addBuilding(1,  9, -6);     // 4: Artisan's Cottage (NE Terrace)      [  7..10, -8..-6], door ( 9,-5)
+    addBuilding(2, -12, 4);     // 5: Weaver's Cottage (West Lane)        [-14..-11, 2.. 4], door (-12,5)
+    addBuilding(4, -5,  8);     // 6: Farmer Hedrick's Farmhouse (SW)     [ -7..-4,  6.. 8], door (-5, 9)
+    addBuilding(3,  6,  8);     // 7: Shepherd's Cottage (SE Pasture)     [  4.. 7,  6.. 8], door ( 6, 9)
+
+    // Cut-stone sanctuary terrace in front of the Chapel
+    for (int ty = -9; ty <= -7; ty++)
+        for (int tx = -3; tx <= 1; tx++)
+            v.court.push_back({ tx, ty });
+
+    // Stepped cobbled Town Square around the central Well
+    for (int ty = -4; ty <= 4; ty++) {
+        for (int tx = -4; tx <= 4; tx++) {
+            if (abs(tx) + abs(ty) <= 6 || (abs(tx) <= 2 && abs(ty) <= 4))
+                v.plaza.push_back({ tx, ty });
         }
+    }
 
-    auto road = [&](int x0, int y0, int x1, int y1) {
-        int dx = abs(x1 - x0), dy = abs(y1 - y0);
-        int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-        int err = dx - dy, x = x0, y = y0;
-        for (int guard = 0; guard < 96; guard++) {
-            v.paths.push_back({ x, y });
-            v.paths.push_back({ x + 1, y });
-            if (x == x1 && y == y1) break;
-            int e2 = 2 * err;
-            if (e2 > -dy) { err -= dy; x += sx; }
-            if (e2 < dx) { err += dx; y += sy; }
+    // Orthogonal & gently stepped 2-tile dirt lanes linking every doorway & all 4 gates
+    paveStreetL(v.paths, -16, 0, -4, 0, true);     // West Mirefen Gate -> Market & Plaza
+    paveStreetL(v.paths, -9, -6, -9, 0, false);    // Elder's Hall -> Market Lane
+    paveStreetL(v.paths, -13, 1, -13, 5, false);   // Market Lane -> Weaver's Cottage doorstep
+    paveStreetL(v.paths, 4, 2, 16, 2, true);       // Plaza -> Inn doorstep & East Woodland Lane
+    paveStreetL(v.paths, 16, 2, 19, 0, false);     // Connect East Woodland Lane cleanly to East Highway (y=0)
+    paveStreetL(v.paths, 8, -5, 8, 2, false);      // Artisan's Cottage -> Inn Lane
+    paveStreetL(v.paths, -2, -7, -2, -4, false);   // Chapel Sanctuary Steps -> Plaza
+    paveStreetL(v.paths, 1, -8, 3, -15, true);     // North Road curving east of Chapel
+    paveStreetL(v.paths, 3, -15, 0, -16, true);    // North Road gateway alignment (x = 0..1)
+    paveStreetL(v.paths, 0, 4, 0, 14, false);      // South Millbrook Highway -> Bridge
+    paveStreetL(v.paths, -8, 9, 0, 9, true);       // Hedrick's Farmhouse & Turnip Croft Gate -> South Road
+    paveStreetL(v.paths, 1, 9, 8, 9, true);        // South Road -> Shepherd's Cottage & Sheep Paddock Gate
+
+    // Doorstep welcome aprons
+    for (const Building& b : v.buildings) {
+        int dtx = buildingDoorTx(b), dty = buildingDoorTy(b);
+        v.paths.push_back({ dtx, dty });
+        v.paths.push_back({ dtx - 1, dty });
+    }
+
+    // Stepped northern hillside cliff ridge behind the Chapel & Elder's Hall (3D crags via relief.png!)
+    auto addCliff = [&](int x0, int x1, int y0, int y1) {
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                v.rocks.push_back({ x, y });
+    };
+    addCliff(-14, -7, -14, -13);
+    addCliff(-6,  -4, -15, -14);
+    addCliff(-4,   1, -16, -15);
+    addCliff( 6,  13, -13, -12);
+
+    // Hedrick's tilled turnip garden
+    for (int ty = 9; ty <= 11; ty++)
+        for (int tx = -13; tx <= -9; tx++)
+            v.soil.push_back({ tx, ty });
+
+    auto deco = [&](int kind, int x, int y, int variant = 0) {
+        v.decos.push_back({ kind, (float)x, (float)y, variant });
+    };
+
+    // --- Central Square setpiece
+    deco(VD_WELL, 0, 0);                    // 2x2 well at [-1..0, -1..0]
+    deco(VD_BUCKET, 1, 0);                  // wooden water basin right beside well
+    deco(VD_BENCH, -2, -3);                 // NW plaza bench [-3..-2, -3] under shade oak
+    deco(VD_BENCH,  3, -2);                 // E plaza bench  [ 2.. 3, -2]
+    deco(VD_SHADE_TREE, -4, -4, 0);         // big plaza shade oak
+    deco(VD_SHADE_TREE,  4,  4, 2);         // SE plaza shade oak
+    deco(VD_NOTICEBOARD, 2,  4);            // town noticeboard at south square exit
+    deco(VD_TORCH, -3,  3);                 // warm plaza lanterns
+    deco(VD_TORCH,  3,  3);
+
+    // --- Chapel of the Meadow forecourt
+    deco(VD_TEMPLE_PILLAR, -4, -9);
+    deco(VD_TEMPLE_PILLAR,  2, -9);
+    deco(VD_FLOWERBED, -4, -7);             // [-5..-4, -7]
+    deco(VD_FLOWERBED,  3, -7);             // [ 2.. 3, -7]
+    deco(VD_TORCH, -3, -6);
+    deco(VD_TORCH,  0, -6);
+    deco(VD_STATUE, -5, -10);
+
+    // --- Market & Elder's Hall (NW)
+    deco(VD_BARREL, -11, -2);
+    deco(VD_CRATE,  -11, -1);
+    deco(VD_PLANT,   -5, -1);
+    deco(VD_SIGN,    -5,  1);
+    deco(VD_MAILBOX, -6, -6);
+    deco(VD_FLOWERBED, -11, -6);            // [-12..-11, -6]
+    deco(VD_TORCH,  -10, -5);
+
+    // --- Weaver's Cottage (W)
+    deco(VD_BARREL,  -15,  4);
+    deco(VD_PLANT,   -10,  4);
+    deco(VD_MAILBOX, -10,  5);
+
+    // --- Artisan's Cottage & Sleeping Stag Inn Patio (NE / E)
+    deco(VD_STUMP,    6, -6);
+    deco(VD_MAILBOX, 11, -5);
+    deco(VD_FLOWERBED, 12, -6);             // [11..12, -6]
+    deco(VD_TORCH,    5,  1);
+    deco(VD_BARREL,  11,  0);
+    deco(VD_CRATE,   12,  0);
+    deco(VD_LONGTABLE, 13, 1);              // 3-tile outdoor tavern table [12..14, 1]
+    deco(VD_BENCH,   13,  0);               // [12..13, 0]
+
+    // --- SW: Farmer Hedrick's Farmhouse & Complete Fenced Turnip Croft (walkable gate at -8, 9..10)
+    deco(VD_BARREL,  -3,  8);
+    deco(VD_MAILBOX, -3,  9);
+    deco(VD_FENCE_V, -14, 8);
+    for (int x = -13; x <= -9; x++) deco(VD_FENCE_H, x, 8);
+    deco(VD_FENCE_V, -8,  8);
+    for (int y = 9; y <= 12; y++) deco(VD_FENCE_V, -14, y);
+    for (int x = -13; x <= -9; x++) deco(VD_FENCE_H, x, 12);
+    deco(VD_FENCE_V, -8, 12);
+    deco(VD_FENCE_V, -8, 11);               // leaves (-8, 9..10) open as yard entrance!
+    deco(VD_BUCKET,  -9, 11);
+
+    // --- SE: Shepherd's Cottage & Complete Fenced Sheep Paddock (walkable gate at 9, 9..10)
+    deco(VD_PLANT,    3,  8);
+    deco(VD_MAILBOX,  8,  8);
+    deco(VD_FENCE_V,  9,  8);
+    for (int x = 10; x <= 13; x++) deco(VD_FENCE_H, x, 8);
+    deco(VD_FENCE_V, 14,  8);
+    for (int y = 9; y <= 13; y++) deco(VD_FENCE_V, 14, y);
+    deco(VD_FENCE_V,  9, 13);
+    for (int x = 10; x <= 13; x++) deco(VD_FENCE_H, x, 13);
+    deco(VD_FENCE_V,  9, 11);
+    deco(VD_FENCE_V,  9, 12);               // leaves (9, 9..10) open as pasture gate!
+    deco(VD_SHADE_TREE, 13, 9, 1);          // shade oak inside sheep paddock
+
+    // --- South Millbrook Bridge Gateposts & Sign
+    deco(VD_SIGN,    2, 11);
+    deco(VD_TORCH,  -1, 13);
+    deco(VD_TORCH,   2, 13);
+    deco(VD_FENCE_V,-2, 13);
+    deco(VD_FENCE_V, 3, 13);
+
+    // --- Dense SNES Perimeter Woodland Belt & Shaded Turf (frames the entire town!)
+    // Leaves crisp gateways for North (x=0..4, y<=-14), West (y=0..1), East (y=2..3), and South (x=-1..2, y>=12)
+    for (int ty = -17; ty <= 15; ty++) {
+        for (int tx = -18; tx <= 18; tx++) {
+            float r = sqrtf((float)(tx * tx + ty * ty));
+            // Keep Millbrook stream & banks natural on the south edge
+            float brook = brookCenterAt((float)tx, seed);
+            if ((float)ty > brook - 2.6f) continue;
+
+            // Road gateway corridors & fenced farmyards stay open and sunny
+            if (tx >= -1 && tx <= 5 && ty <= -12) continue;   // North sanctuary & road
+            if (tx <= -13 && ty >= -1 && ty <= 2) continue;   // West Mirefen gate
+            if (tx >= 13 && ty >= -1 && ty <= 4) continue;    // East woodland lane & highway merge
+            if (tx >= -2 && tx <= 3 && ty >= 10) continue;    // South bridge approach
+            if (tx >= -15 && tx <= -7 && ty >= 7 && ty <= 13) continue; // SW Turnip Croft
+            if (tx >= 8 && tx <= 15 && ty >= 7 && ty <= 14) continue;   // SE Sheep Paddock
+
+            bool inWoodBelt = (r >= 13.6f && r <= 18.6f) ||
+                              (ty <= -11 && abs(tx) >= 5 && r <= 18.6f) ||
+                              (abs(tx) >= 15 && ty >= -10 && ty <= 12);
+            if (!inWoodBelt) continue;
+            if (cellReservedInVillage(v, tx, ty, 1)) continue;
+
+            v.grassDark.push_back({ tx, ty });
+
+            uint32_t h = hash2i(tx, ty, v.seed ^ 0x7711u);
+            float hf = (float)(h & 0xffff) / 65536.0f;
+            if (ty <= -9) {
+                // Northern hillside: tiered evergreen pines + oaks + boulders
+                if (((tx + (ty & 1)) & 1) == 0 && hf < 0.82f)
+                    deco((h & 3) ? VD_PINE : VD_SHADE_TREE, tx, ty, (int)(h % 3));
+                else if (hf > 0.90f)
+                    deco(VD_ROCK, tx, ty, (int)(h % 3));
+                else if (hf < 0.20f)
+                    deco(VD_BUSH, tx, ty);
+            } else {
+                // Lush meadow-edge broadleaf woods & flowering hedgerows
+                bool slot = (((tx & 1) == 0 && (ty & 1) == 0) ||
+                             ((tx & 1) == 1 && (ty & 1) == 1 && r > 15.2f));
+                if (slot && hf < 0.84f) {
+                    deco((ty < -3 && (h % 4 == 0)) ? VD_PINE : VD_SHADE_TREE, tx, ty, (int)(h % 3));
+                } else if (hf < 0.18f) {
+                    deco((h & 1) ? VD_FLOWER_BUSH : VD_BUSH, tx, ty);
+                } else if (hf > 0.94f) {
+                    deco((h & 1) ? VD_STUMP : VD_ROCK, tx, ty, (int)(h % 3));
+                } else if (hf > 0.72f) {
+                    v.flowers.push_back({ tx, ty });
+                }
+            }
         }
-    };
-    // clean roads from the plaza to every building doorstep
-    road(-5, 0, -8, 0);
-    road(5, 0, 8, 0);
-    road(0, -4, 0, -10);
-    road(-8, 0, -12, 6);
-    road(8, 0, 12, 6);
-    road(-8, -5, -12, -7);
-    road(8, -5, 12, -7);
-    road(0, 4, -5, 11);
-    road(0, 4, 6, 11);
-    // the gate road running south out of town, and north path around the temple
-    road(0, 4, 0, 17);
-    road(1, -8, 4, -10);
-    road(4, -10, 4, -15);
-    road(4, -15, 0, -16);
+    }
 
-    auto deco = [&](int kind, float x, float y, int variant = 0) {
-        v.decos.push_back({ kind, x, y, variant });
+    // Interior garden shade trees & wildflower accents tucked beside cottages and fences
+    const std::pair<int, int> innerTrees[] = {
+        { -6, -9 }, { -13, -10 }, { 5, -10 }, { 12, -9 },
+        { -15, 6 }, { -12, 13 }, { 12, 14 }
     };
-    deco(VD_WELL, 0.0f, 0.0f);
-    deco(VD_BUCKET, 2.0f, 0.0f);
-    deco(VD_SIGN, 3.0f, 5.0f);
-    deco(VD_SIGN, -3.0f, 6.0f);
-    deco(VD_BENCH, -3.0f, 2.0f);
-    deco(VD_BENCH, 3.0f, 2.0f);
-    deco(VD_FLOWERBED, -4.0f, -3.0f);
-    deco(VD_FLOWERBED, 5.0f, -3.0f);
-    deco(VD_TORCH, -6.0f, 3.0f);
-    deco(VD_TORCH, 6.0f, 3.0f);
-    deco(VD_STATUE, -3.0f, -6.0f);
-    deco(VD_STATUE, 3.0f, -6.0f);
-    deco(VD_PLANT, -10.0f, 2.0f);
-    deco(VD_PLANT, 10.0f, 2.0f);
-    deco(VD_BARREL, -11.0f, -1.0f);
-    deco(VD_BARREL, 11.0f, -1.0f);
-    deco(VD_CRATE, 8.0f, 4.0f);
-    deco(VD_CAMPFIRE, -8.0f, 8.0f);
-    deco(VD_CAULDRON, 9.0f, 8.0f);
-    deco(VD_TABLE, -7.0f, 4.0f);
-    deco(VD_FENCE_H, -14.0f, 8.0f);
-    deco(VD_FENCE_H, -13.0f, 8.0f);
-    deco(VD_FENCE_H, 13.0f, 8.0f);
-    deco(VD_FENCE_V, -14.0f, 9.0f);
-    deco(VD_FENCE_V, 14.0f, 9.0f);
-    // Shelter belts, kitchen plots and two shady places to stop by the well.
-    for (const auto& p : std::vector<std::pair<int,int>>{{-15,-3},{-14,1},{-9,-6},{-5,-5},
-             {5,-5},{9,-7},{14,0},{15,3},{-9,8},{9,9},{-15,12},{14,12},{-5,14},{6,14}})
-        deco(VD_SHADE_TREE, (float)p.first, (float)p.second, (abs(p.first)+abs(p.second))%3);
-    for (int x = -13; x <= -9; ++x) deco(VD_FENCE_H, (float)x, 13);
-    for (int x = 10; x <= 13; ++x) deco(VD_FENCE_H, (float)x, 13);
+    for (auto [tx, ty] : innerTrees) {
+        if (!cellReservedInVillage(v, tx, ty, 1)) {
+            v.grassDark.push_back({ tx, ty });
+            v.grassDark.push_back({ tx - 1, ty });
+            deco(VD_SHADE_TREE, tx, ty, (abs(tx) + abs(ty)) % 3);
+        }
+    }
+    const std::pair<int, int> flowerSpots[] = {
+        { -6, -5 }, { -4, -8 }, { 2, -8 }, { 6, -5 }, { 11, -4 },
+        { -11, 5 }, { -4, 9 }, { 8, 7 }, { 10, 10 }, { 12, 12 },
+        { -3, 12 }, { 3, 12 }
+    };
+    for (auto [tx, ty] : flowerSpots) {
+        if (!cellReservedInVillage(v, tx, ty, 0)) v.flowers.push_back({ tx, ty });
+    }
+
+    dedupCells(v.paths);
+    dedupCells(v.plaza);
+    dedupCells(v.court);
+    dedupCells(v.grassDark);
+    dedupCells(v.soil);
+    dedupCells(v.flowers);
+    dedupCells(v.rocks);
 }
 
 // Generated villages --------------------------------------------------------
 static void layoutVillage(Village& v) {
     uint32_t rs = v.seed;
     v.buildings.clear();
+    v.plaza.clear();
+    v.paths.clear();
+    v.court.clear();
+    v.grassDark.clear();
+    v.soil.clear();
+    v.flowers.clear();
+    v.rocks.clear();
+    v.decos.clear();
 
-    // A market lane, a hill court or a compact green; mirror/stagger the
-    // services without moving any door off its own road.
-    int plan = rs % 3, side = (rs & 8) ? 1 : -1;
-    Building shop{ 5, v.cx + 7*side, v.cy + (plan == 0 ? 1 : -3), 4, 3, 5 };
-    Building inn{ 6, v.cx - 7*side, v.cy + (plan == 1 ? 4 : 0), 4, 3, 6 };
-    Building temple{ 7, v.cx + (plan == 2 ? -3*side : 0), v.cy - 8, 5, 4, 7 };
+    int plan = (int)(rs % 3);
+    int side = (rs & 8) ? 1 : -1;
+
+    // 5-tile wide service buildings (shop, inn, temple) + staggered residential cottages
+    Building shop{ 5, v.cx + 7 * side, v.cy + (plan == 0 ? 0 : -2), 5, 3, 5 };
+    Building inn{ 6, v.cx - 7 * side, v.cy + (plan == 1 ? 3 : 1), 5, 3, 6 };
+    Building temple{ 7, v.cx + (plan == 2 ? -2 * side : 0), v.cy - 9, 5, 4, 7 };
     v.buildings.push_back(shop);
     v.buildings.push_back(inn);
     v.buildings.push_back(temple);
 
+    const std::pair<int, int> slots[] = {
+        { -9 * side, -6 }, { 9 * side, -6 }, { -10 * side, 6 },
+        { 8 * side, 7 },   { -4 * side, 8 }, { 4 * side, 9 }
+    };
     int targetHouses = 3 + (int)(rs % 3);
-    for (int i = 0; i < targetHouses * 3 && (int)v.buildings.size() < 3 + targetHouses; i++) {
-        float ang = hashf(i, 71, rs) * 6.2831853f;
-        int dist = 8 + (int)(hashf(i, 77, rs) * 4.0f);
+    for (int i = 0; i < 6 && (int)v.buildings.size() < 3 + targetHouses; i++) {
+        int jx = (int)(hash2i(i, 17, rs) % 3) - 1;
+        int jy = (int)(hash2i(i, 29, rs) % 2);
         Building b;
         b.w = 4; b.h = 3;
-        b.tx = v.cx + (int)(cosf(ang) * dist);
-        b.ty = v.cy + (int)(sinf(ang) * dist * 0.85f);
-        b.kind = (int)(hashf(i, 31, rs) * 5.0f) % 5;
+        b.tx = v.cx + slots[i].first + jx;
+        b.ty = v.cy + slots[i].second + jy;
+        b.kind = (int)(hash2i(i, 31, rs) % 5);
         b.sprite = b.kind;
-        // Never overlap plaza or other buildings
         if (abs(b.tx - v.cx) <= 5 && abs(b.ty - v.cy) <= 4) continue;
         bool bad = false;
         for (const auto& ex : v.buildings) {
@@ -708,54 +1186,98 @@ static void layoutVillage(Village& v) {
         if (!bad) v.buildings.push_back(b);
     }
 
-    v.plaza.clear();
-    for (int y = -4; y <= 4; ++y) for (int x = -5; x <= 5; ++x) {
-        bool paved = plan == 0 ? abs(y) <= 1 && abs(x) <= 5 :        // market street
-                     plan == 1 ? abs(y) <= 3 && abs(x) <= 3 :        // temple court
-                                 x*x/16.f + y*y/9.f <= 1.f;          // village green
-        if (paved) v.plaza.emplace_back(v.cx+x,v.cy+y);
-    }
+    // Temple forecourt flagstones
+    for (int y = temple.ty + 1; y <= temple.ty + 2; y++)
+        for (int x = buildingX0(temple); x < buildingX0(temple) + temple.w; x++)
+            v.court.push_back({ x, y });
 
-    v.paths.clear();
-    auto road = [&](int x0, int y0, int x1, int y1) {
-        int dx = abs(x1 - x0), dy = abs(y1 - y0);
-        int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-        int err = dx - dy, x = x0, y = y0;
-        for (int guard = 0; guard < 96; guard++) {
-            v.paths.push_back({ x, y });
-            v.paths.push_back({ x+1, y });
-            if (x == x1 && y == y1) break;
-            int e2 = 2 * err;
-            if (e2 > -dy) { err -= dy; x += sx; }
-            if (e2 < dx) { err += dx; y += sy; }
+    // Central cobbled square
+    for (int y = -3; y <= 3; ++y) {
+        for (int x = -4; x <= 4; ++x) {
+            bool paved = (plan == 0) ? (abs(y) <= 2 && abs(x) <= 4) :
+                         (plan == 1) ? (abs(x) + abs(y) <= 5) :
+                                       (x * x / 16.0f + y * y / 9.0f <= 1.05f);
+            if (paved) v.plaza.emplace_back(v.cx + x, v.cy + y);
         }
-    };
-    for (const Building& b : v.buildings) road(v.cx, v.cy, b.tx, b.ty + 1);
+    }
 
-    v.decos.clear();
-    auto tryDeco = [&](int kind, float x, float y, int variant = 0) {
-        if (decoHitsBuildingOrDoor(v, x, y)) return;
-        v.decos.push_back({ kind, x, y, variant });
+    // Orthogonal L-shaped lanes to every doorstep + 4 cardinal village entrances
+    for (size_t i = 0; i < v.buildings.size(); i++) {
+        const Building& b = v.buildings[i];
+        int dx = buildingDoorTx(b), dy = buildingDoorTy(b);
+        paveStreetL(v.paths, v.cx, v.cy, dx, dy, (i % 2) == 0);
+        v.paths.push_back({ dx - 1, dy });
+        v.paths.push_back({ dx, dy });
+    }
+    paveStreetL(v.paths, v.cx, v.cy + 3, v.cx, v.cy + 16, false);
+    paveStreetL(v.paths, v.cx - 4, v.cy, v.cx - 16, v.cy, true);
+    paveStreetL(v.paths, v.cx + 4, v.cy, v.cx + 16, v.cy, true);
+
+    auto tryDeco = [&](int kind, int x, int y, int variant = 0) {
+        if (cellReservedInVillage(v, x, y, 1)) return;
+        if (kind == VD_WELL || kind == VD_BENCH || kind == VD_FLOWERBED) {
+            if (cellReservedInVillage(v, x - 1, y, 1)) return;
+        }
+        v.decos.push_back({ kind, (float)x, (float)y, variant });
     };
-    tryDeco(VD_WELL, (float)v.cx, (float)v.cy);
-    tryDeco(VD_SIGN, (float)v.cx + 2.0f, (float)v.cy + 3.0f);
-    tryDeco(VD_BENCH, (float)v.cx - 2.0f, (float)v.cy + 2.0f);
-    tryDeco(VD_FLOWERBED, (float)v.cx + 3.0f, (float)v.cy - 2.0f);
-    for (int i = 0; i < 6; i++) {
-        float a = hashf(i, 5, rs) * 6.2831853f;
-        float r = 4.5f + hashf(i, 9, rs) * 5.0f;
-        int kind = (i % 3 == 0) ? VD_BARREL : (i % 3 == 1 ? VD_PLANT : VD_TORCH);
-        tryDeco(kind, floorf(v.cx + cosf(a) * r), floorf(v.cy + sinf(a) * r * 0.8f));
+
+    // Well at center + benches & sign tucked at plaza corners
+    v.decos.push_back({ VD_WELL, (float)v.cx, (float)v.cy, 0 });
+    v.decos.push_back({ VD_BUCKET, (float)(v.cx + 1), (float)v.cy, 0 });
+    tryDeco(VD_SIGN, v.cx + 2, v.cy + 4);
+    tryDeco(VD_BENCH, v.cx - 2, v.cy - 3);
+    tryDeco(VD_TORCH, v.cx - 3, v.cy + 3);
+    tryDeco(VD_TORCH, v.cx + 3, v.cy + 3);
+
+    // Contextual props tucked right beside each building wall
+    for (size_t i = 0; i < v.buildings.size(); i++) {
+        const Building& b = v.buildings[i];
+        int lx = buildingX0(b) - 1;
+        int rx = buildingX0(b) + b.w;
+        if (b.kind == 5) {
+            tryDeco(VD_CRATE, lx, b.ty);
+            tryDeco(VD_BARREL, lx, b.ty - 1);
+        } else if (b.kind == 6) {
+            tryDeco(VD_BARREL, rx, b.ty);
+            tryDeco(VD_TORCH, lx, b.ty + 1);
+        } else if (b.kind == 7) {
+            tryDeco(VD_TEMPLE_PILLAR, lx + 1, b.ty + 1);
+            tryDeco(VD_TEMPLE_PILLAR, rx - 1, b.ty + 1);
+        } else {
+            tryDeco((i & 1) ? VD_MAILBOX : VD_PLANT, rx, b.ty + 1);
+            tryDeco(VD_BARREL, lx, b.ty);
+        }
     }
-    for (int i=0; i<12; ++i) {
-        int dx = (int)(hash2i(i,3,rs)%25)-12, dy = (int)(hash2i(i,7,rs)%23)-11;
-        if (dx*dx+dy*dy < 35) continue;
-        int x=v.cx+dx, y=v.cy+dy;
-        if (std::find(v.paths.begin(),v.paths.end(),std::make_pair(x,y)) != v.paths.end()) continue;
-        bool busy=false;
-        for (const auto& d : v.decos) if (fabsf(d.x-x)<2 && fabsf(d.y-y)<2) busy=true;
-        if (!busy) tryDeco(VD_SHADE_TREE, (float)x, (float)y, i%3);
+
+    // Perimeter woodland belt framing the generated village
+    for (int dy = -17; dy <= 17; dy++) {
+        for (int dx = -17; dx <= 17; dx++) {
+            float r = sqrtf((float)(dx * dx + dy * dy));
+            if (r < 12.8f || r > 18.2f) continue;
+            if (abs(dx) <= 2 && dy >= 10) continue;   // South gate
+            if (abs(dy) <= 2 && abs(dx) >= 10) continue; // E/W gates
+            int tx = v.cx + dx, ty = v.cy + dy;
+            if (cellReservedInVillage(v, tx, ty, 1)) continue;
+
+            v.grassDark.push_back({ tx, ty });
+            uint32_t h = hash2i(dx, dy, rs ^ 0x3391u);
+            float hf = (float)(h & 0xffff) / 65536.0f;
+            if (((dx & 1) == 0 && (dy & 1) == 0) && hf < 0.78f)
+                v.decos.push_back({ VD_SHADE_TREE, (float)tx, (float)ty, (int)(h % 3) });
+            else if (hf < 0.16f)
+                v.decos.push_back({ (h & 1) ? VD_BUSH : VD_FLOWER_BUSH, (float)tx, (float)ty, 0 });
+            else if (hf > 0.94f)
+                v.decos.push_back({ VD_ROCK, (float)tx, (float)ty, (int)(h % 3) });
+            else if (hf > 0.75f)
+                v.flowers.push_back({ tx, ty });
+        }
     }
+
+    dedupCells(v.paths);
+    dedupCells(v.plaza);
+    dedupCells(v.court);
+    dedupCells(v.grassDark);
+    dedupCells(v.flowers);
 }
 
 void villageLoadAt(float x, float y) {
@@ -763,52 +1285,50 @@ void villageLoadAt(float x, float y) {
         if (g.villageLoaded && g.village.startVillage) return;
         buildStartVillage(g.village, g.worldSeed);
         g.villageLoaded = true;
-        g.villageKey = 0x5157454cu;      // 'SWEL'
+        g.villageKey = 0x5157454cu;
         return;
     }
 
     const int SECTOR = 96;
     int sx = (int)floorf(x / SECTOR), sy = (int)floorf(y / SECTOR);
-    // A site survey can sample thousands of tiles. Cache the nine candidates
-    // for this neighbourhood, including rejected sites, not just the winner.
-    struct Site { int sx,sy,x,y; uint32_t seed; };
+    struct Site { int sx, sy, x, y; uint32_t seed; };
     static std::vector<Site> sites;
     static int lastX, lastY;
     static uint32_t lastSeed;
     static bool surveyed = false;
-    if (!surveyed || sx!=lastX || sy!=lastY || lastSeed!=g.worldSeed) {
-        surveyed=true; lastX=sx; lastY=sy; lastSeed=g.worldSeed; sites.clear();
-        for (int dy=-1; dy<=1; ++dy) for (int dx=-1; dx<=1; ++dx) {
-            int cx=sx+dx, cy=sy+dy;
-            uint32_t h=hash2i(cx,cy,g.worldSeed^0x71a9eu);
-            if (h%1000 >= 320) continue;
-            int bx=cx*SECTOR+SECTOR/2, by=cy*SECTOR+SECTOR/2;
-            bool ok=false;
-            for (int r=0; r<40 && !ok; r+=3) for (int a=0; a<(r?16:1) && !ok; ++a) {
-                float ang=a*(6.2831853f/16);
-                int tx=bx+(int)(cosf(ang)*r), ty=by+(int)(sinf(ang)*r);
-                if (tx*(float)tx+ty*(float)ty < 50*50 ||
-                    (abs(tx-BOSS_CASTLE_TX)<29 && abs(ty-BOSS_CASTLE_TY)<29) ||
-                    (abs(tx-LOCKET_SITE_TX)<23 && abs(ty-LOCKET_SITE_TY)<23) ||
-                    (abs(tx-TOWER_SITE_TX)<23 && abs(ty-TOWER_SITE_TY)<23)) continue;
-                if (siteFit(tx,ty,15)) { sites.push_back({cx,cy,tx,ty,h}); ok=true; }
+    if (!surveyed || sx != lastX || sy != lastY || lastSeed != g.worldSeed) {
+        surveyed = true; lastX = sx; lastY = sy; lastSeed = g.worldSeed; sites.clear();
+        for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+            int cx = sx + dx, cy = sy + dy;
+            uint32_t h = hash2i(cx, cy, g.worldSeed ^ 0x71a9eu);
+            if (h % 1000 >= 320) continue;
+            int bx = cx * SECTOR + SECTOR / 2, by = cy * SECTOR + SECTOR / 2;
+            bool ok = false;
+            for (int r = 0; r < 40 && !ok; r += 3) for (int a = 0; a < (r ? 16 : 1) && !ok; ++a) {
+                float ang = a * (6.2831853f / 16);
+                int tx = bx + (int)(cosf(ang) * r), ty = by + (int)(sinf(ang) * r);
+                if (tx * (float)tx + ty * (float)ty < 50 * 50 ||
+                    (abs(tx - BOSS_CASTLE_TX) < 29 && abs(ty - BOSS_CASTLE_TY) < 29) ||
+                    (abs(tx - LOCKET_SITE_TX) < 23 && abs(ty - LOCKET_SITE_TY) < 23) ||
+                    (abs(tx - TOWER_SITE_TX) < 23 && abs(ty - TOWER_SITE_TY) < 23)) continue;
+                if (siteFit(tx, ty, 15)) { sites.push_back({ cx, cy, tx, ty, h }); ok = true; }
             }
         }
     }
     Village best;
-    bool found=false;
-    int bestDist=48; // no need to load/render a town a screen beyond the horizon
+    bool found = false;
+    int bestDist = 48;
     for (const auto& s : sites) {
-        int d=std::max(abs(s.x-(int)floorf(x)), abs(s.y-(int)floorf(y)));
-        if (d>=bestDist) continue;
-        bestDist=d; found=true; best.valid=true; best.cx=s.x; best.cy=s.y;
-        best.sectorX=s.sx; best.sectorY=s.sy; best.seed=s.seed;
+        int d = std::max(abs(s.x - (int)floorf(x)), abs(s.y - (int)floorf(y)));
+        if (d >= bestDist) continue;
+        bestDist = d; found = true; best.valid = true; best.cx = s.x; best.cy = s.y;
+        best.sectorX = s.sx; best.sectorY = s.sy; best.seed = s.seed;
     }
     if (!found) { g.villageLoaded = false; g.villageKey = ~0ull; return; }
 
     uint64_t key = ((uint64_t)(uint32_t)best.sectorX << 32) | (uint32_t)best.sectorY;
     if (g.villageLoaded && g.villageKey == key) return;
-    best.name=villageNameFor(best.sectorX,best.sectorY,g.worldSeed);
+    best.name = villageNameFor(best.sectorX, best.sectorY, g.worldSeed);
     layoutVillage(best);
     g.village = best;
     g.villageKey = key;
@@ -852,13 +1372,18 @@ static const char* PRIEST_LINES[] = {
 static const char* ANIMAL_LINES[] = {
     "Woof! *wag*", "Arf! *sniffs your boots*", "*happy tail thump*", "Woof!",
 };
+static const char* SHEEP_LINES[] = {
+    "Baa! Her wool smells of clover and warm meadow sun.",
+    "Maaa... She munches a buttercup without losing rhythm.",
+};
 static const char* QUEST_LINES[] = {
     "Those slimes are eating my turnips. Thin them out and I'll make it worth your while.",
 };
 
 const char* npcLine(const Npc& npc, int index) {
-    if (npc.sprite==NS_CAT) return "The cat blinks slowly, then looks away.";
-    if (npc.sprite==NS_CHICKEN) return "Cluck! She goes back to the turnips.";
+    if (npc.sprite == NS_CAT) return "The cat blinks slowly, then looks away.";
+    if (npc.sprite == NS_CHICKEN) return "Cluck! She goes back to the turnips.";
+    if (npc.sprite == NS_SHEEP) return SHEEP_LINES[(unsigned)index % 2u];
     const char** set = VILLAGER_LINES;
     int n = 8;
     switch (npc.role) {
@@ -890,7 +1415,7 @@ const char* npcRoleName(int role) {
 }
 
 void npcsLoadFor(float x, float y, bool force) {
-    bool useVillage = g.villageLoaded && fabsf(x-g.village.cx)<30 && fabsf(y-g.village.cy)<30;
+    bool useVillage = g.villageLoaded && fabsf(x - g.village.cx) < 30 && fabsf(y - g.village.cy) < 30;
     int sx = (int)floorf(x / 32), sy = (int)floorf(y / 32);
     uint64_t key = useVillage
         ? (0x1000000000000ull | g.villageKey)
@@ -918,31 +1443,36 @@ void npcsLoadFor(float x, float y, bool force) {
     if (useVillage) {
         const Village& v = g.village;
         for (const Building& b : v.buildings) {
+            int dtx = buildingDoorTx(b), dty = buildingDoorTy(b);
             if (b.kind == 5)
-                add(NS_MERCHANT, FACE_SHOPKEEPER, NPC_SHOPKEEP, (float)b.tx - 2.0f, (float)b.ty + 1.5f,
+                add(NS_MERCHANT, FACE_SHOPKEEPER, NPC_SHOPKEEP, (float)(dtx - 2) + 0.5f, (float)dty + 0.5f,
                     v.startVillage ? "Mira the Trader" : "Village Trader", 0);
             else if (b.kind == 6)
-                add(NS_MAYOR, FACE_INNKEEPER, NPC_INNKEEP, (float)b.tx + 2.0f, (float)b.ty + 1.5f,
+                add(NS_MAYOR, FACE_INNKEEPER, NPC_INNKEEP, (float)(dtx + 2) + 0.5f, (float)dty + 0.5f,
                     v.startVillage ? "Bren the Innkeep" : "Innkeeper", 0);
             else if (b.kind == 7)
-                add(NS_PRIEST, FACE_ELDER, NPC_PRIEST, (float)b.tx + 2.5f, (float)b.ty + 1.5f,
+                add(NS_PRIEST, FACE_ELDER, NPC_PRIEST, (float)(dtx + 2) + 0.5f, (float)dty + 0.5f,
                     v.startVillage ? "Father Osric" : "Shrine Keeper", 0);
         }
 
         if (v.startVillage) {
-            add(NS_CHICKEN, -1, NPC_ANIMAL, -10.5f,11.5f,"Hen",0);
-            add(NS_CHICKEN, -1, NPC_ANIMAL, -12.5f,12.5f,"Hen",1);
-            add(NS_CAT, -1, NPC_ANIMAL, 8.5f,2.5f,"Inn Cat",0);
-            // Elmswick's named residents & quest givers placed cleanly around the town
-            add(NS_ELDER,     FACE_ELDER,     NPC_ELDER,    -2.5f, -2.5f, "Old Maren",      0, QUEST_CROWN);
-            add(NS_WOMAN,     FACE_WOMAN,     NPC_QUEST,     3.5f, -1.5f, "Tamsin",         1, QUEST_LOCKET);
-            add(NS_CHILD,     FACE_CHILD,     NPC_CHILD,    -2.5f,  3.5f, "Pip the Younger",2);
-            add(NS_GUARD,     FACE_GUARD,     NPC_GUARD,     2.5f,  7.5f, "Watchman Odo",   3);
-            add(NS_VILLAGER1, FACE_VILLAGER1, NPC_VILLAGER, -6.5f,  2.5f, "Rook",           4);
-            add(NS_VILLAGER2, FACE_VILLAGER2, NPC_VILLAGER,  6.5f,  1.5f, "Sable",          5);
-            add(NS_VILLAGER3, FACE_VILLAGER3, NPC_VILLAGER,  2.5f, -5.5f, "Wren",           6);
-            add(NS_FARMER,    FACE_SMITH,     NPC_QUEST,    -2.5f, 12.5f, "Farmer Hedrick", 0, QUEST_SLIMES);
-            add(NS_DOG,       FACE_DOG,      NPC_ANIMAL,    2.5f,  1.5f, "Town Dog",       0);
+            // Animals in their proper yards & patios
+            add(NS_CHICKEN, -1,       NPC_ANIMAL,  -10.5f, 10.5f, "Hen",      0);
+            add(NS_CHICKEN, -1,       NPC_ANIMAL,  -11.5f, 11.5f, "Hen",      1);
+            add(NS_SHEEP,   -1,       NPC_ANIMAL,   11.5f, 10.5f, "Clover",   0);
+            add(NS_SHEEP,   -1,       NPC_ANIMAL,   12.5f, 11.5f, "Woolly",   1);
+            add(NS_CAT,     -1,       NPC_ANIMAL,   11.5f,  2.5f, "Inn Cat",  0);
+            add(NS_DOG,     FACE_DOG, NPC_ANIMAL,    2.5f,  1.5f, "Town Dog", 0);
+
+            // Named Elmswick townsfolk & questgivers in their district spots
+            add(NS_ELDER,     FACE_ELDER,     NPC_ELDER,     1.5f, -1.5f, "Old Maren",       0, QUEST_CROWN);
+            add(NS_WOMAN,     FACE_WOMAN,     NPC_QUEST,    -2.5f,  1.5f, "Tamsin",          1, QUEST_LOCKET);
+            add(NS_CHILD,     FACE_CHILD,     NPC_CHILD,    -1.5f,  3.5f, "Pip the Younger", 2);
+            add(NS_GUARD,     FACE_GUARD,     NPC_GUARD,     2.5f, 10.5f, "Watchman Odo",    3);
+            add(NS_VILLAGER1, FACE_VILLAGER1, NPC_VILLAGER, -6.5f,  1.5f, "Rook",            4);
+            add(NS_VILLAGER2, FACE_VILLAGER2, NPC_VILLAGER,  6.5f,  3.5f, "Sable",           5);
+            add(NS_VILLAGER3, FACE_VILLAGER3, NPC_VILLAGER, -8.5f, -5.5f, "Wren",            6);
+            add(NS_FARMER,    FACE_SMITH,     NPC_QUEST,    -6.5f, 10.5f, "Farmer Hedrick",  0, QUEST_SLIMES);
         } else {
             const int sprites[] = { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3 };
             const int faces[] = { FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3 };
@@ -959,6 +1489,8 @@ void npcsLoadFor(float x, float y, bool force) {
                 add(sprite, face, role, px, py, names[i % 6], i);
             }
             add(NS_DOG, FACE_DOG, NPC_ANIMAL, (float)v.cx + 2.5f, (float)v.cy + 1.5f, "Village Dog", 0);
+            if ((v.seed & 1) == 0)
+                add(NS_SHEEP, -1, NPC_ANIMAL, (float)v.cx - 3.5f, (float)v.cy + 2.5f, "Village Sheep", 0);
         }
     } else {
         uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x4e3c17u);
@@ -1013,7 +1545,6 @@ void chestsLoadFor(float x, float y) {
     }
 }
 
-// ================================================================ landmarks
 bool landmarkNear(int tx, int ty, Landmark& out) {
     if (abs(tx - BOSS_CASTLE_TX) <= 10 && abs(ty - BOSS_CASTLE_TY) <= 10) {
         out = { LK_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, 0xca571eu };
@@ -1034,15 +1565,13 @@ bool landmarkNear(int tx, int ty, Landmark& out) {
 void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out) {
     out.clear();
     auto maybeAdd = [&](LandmarkKind kind, int tx, int ty, uint32_t seed) {
-        if (tx >= x0 - 6 && tx <= x1 + 6 && ty >= y0 - 6 && ty <= y1 + 8)
+        if (tx >= x0 - 6 && tx <= x1 + 6 && ty >= y0 - 8 && ty <= y1 + 8)
             out.push_back({ kind, tx, ty, seed });
     };
-    // Deterministic story landmarks
     maybeAdd(LK_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, 0xca571eu);
     maybeAdd(LK_STONES, LOCKET_SITE_TX, LOCKET_SITE_TY, 0x10c4e7u);
     maybeAdd(LK_TOWER,  TOWER_SITE_TX,  TOWER_SITE_TY,  0x703e2u);
 
-    // Procedural sector landmarks
     const int SECTOR = 128;
     int sx0 = (int)floorf((float)(x0 - 8) / SECTOR);
     int sx1 = (int)floorf((float)(x1 + 8) / SECTOR);
@@ -1063,28 +1592,25 @@ bool inBossArena(float x, float y) {
 }
 
 // ================================================================ field monsters
-// Habitat survives paving: on a frozen road the encounter still comes from
-// the tundra, not the generic dirt table. Keep early pools approachable and
-// reserve Serpents, Golems and Riders for the distant, higher-level frontier.
 EnemyKind rollBiomeEnemy(int tx, int ty, int zoneLevel) {
     static const EnemyKind common[BI_COUNT][4] = {
-        {EN_SLIME, EN_SLIME, EN_IMP, EN_BAT}, {EN_BAT, EN_IMP, EN_WOLF, EN_BAT},
-        {EN_HORNET, EN_SLIME, EN_HORNET, EN_WOLF}, {EN_SLIME, EN_WISP, EN_BAT, EN_WISP},
-        {EN_WOLF, EN_IMP, EN_WOLF, EN_BAT}, {EN_WOLF, EN_WISP, EN_WOLF, EN_WISP},
-        {EN_HORNET, EN_IMP, EN_BAT, EN_IMP}
+        { EN_SLIME, EN_SLIME, EN_IMP, EN_BAT }, { EN_BAT, EN_IMP, EN_WOLF, EN_BAT },
+        { EN_HORNET, EN_SLIME, EN_HORNET, EN_WOLF }, { EN_SLIME, EN_WISP, EN_BAT, EN_WISP },
+        { EN_WOLF, EN_IMP, EN_WOLF, EN_BAT }, { EN_WOLF, EN_WISP, EN_WOLF, EN_WISP },
+        { EN_HORNET, EN_IMP, EN_BAT, EN_IMP }
     };
     static const EnemyKind frontier[BI_COUNT][2] = {
-        {EN_WOLF, EN_ORC}, {EN_GHOST, EN_WOLF}, {EN_WOLF, EN_HORNET}, {EN_GHOST, EN_SKELETON},
-        {EN_ORC, EN_SKELETON}, {EN_WISP, EN_GHOST}, {EN_SKELETON, EN_ORC}
+        { EN_WOLF, EN_ORC }, { EN_GHOST, EN_WOLF }, { EN_WOLF, EN_HORNET }, { EN_GHOST, EN_SKELETON },
+        { EN_ORC, EN_SKELETON }, { EN_WISP, EN_GHOST }, { EN_SKELETON, EN_ORC }
     };
     static const EnemyKind far[BI_COUNT] = {
         EN_NIGHT_RIDER, EN_NIGHT_RIDER, EN_SERPENT, EN_SERPENT, EN_GOLEM, EN_GOLEM, EN_SERPENT
     };
     auto biome = sampleGround(tx, ty).biome;
     auto h = hash2i(tx, ty, g.worldSeed ^ 0xbad1ceu);
-    if (zoneLevel >= 12 && h%3 != 0) return far[biome];
-    if (zoneLevel >= 3 && (h%3 == 0 || zoneLevel >= 7)) return frontier[biome][(h>>8)%2];
-    return common[biome][(h>>8)%4];
+    if (zoneLevel >= 12 && h % 3 != 0) return far[biome];
+    if (zoneLevel >= 3 && (h % 3 == 0 || zoneLevel >= 7)) return frontier[biome][(h >> 8) % 2];
+    return common[biome][(h >> 8) % 4];
 }
 
 std::vector<EnemyKind> buildEncounterGroup(EnemyKind primary, int tx, int ty, int zoneLevel) {
@@ -1116,8 +1642,8 @@ void fieldMonstersInView(float x, float y, std::vector<FieldMonster>& out) {
             float r = 3.0f + hashf(i, cy * 13 + 5, h) * (SECTOR * 0.38f);
             float mx = cx * SECTOR + SECTOR * 0.5f + cosf(a) * r;
             float my = cy * SECTOR + SECTOR * 0.5f + sinf(a) * r;
-            if (mx * mx + my * my < 22.0f * 22.0f) continue;      // never inside Elmswick
-            if (g.villageLoaded && inVillage(mx, my)) continue;   // never inside any village
+            if (mx * mx + my * my < 22.0f * 22.0f) continue;
+            if (g.villageLoaded && inVillage(mx, my)) continue;
             int mtx = (int)floorf(mx), mty = (int)floorf(my);
             if (nearSpecialSite(mtx, mty)) continue;
             if (!cellWalkable(mtx, mty)) continue;
@@ -1130,7 +1656,6 @@ void fieldMonstersInView(float x, float y, std::vector<FieldMonster>& out) {
             fm.x = mx; fm.y = my;
             fm.phase = hashf(i, cx + cy + 99, h) * 6.2831853f;
             int zl = zoneLevelAt(mx, my);
-            // South meadow near Elmswick favours slimes so Turnip Trouble is fun to complete
             if (my > 18.0f && my < 56.0f && fabsf(mx) < 34.0f && ((h >> 12) % 100) < 68)
                 fm.kind = EN_SLIME;
             else
@@ -1148,7 +1673,7 @@ int zoneLevelAt(float x, float y) {
 }
 
 const char* zoneNameAt(float x, float y) {
-    if (fabsf(x)<11 && y>14 && y<23) return "Millbrook Crossing";
+    if (fabsf(x) < 11 && y > 15 && y < 24) return "Millbrook Crossing";
     if (inVillage(x, y) && g.villageLoaded) return g.village.name.c_str();
     if (inBossArena(x, y)) return "Castle of Elm";
     if (fabsf(x - LOCKET_SITE_TX) < 10.0f && fabsf(y - LOCKET_SITE_TY) < 10.0f) return "The Standing Stones";
@@ -1163,10 +1688,10 @@ const char* zoneNameAt(float x, float y) {
         case BI_DUNES: return "The Sunscorch Flats";
         default: break;
     }
-    if (x*x+y*y < 26*26) return "Meadow of First Steps";
+    if (x * x + y * y < 26 * 26) return "Meadow of First Steps";
     if (y < -40 && fabsf(x) < 30) return "The North Road";
     if (x < -120) return "The Howling West";
-    if (x*x+y*y > 260*260) return "The Far Wilds";
+    if (x * x + y * y > 260 * 260) return "The Far Wilds";
     return "The Greenmere";
 }
 
@@ -1197,11 +1722,12 @@ bool findWalkPath(float fromX, float fromY, int toTx, int toTy, WalkPath& out) {
     if (g.villageLoaded) {
         for (int i = 0; i < (int)g.village.buildings.size(); i++) {
             const Building& b = g.village.buildings[i];
-            int x0 = b.tx - b.w / 2, x1 = x0 + b.w - 1;
-            int y0 = b.ty - b.h + 1;
+            int x0 = buildingX0(b), x1 = x0 + b.w - 1;
+            int y0 = buildingY0(b);
             if (toTx >= x0 && toTx <= x1 && toTy >= y0 && toTy <= b.ty) {
                 out.doorBuilding = i;
-                targetX = b.tx; targetY = b.ty + 1;
+                targetX = buildingDoorTx(b);
+                targetY = buildingDoorTy(b);
                 break;
             }
         }

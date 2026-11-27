@@ -85,8 +85,14 @@ static void setBanner(const std::string& s, float dur = 1.6f) {
     B.banner = s; B.bannerT = dur;
 }
 
-static float heroX(int i) { return 372.0f + (g.party[i].row == 1 ? 18.0f : 0.0f) + i * 16.0f; }
-static float heroY(int i) { return 102.0f + i * 32.0f; }
+static inline float btOx()    { return floorf((g.vw - BASE_VW) * 0.5f); }
+static inline float btTrayY() { return (float)g.vh - 102.0f; }
+static inline float btStageY(){ return (btTrayY() - 186.0f) * 0.55f; }
+
+static float foeScreenX(const BattleEnemy& f) { return btOx() + f.x; }
+static float foeScreenY(const BattleEnemy& f) { return btStageY() + f.y; }
+static float heroX(int i) { return btOx() + 372.0f + (g.party[i].row == 1 ? 18.0f : 0.0f) + i * 16.0f; }
+static float heroY(int i) { return btStageY() + 102.0f + i * 32.0f; }
 
 static int firstAliveFoe() {
     for (int i = 0; i < (int)B.foes.size(); i++) if (B.foes[i].alive) return i;
@@ -192,19 +198,19 @@ static void damageFoe(int idx, int dmg, bool crit, bool weak, FxKind fx = FX_SLA
     if (!f.alive) return;
     f.hp = std::max(0, f.hp - dmg);
     f.hitT = 0.26f;
-    spawnFx(crit ? FX_IMPACT : fx, f.x, f.y - 16);
+    spawnFx(crit ? FX_IMPACT : fx, foeScreenX(f), foeScreenY(f) - 16);
     char buf[32];
     snprintf(buf, sizeof(buf), crit ? "%d!" : "%d", dmg);
     Color col = weak ? Color{ 255, 224, 96, 255 } : (crit ? Color{ 255, 232, 130, 255 } : WHITE);
-    spawnFloater(buf, f.x, f.y - 24, col);
-    if (weak) spawnFloater("WEAK!", f.x, f.y - 36, Color{ 255, 185, 80, 255 });
+    spawnFloater(buf, foeScreenX(f), foeScreenY(f) - 24, col);
+    if (weak) spawnFloater("WEAK!", foeScreenX(f), foeScreenY(f) - 38, Color{ 255, 185, 80, 255 });
     playSoundIf(fx == FX_SLASH ? g.assets.sword : g.assets.spell);
     if (f.hp <= 0) {
         f.alive = false;
         B.xpGain += f.xp;
         B.gilGain += f.gil;
         g.defeatedCount++;
-        spawnFx(FX_POOF, f.x, f.y - 14, 0.45f);
+        spawnFx(FX_POOF, foeScreenX(f), foeScreenY(f) - 14, 0.45f);
         if (f.kind == EN_SLIME) {
             g.slimesSlain++;
             if (g.quests[QUEST_SLIMES].state == QS_ACTIVE)
@@ -468,8 +474,8 @@ static void executeHeroItem(int hi, int id, int targetHero) {
 }
 
 // ================================================================ shared layout geometry
-static Rectangle cmdRect(int i)     { return { 14.0f,  (float)(194 + i * 17), 90.0f,  15.0f }; }
-static Rectangle subListRect(int i) { return { 114.0f, (float)(194 + i * 16), 144.0f, 15.0f }; }
+static Rectangle cmdRect(int i)     { return { btOx() + 12.0f,  btTrayY() + 8.0f + i * 17.0f, 86.0f,  15.0f }; }
+static Rectangle subListRect(int i) { return { btOx() + 108.0f, btTrayY() + 8.0f + i * 16.0f, 150.0f, 15.0f }; }
 
 // ================================================================ update
 void battleUpdate(float dt) {
@@ -628,7 +634,7 @@ void battleUpdate(float dt) {
             }
             for (int i = 0; i < (int)B.foes.size(); i++) {
                 if (!B.foes[i].alive) continue;
-                if (CheckCollisionPointRec(m, { B.foes[i].x - 24, B.foes[i].y - 44, 48, 48 })) {
+                if (CheckCollisionPointRec(m, { foeScreenX(B.foes[i]) - 24, foeScreenY(B.foes[i]) - 44, 48, 48 })) {
                     executeHeroAttack(B.activeHero, i);
                     return;
                 }
@@ -749,7 +755,7 @@ void battleUpdate(float dt) {
         if (clicked) {
             for (int i = 0; i < (int)B.foes.size(); i++) {
                 if (!B.foes[i].alive) continue;
-                if (CheckCollisionPointRec(m, { B.foes[i].x - 28, B.foes[i].y - 48, 56, 54 })) {
+                if (CheckCollisionPointRec(m, { foeScreenX(B.foes[i]) - 28, foeScreenY(B.foes[i]) - 48, 56, 54 })) {
                     commitFoe(i);
                     return;
                 }
@@ -784,7 +790,7 @@ void battleUpdate(float dt) {
         if (clicked) {
             for (int i = 0; i < 3; i++) {
                 Rectangle spriteBox{ heroX(i) - 18, heroY(i) - 26, 36, 34 };
-                Rectangle cardBox{ 266.0f, (float)(194 + i * 27), 232.0f, 25.0f };
+                Rectangle cardBox{ btOx() + 266.0f, btTrayY() + 8.0f + i * 28.0f, 236.0f, 26.0f };
                 if (CheckCollisionPointRec(m, spriteBox) || CheckCollisionPointRec(m, cardBox)) {
                     commitAlly(i);
                     return;
@@ -809,21 +815,32 @@ static Texture2D* fxTex(FxKind k) {
 
 static void drawBattleBackdrop(float sx, float sy) {
     GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
-    Texture2D tex=B.isBoss ? g.assets.castleBattlefield : g.assets.battlefield[gt.biome];
+    Texture2D tex = B.isBoss ? g.assets.castleBattlefield : g.assets.battlefield[gt.biome];
     if (!tex.id) { ClearBackground(Color{ 30, 40, 70, 255 }); return; }
-    // Overscan by a few pixels so screen shake never shows a bare edge.
+    float stageH = btTrayY() + 6.0f;
+    // Scale proportionally to cover width and stage height while keeping sky/castle towers framed
+    float scale = std::max(((float)g.vw + 12.0f) / (float)tex.width,
+                           (stageH + 10.0f) / 196.0f);
+    float dw = roundf((float)tex.width * scale);
+    float dh = roundf((float)tex.height * scale);
+    float dx = floorf(((float)g.vw - dw) * 0.5f + sx);
+    float visibleBattleH = 196.0f * scale;
+    float dy = floorf((stageH - visibleBattleH) * 0.32f + sy);
+    if (dy > -2.0f) dy = -2.0f;
+    if (dy + dh < stageH + 4.0f) dy = stageH + 4.0f - dh;
     DrawTexturePro(tex, { 0, 0, (float)tex.width, (float)tex.height },
-                   { sx - 4, sy - 4, (float)tex.width + 8, (float)tex.height + 8 },
-                   { 0, 0 }, 0.0f, WHITE);
+                   { dx, dy, dw, dh }, { 0, 0 }, 0.0f, WHITE);
 }
 
 void battleDraw() {
+    float ox = btOx();
+    float trayY = btTrayY();
     float sx = (B.screenShake > 0) ? sinf(g.totalTime * 70.0f) * 3.0f : 0.0f;
     float sy = (B.screenShake > 0) ? cosf(g.totalTime * 57.0f) * 2.0f : 0.0f;
 
     drawBattleBackdrop(sx, sy);
 
-    // Enemies (left side)
+    // 1. Enemies (left side)
     for (int i = 0; i < (int)B.foes.size(); i++) {
         const BattleEnemy& f = B.foes[i];
         if (!f.alive) continue;
@@ -831,28 +848,22 @@ void battleDraw() {
         float lunge = (f.lungeT > 0) ? sinf(f.lungeT / 0.24f * 3.14159f) * 14.0f : 0.0f;
         float bob = sinf(g.totalTime * 3.2f + i * 1.3f) * 1.8f;
         float scale = f.boss ? 0.68f : 0.56f;
-        float ex = f.x + lunge + sx;
-        float ey = f.y + sy;
+        float ex = foeScreenX(f) + lunge + sx;
+        float ey = foeScreenY(f) + sy;
         DrawEllipse((int)ex, (int)ey - 2, t.width * scale * 0.34f, 4.0f, Fade(BLACK, 0.30f));
         Color tint = (f.hitT > 0 && ((int)(f.hitT * 30) & 1)) ? Color{ 255, 130, 130, 255 } : WHITE;
-        // Battle sprites are drawn facing left; flip horizontally so foes on the left face right toward the party.
         float srcW = (f.kind == EN_SLIME || f.kind == EN_GHOST || f.kind == EN_SLIME_KING)
             ? (float)t.width : -(float)t.width;
         DrawTexturePro(t, { 0, 0, srcW, (float)t.height },
-                       { ex - t.width * scale * 0.5f, ey - t.height * scale + bob,
+                       { floorf(ex - t.width * scale * 0.5f), floorf(ey - t.height * scale + bob),
                          t.width * scale, t.height * scale },
                        { 0, 0 }, 0.0f, tint);
         float bw = f.boss ? 56.0f : 34.0f;
-        drawBar(ex - bw * 0.5f, ey + 3, bw, 4, (float)f.hp / std::max(1, f.maxHp),
+        drawBar(floorf(ex - bw * 0.5f), floorf(ey + 3.0f), bw, 4, (float)f.hp / std::max(1, f.maxHp),
                 f.boss ? Color{ 255, 190, 70, 255 } : Color{ 235, 95, 95, 255 }, Color{ 26, 20, 32, 220 });
-        if (B.phase == BP_TARGET_FOE && B.targetCursor == i) {
-            float ptrBob = sinf(g.totalTime * 8.0f) * 2.5f;
-            drawTextCentered("v", ex, ey - t.height * scale - 12 + ptrBob, Color{ 255, 232, 120, 255 }, 8);
-            drawTextCentered(enemyDef(f.kind).name, ex, ey - t.height * scale - 22 + ptrBob, WHITE, 8);
-        }
     }
 
-    // Heroes (right side, facing left)
+    // 2. Heroes (right side, facing left)
     for (int i = 0; i < 3; i++) {
         const Hero& h = g.party[i];
         float lunge = (B.heroLungeT[i] > 0) ? -sinf(B.heroLungeT[i] / 0.22f * 3.14159f) * 16.0f : 0.0f;
@@ -868,21 +879,19 @@ void battleDraw() {
         else if (h.poisoned) tint = Color{ 215, 175, 255, 255 };
 
         Rectangle src{ (float)(frame * 24), 64.0f, -24.0f, 32.0f };
-        float rot = h.ko ? 90.0f : 0.0f;
-        DrawTexturePro(sheet, src, { hx - 12, hy - 30, 24, 32 },
-                       h.ko ? Vector2{ 12, 16 } : Vector2{ 0, 0 }, rot, tint);
+        if (h.ko) {
+            DrawTexturePro(sheet, src, { floorf(hx), floorf(hy - 6.0f), 24, 32 },
+                           { 12, 16 }, 90.0f, tint);
+        } else {
+            DrawTexturePro(sheet, src, { floorf(hx - 12.0f), floorf(hy - 30.0f), 24, 32 },
+                           { 0, 0 }, 0.0f, tint);
+        }
 
         if (B.defending[i] && !h.ko)
             DrawRing({ hx, hy - 14 }, 13, 15, 0, 360, 18, Fade(Color{ 130, 200, 255, 255 }, 0.55f));
-        if (B.activeHero == i && !h.ko)
-            drawTextCentered(">", hx - 18, hy - 18, Color{ 255, 232, 120, 255 }, 8);
-        if (B.phase == BP_TARGET_ALLY && B.targetCursor == i) {
-            float ptrBob = sinf(g.totalTime * 8.0f) * 2.5f;
-            drawTextCentered("v", hx, hy - 40 + ptrBob, Color{ 120, 255, 160, 255 }, 8);
-        }
     }
 
-    // FX sprites
+    // 3. FX sprites
     for (const auto& e : B.fx) {
         Texture2D* t = fxTex(e.kind);
         if (!t || t->id == 0) continue;
@@ -894,29 +903,69 @@ void battleDraw() {
                        { 0, 0 }, 0.0f, Fade(WHITE, a));
     }
 
-    // Floating numbers
-    for (const auto& fl : B.floaters) {
-        float a = std::min(1.0f, fl.life * 2.0f);
-        drawTextCentered(fl.text.c_str(), fl.x + 1, fl.y + 1, Fade(BLACK, a), 8);
-        drawTextCentered(fl.text.c_str(), fl.x,     fl.y,     Fade(fl.col, a), 8);
-    }
-
-    // Top action banner & targeting hint (never overlaps bottom HUD)
+    // 4. Top action banner & targeting hint
+    float minMarkerY = 6.0f;
     if (B.bannerT > 0 && !B.banner.empty()) {
-        drawWindow({ 28, 6, VRES_W - 56.0f, 22 });
-        drawTextCentered(B.banner.c_str(), VRES_W * 0.5f, 13, Color{ 255, 236, 176, 255 }, 8);
+        float bw = std::min((float)(g.vw - 32), std::max(260.0f, measureText(B.banner.c_str(), 8).x + 28.0f));
+        drawWindow({ floorf(g.vw * 0.5f - bw * 0.5f), 5.0f, bw, 21.0f });
+        drawTextCentered(B.banner.c_str(), g.vw * 0.5f, 12.0f, Color{ 255, 236, 176, 255 }, 8);
+        minMarkerY = 29.0f;
     }
     if (B.phase == BP_TARGET_FOE || B.phase == BP_TARGET_ALLY) {
         const char* hint = (B.phase == BP_TARGET_FOE)
-            ? "Pick enemy (Arrows/Click, SPACE confirm, ESC back)"
-            : "Pick ally (Arrows/Click, SPACE confirm, ESC back)";
-        drawWindow({ 60, 30, VRES_W - 120.0f, 18 });
-        drawTextCentered(hint, VRES_W * 0.5f, 35, Color{ 170, 240, 195, 255 }, 8);
+            ? "Target foe: Arrows/Click, SPACE confirm, ESC back"
+            : "Target ally: Arrows/Click, SPACE confirm, ESC back";
+        float hw = measureText(hint, 8).x + 22.0f;
+        float hy = minMarkerY;
+        drawWindowBlue({ floorf(g.vw * 0.5f - hw * 0.5f), hy, hw, 18.0f });
+        drawTextCentered(hint, g.vw * 0.5f, hy + 5.0f, Color{ 185, 245, 205, 255 }, 8);
+        minMarkerY = hy + 21.0f;
     }
 
-    // Bottom combat tray
-    DrawRectangle(0, 186, VRES_W, VRES_H - 186, Color{ 10, 14, 30, 255 });
-    drawWindow({ 6, 188, 104, 94 });
+    // 5. Post-sprite target pointers, active markers & damage floaters (never occluded or overlapping banners!)
+    if (B.phase == BP_TARGET_FOE && B.targetCursor >= 0 && B.targetCursor < (int)B.foes.size()) {
+        const BattleEnemy& f = B.foes[B.targetCursor];
+        if (f.alive) {
+            Texture2D& t = (g.assets.enemyBig[f.kind].id ? g.assets.enemyBig[f.kind] : g.assets.enemy[f.kind]);
+            float scale = f.boss ? 0.68f : 0.56f;
+            float ex = foeScreenX(f) + sx;
+            float ey = foeScreenY(f) + sy;
+            float ptrBob = sinf(g.totalTime * 8.0f) * 2.0f;
+            float labelY = std::max(minMarkerY + 2.0f, ey - t.height * scale - 24.0f + ptrBob);
+            drawWorldLabel(enemyDef(f.kind).name, ex, labelY, Color{ 255, 240, 180, 255 }, 8);
+            float ax = floorf(ex);
+            float ay = labelY + 13.0f;
+            DrawTriangle({ ax - 4.0f, ay }, { ax + 4.0f, ay }, { ax, ay + 5.0f }, Color{ 255, 232, 110, 255 });
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        const Hero& h = g.party[i];
+        if (h.ko && B.phase != BP_TARGET_ALLY) continue;
+        float hx = heroX(i) + sx;
+        float hy = heroY(i) + sy;
+        if (B.activeHero == i && !h.ko) {
+            drawCursor(hx - 21.0f, hy - 20.0f, Color{ 255, 232, 120, 255 });
+        }
+        if (B.phase == BP_TARGET_ALLY && B.targetCursor == i) {
+            float ptrBob = sinf(g.totalTime * 8.0f) * 2.0f;
+            float labelY = std::max(minMarkerY + 2.0f, hy - 46.0f + ptrBob);
+            drawWorldLabel(heroName(h.klass), hx, labelY, Color{ 150, 255, 180, 255 }, 8);
+            float ax = floorf(hx);
+            float ay = labelY + 13.0f;
+            DrawTriangle({ ax - 4.0f, ay }, { ax + 4.0f, ay }, { ax, ay + 5.0f }, Color{ 130, 255, 170, 255 });
+        }
+    }
+    for (const auto& fl : B.floaters) {
+        float a = std::min(1.0f, fl.life * 2.0f);
+        drawWorldLabel(fl.text.c_str(), fl.x, fl.y, Fade(fl.col, a), 8);
+    }
+
+    // 6. Bottom combat tray
+    DrawRectangle(0, (int)trayY - 2, g.vw, g.vh - ((int)trayY - 2), Color{ 8, 12, 28, 255 });
+    DrawLine(0, (int)trayY - 2, g.vw, (int)trayY - 2, Color{ 96, 118, 196, 220 });
+
+    // Left panel: Commands (96px wide, indented text clear of cursor)
+    drawWindow({ ox + 6, trayY, 96, 96 });
     const char* cmds[5] = { "Attack", "Skill", "Item", "Defend", "Flee" };
     for (int i = 0; i < 5; i++) {
         Rectangle r = cmdRect(i);
@@ -929,12 +978,12 @@ void battleDraw() {
         Color c = dis ? Color{ 130, 130, 155, 220 }
                 : (B.phase == BP_COMMAND ? (sel ? Color{ 255, 236, 176, 255 } : WHITE)
                                          : Color{ 165, 175, 210, 220 });
-        drawText(cmds[i], r.x + 8, r.y + 4, c, 8);
-        if (sel) drawCursor(r.x + 1, r.y + 4);
+        if (sel) drawCursor(r.x + 2, r.y + 4);
+        drawText(cmds[i], r.x + 12, r.y + 4, c, 8);
     }
 
-    // Middle panel (sub-list OR living enemies)
-    drawWindow({ 110, 188, 152, 94 });
+    // Middle panel: Sub-list OR living enemies (158px wide so "Phoenix Down" + "x9" never collide)
+    drawWindow({ ox + 104, trayY, 158, 96 });
     if (B.phase == BP_MAGIC && B.activeHero >= 0) {
         SpellList sl = spellsFor(g.party[B.activeHero].klass, g.party[B.activeHero].level);
         for (int i = 0; i < sl.count && i < 5; i++) {
@@ -943,12 +992,12 @@ void battleDraw() {
             if (sel) DrawRectangle((int)r.x, (int)r.y, (int)r.width, (int)r.height, Color{ 56, 86, 164, 255 });
             const SpellDef& sp = sl.spells[i];
             bool ok = g.party[B.activeHero].mp >= sp.cost;
-            drawText(sp.name, r.x + 4, r.y + 3, ok ? WHITE : Color{ 140, 145, 175, 255 }, 8);
+            if (sel) drawCursor(r.x + 2, r.y + 4);
+            drawText(sp.name, r.x + 11, r.y + 4, ok ? WHITE : Color{ 140, 145, 175, 255 }, 8);
             char mp[16]; snprintf(mp, sizeof(mp), "%dM", sp.cost);
             Vector2 sz = measureText(mp, 8);
-            drawText(mp, r.x + r.width - sz.x - 4, r.y + 3,
+            drawText(mp, r.x + r.width - sz.x - 3, r.y + 4,
                      ok ? Color{ 130, 195, 255, 255 } : Color{ 210, 110, 110, 255 }, 8);
-            if (sel) drawCursor(r.x + 1, r.y + 4);
         }
     } else if (B.phase == BP_ITEM) {
         auto items = usableBattleItems();
@@ -959,81 +1008,96 @@ void battleDraw() {
             Rectangle r = subListRect(row);
             bool sel = (B.subCursor == i);
             if (sel) DrawRectangle((int)r.x, (int)r.y, (int)r.width, (int)r.height, Color{ 56, 86, 164, 255 });
-            drawText(itemDef(items[i]).name, r.x + 4, r.y + 3, WHITE, 8);
+            if (sel) drawCursor(r.x + 2, r.y + 4);
+            drawText(itemDef(items[i]).name, r.x + 11, r.y + 4, WHITE, 8);
             char q[16]; snprintf(q, sizeof(q), "x%d", itemCount(items[i]));
             Vector2 sz = measureText(q, 8);
-            drawText(q, r.x + r.width - sz.x - 4, r.y + 3, Color{ 255, 232, 150, 255 }, 8);
-            if (sel) drawCursor(r.x + 1, r.y + 4);
+            drawText(q, r.x + r.width - sz.x - 3, r.y + 4, Color{ 255, 232, 150, 255 }, 8);
         }
         if (n > 5) {
-            char sc[24]; snprintf(sc, sizeof(sc), "%d/%d", B.subCursor + 1, n);
-            Vector2 ssz = measureText(sc, 8);
-            drawText(sc, 110 + 152 - ssz.x - 4, 272, Color{ 165, 180, 215, 255 }, 8);
+            char sc[24]; snprintf(sc, sizeof(sc), "ITEM %d/%d", B.subCursor + 1, n);
+            float sw = measureText(sc, 8).x + 12.0f;
+            drawWindowBlue({ ox + 260.0f - sw, trayY - 10.0f, sw, 16.0f });
+            drawText(sc, ox + 260.0f - sw + 6.0f, trayY - 6.0f, Color{ 255, 232, 150, 255 }, 8);
         }
     } else {
         int row = 0;
         for (int i = 0; i < (int)B.foes.size(); i++) {
             if (!B.foes[i].alive) continue;
-            float y = 196.0f + row * 17.0f;
+            float y = trayY + 8.0f + row * 17.0f;
             bool tgt = (B.phase == BP_TARGET_FOE && B.targetCursor == i);
-            if (tgt) DrawRectangle(114, (int)y - 1, 144, 15, Color{ 56, 86, 164, 230 });
-            drawText(enemyDef(B.foes[i].kind).name, 118, y + 2,
+            if (tgt) {
+                DrawRectangle((int)ox + 108, (int)y - 1, 150, 15, Color{ 56, 86, 164, 230 });
+                drawCursor(ox + 110, y + 3);
+            }
+            drawText(enemyDef(B.foes[i].kind).name, ox + (tgt ? 120.0f : 112.0f), y + 3,
                      tgt ? Color{ 255, 236, 176, 255 } : Color{ 225, 232, 250, 255 }, 8);
             char hp[24]; snprintf(hp, sizeof(hp), "%d", B.foes[i].hp);
             Vector2 sz = measureText(hp, 8);
-            drawText(hp, 254 - sz.x, y + 2, Color{ 245, 165, 165, 255 }, 8);
+            drawText(hp, ox + 255.0f - sz.x, y + 3, Color{ 245, 165, 165, 255 }, 8);
             row++;
         }
     }
 
-    // Right panel: party status & ATB bars
-    drawWindow({ 264, 188, 242, 94 });
+    // Right panel: Party status & ATB bars (clean 2-line columns, zero overlaps!)
+    drawWindow({ ox + 264, trayY, 242, 96 });
     for (int i = 0; i < 3; i++) {
         const Hero& h = g.party[i];
-        float y = 195.0f + i * 28.0f;
+        float y = trayY + 7.0f + i * 29.0f;
         bool act = (B.activeHero == i);
-        if (act) DrawRectangleRounded({ 268, y - 2, 234, 25 }, 0.25f, 4, Color{ 44, 68, 138, 220 });
+        bool allySel = (B.phase == BP_TARGET_ALLY && B.targetCursor == i);
+        if (act || allySel) {
+            DrawRectangleRounded({ ox + 268, y - 2, 234, 25 }, 0.25f, 4,
+                                 allySel ? Color{ 44, 92, 118, 230 } : Color{ 44, 68, 138, 220 });
+        }
         Color nc = h.ko ? Color{ 225, 110, 110, 255 }
-                 : (h.poisoned ? Color{ 200, 145, 255, 255 }
+                 : (h.poisoned ? Color{ 210, 155, 255, 255 }
                                : (act ? Color{ 255, 236, 176, 255 } : WHITE));
-        drawText(heroName(h.klass), 273, y + 1, nc, 8);
-        if (h.ko) drawText("KO", 322, y + 1, Color{ 255, 110, 110, 255 }, 8);
-        else if (h.poisoned) drawText("PSN", 318, y + 1, Color{ 195, 125, 255, 255 }, 8);
+        // Row line 1: Name [271..324] | KO/PSN [329..355] | HP [..444] | MP [..499]
+        drawText(heroName(h.klass), ox + 271, y + 1, nc, 8);
+        if (h.ko) drawText("KO", ox + 329, y + 1, Color{ 255, 110, 110, 255 }, 8);
+        else if (h.poisoned) drawText("PSN", ox + 329, y + 1, Color{ 205, 135, 255, 255 }, 8);
 
         char hp[32]; snprintf(hp, sizeof(hp), "%d/%d", h.hp, h.maxHp);
-        drawText(hp, 344, y + 1, WHITE, 8);
+        Vector2 hsz = measureText(hp, 8);
+        drawText(hp, ox + 446.0f - hsz.x, y + 1, WHITE, 8);
+
         char mp[24]; snprintf(mp, sizeof(mp), "%dM", h.mp);
         Vector2 msz = measureText(mp, 8);
-        drawText(mp, 444 - msz.x, y + 1, Color{ 130, 195, 255, 255 }, 8);
+        drawText(mp, ox + 499.0f - msz.x, y + 1, Color{ 130, 195, 255, 255 }, 8);
 
-        drawBar(273, y + 13, 114, 5, (float)h.hp / std::max(1, h.maxHp),
-                Color{ 96, 220, 120, 255 }, Color{ 24, 34, 68, 255 });
-        drawBar(450, y + 4, 48, 8, B.atb[i],
+        // Row line 2: HP gauge [271..419] | ATB gauge [431..499]
+        drawBar(ox + 271, y + 13, 148, 5, (float)h.hp / std::max(1, h.maxHp),
+                h.poisoned ? Color{ 187, 138, 192, 255 } : Color{ 96, 220, 120, 255 },
+                Color{ 22, 32, 64, 255 });
+        drawBar(ox + 431, y + 13, 68, 5, B.atb[i],
                 B.atb[i] >= 1.0f ? Color{ 255, 230, 110, 255 } : Color{ 110, 180, 255, 255 },
-                Color{ 24, 34, 68, 255 });
+                Color{ 22, 32, 64, 255 });
     }
 
     // Victory / Fled summary modal
     if (B.phase == BP_VICTORY || B.phase == BP_FLED) {
-        DrawRectangle(0, 0, VRES_W, VRES_H, Fade(BLACK, 0.45f));
+        DrawRectangle(0, 0, g.vw, g.vh, Fade(BLACK, 0.48f));
         int showRows = std::min(5, (int)B.rewards.size());
+        float mw = 312.0f;
         float mh = (B.phase == BP_VICTORY) ? (96.0f + (float)showRows * 14.0f) : 70.0f;
-        float my = VRES_H * 0.5f - mh * 0.5f - 10.0f;
-        drawWindow({ 116, my, 280, mh });
+        float mx = floorf(g.vw * 0.5f - mw * 0.5f);
+        float my = floorf(g.vh * 0.5f - mh * 0.5f - 10.0f);
+        drawWindow({ mx, my, mw, mh });
         if (B.phase == BP_VICTORY) {
-            drawTextCentered(B.isBoss ? "BOSS DEFEATED!" : "VICTORY!", VRES_W * 0.5f, my + 12,
+            drawTextCentered(B.isBoss ? "BOSS DEFEATED!" : "VICTORY!", g.vw * 0.5f, my + 12,
                              Color{ 255, 236, 176, 255 }, 8);
             char rew[96];
             snprintf(rew, sizeof(rew), "Gained +%d XP   +%d Gil", B.xpGain, B.gilGain);
-            drawTextCentered(rew, VRES_W * 0.5f, my + 32, Color{ 150, 240, 175, 255 }, 8);
+            drawTextCentered(rew, g.vw * 0.5f, my + 32, Color{ 150, 240, 175, 255 }, 8);
             for (int i = 0; i < showRows; i++) {
-                drawTextCentered(B.rewards[i].c_str(), VRES_W * 0.5f, my + 50 + i * 14,
+                drawTextCentered(B.rewards[i].c_str(), g.vw * 0.5f, my + 50 + i * 14,
                                  Color{ 255, 224, 120, 255 }, 8);
             }
         } else {
-            drawTextCentered("ESCAPED!", VRES_W * 0.5f, my + 18, Color{ 200, 225, 255, 255 }, 8);
+            drawTextCentered("ESCAPED!", g.vw * 0.5f, my + 18, Color{ 200, 225, 255, 255 }, 8);
         }
-        drawTextCentered("SPACE or CLICK to continue", VRES_W * 0.5f, my + mh - 18,
+        drawTextCentered("SPACE or CLICK to continue", g.vw * 0.5f, my + mh - 18,
                          Color{ 210, 225, 250, 235 }, 8);
     }
     drawToast();

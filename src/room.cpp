@@ -1,31 +1,32 @@
-// room.cpp — building interiors: shop, inn, temple, manor & cottages
+// room.cpp — building interiors: shop, inn, temple, elder's hall & cottages
 #include "game.hpp"
 #include "world.hpp"
 #include <cstdio>
 
 enum RoomPropTex {
-    RP_COUNTER = 0, RP_SHELF, RP_TABLE, RP_BED, RP_BARREL, RP_KEG,
+    RP_COUNTER = 0, RP_SHELF, RP_TABLE, RP_LONGTABLE, RP_BED, RP_BARREL, RP_KEG,
     RP_LANTERN, RP_CANDLE, RP_PLATE, RP_STATUE, RP_PILLAR, RP_PLANT,
     RP_URN, RP_STOOL
 };
 
 static Texture2D* roomPropTexture(int tex) {
     switch (tex) {
-        case RP_COUNTER: return &g.assets.counter;
-        case RP_SHELF:   return g.assets.shelf.id ? &g.assets.shelf : &g.assets.counter;
-        case RP_TABLE:   return &g.assets.table;
-        case RP_BED:     return &g.assets.bed;
-        case RP_BARREL:  return &g.assets.barrel;
-        case RP_KEG:     return &g.assets.keg;
-        case RP_LANTERN: return &g.assets.lantern;
-        case RP_CANDLE:  return &g.assets.candle;
-        case RP_PLATE:   return &g.assets.plate;
-        case RP_STATUE:  return &g.assets.statue;
-        case RP_PILLAR:  return &g.assets.pillar;
-        case RP_PLANT:   return &g.assets.plant;
-        case RP_URN:     return &g.assets.urn;
-        case RP_STOOL:   return &g.assets.stoolTex;
-        default:         return &g.assets.barrel;
+        case RP_COUNTER:   return &g.assets.counter;
+        case RP_SHELF:     return g.assets.shelf.id ? &g.assets.shelf : &g.assets.counter;
+        case RP_TABLE:     return &g.assets.table;
+        case RP_LONGTABLE: return g.assets.longtable.id ? &g.assets.longtable : &g.assets.table;
+        case RP_BED:       return &g.assets.bed;
+        case RP_BARREL:    return &g.assets.barrel;
+        case RP_KEG:       return &g.assets.keg;
+        case RP_LANTERN:   return &g.assets.lantern;
+        case RP_CANDLE:    return &g.assets.candle;
+        case RP_PLATE:     return &g.assets.plate;
+        case RP_STATUE:    return &g.assets.statue;
+        case RP_PILLAR:    return &g.assets.pillar;
+        case RP_PLANT:     return &g.assets.plant;
+        case RP_URN:       return &g.assets.urn;
+        case RP_STOOL:     return &g.assets.stoolTex;
+        default:           return &g.assets.barrel;
     }
 }
 
@@ -33,7 +34,8 @@ void roomBuild(Room& room, const Building& b, const Village& v) {
     room = Room{};
     room.w = 15; room.h = 11;
     if (b.kind == 7) { room.w = 17; room.h = 12; }
-    else if (b.kind == 8) { room.w = 16; room.h = 11; }
+    else if (b.kind == 8) { room.w = 17; room.h = 11; }
+    else if (b.kind == 6) { room.w = 16; room.h = 11; }
     room.exitX = room.w * 0.5f;
     room.exitY = (float)(room.h - 1) - 0.1f;
     room.npcX = room.w * 0.5f;
@@ -47,57 +49,104 @@ void roomBuild(Room& room, const Building& b, const Village& v) {
     if (b.kind == 5) {
         room.kind = ROOM_SHOP;
         room.title = v.startVillage ? "Mira's Sundries" : (vname + " Sundries");
-        g.roomNpcSprite = NS_MERCHANT; // merchant
+        g.roomNpcSprite = NS_MERCHANT;
         g.roomNpcFace = FACE_SHOPKEEPER;
         g.roomNpcName = v.startVillage ? "Mira the Trader" : "Village Trader";
         for (int x = 4; x <= room.w - 5; x++) addP(RP_COUNTER, x + 0.5f, 4.0f, true, 1.0f, 0.75f);
-        for (int x = 3; x <= room.w - 3; x += 4) addP(RP_SHELF, x + 0.5f, 1.8f, true, 0.9f, 0.8f);
+        // shelf.png is 44px (~2.75 tiles) wide
+        addP(RP_SHELF, 3.3f, 1.8f, true, 2.6f, 0.85f);
+        addP(RP_SHELF, room.w * 0.5f, 1.8f, true, 2.6f, 0.85f);
+        addP(RP_SHELF, room.w - 3.3f, 1.8f, true, 2.6f, 0.85f);
+        addP(RP_TABLE, 3.2f, 6.8f, true, 1.3f, 0.9f);
+        addP(RP_PLATE, 3.2f, 6.45f, false, 0.4f, 0.4f);
         addP(RP_BARREL, 2.0f, room.h - 2.6f);
         addP(RP_BARREL, 3.0f, room.h - 2.6f);
         addP(RP_KEG,    room.w - 2.2f, room.h - 2.6f);
-        addP(RP_PLANT,  2.0f, 4.2f);
-        addP(RP_PLANT,  room.w - 2.0f, 4.2f);
+        addP(RP_KEG,    room.w - 3.3f, room.h - 2.6f);
+        addP(RP_PLANT,  2.0f, 4.1f);
+        addP(RP_PLANT,  room.w - 2.0f, 4.1f);
     } else if (b.kind == 6) {
         room.kind = ROOM_INN;
         room.title = v.startVillage ? "The Sleeping Stag Inn" : (vname + " Inn");
-        g.roomNpcSprite = NS_MAYOR; // apron-clad innkeeper
+        g.roomNpcSprite = NS_MAYOR;
         g.roomNpcFace = FACE_INNKEEPER;
         g.roomNpcName = v.startVillage ? "Bren the Innkeep" : "Innkeeper";
         room.npcX = 4.5f; room.npcY = 2.6f;
         for (int x = 2; x <= 6; x++) addP(RP_COUNTER, x + 0.5f, 4.0f, true, 1.0f, 0.75f);
-        addP(RP_BED,   room.w - 4.5f, 2.8f, true, 1.1f, 1.4f);
-        addP(RP_BED,   room.w - 2.3f, 2.8f, true, 1.1f, 1.4f);
-        addP(RP_BED,   room.w - 4.5f, 6.4f, true, 1.1f, 1.4f);
-        addP(RP_BED,   room.w - 2.3f, 6.4f, true, 1.1f, 1.4f);
-        addP(RP_TABLE, 4.5f, 6.8f, true, 1.3f, 0.9f);
-        addP(RP_STOOL, 3.3f, 7.1f, false, 0.6f, 0.6f);
-        addP(RP_STOOL, 5.7f, 7.1f, false, 0.6f, 0.6f);
+        addP(RP_SHELF, 4.5f, 1.8f, true, 2.6f, 0.85f);
+        // Tavern dining table on left
+        addP(RP_LONGTABLE, 4.4f, 7.1f, true, 2.7f, 0.9f);
+        addP(RP_PLATE, 3.7f, 6.8f, false, 0.4f, 0.4f);
+        addP(RP_PLATE, 5.1f, 6.8f, false, 0.4f, 0.4f);
+        addP(RP_STOOL, 3.6f, 7.9f, false, 0.6f, 0.6f);
+        addP(RP_STOOL, 5.2f, 7.9f, false, 0.6f, 0.6f);
+        // Partition pillars separating common room from guest bunks
+        addP(RP_PILLAR, 9.2f, 3.2f, true, 0.8f, 0.8f);
+        addP(RP_PILLAR, 9.2f, 6.8f, true, 0.8f, 0.8f);
+        addP(RP_BED,   room.w - 4.4f, 2.9f, true, 1.1f, 1.4f);
+        addP(RP_BED,   room.w - 2.3f, 2.9f, true, 1.1f, 1.4f);
+        addP(RP_BED,   room.w - 4.4f, 6.5f, true, 1.1f, 1.4f);
+        addP(RP_BED,   room.w - 2.3f, 6.5f, true, 1.1f, 1.4f);
         addP(RP_LANTERN, 2.0f, 2.0f, false, 0.5f, 0.5f);
+        addP(RP_KEG, 2.0f, room.h - 2.5f);
     } else if (b.kind == 7) {
         room.kind = ROOM_TEMPLE;
         room.title = v.startVillage ? "Chapel of the Meadow" : (vname + " Chapel");
-        g.roomNpcSprite = NS_PRIEST; // priest
+        g.roomNpcSprite = NS_PRIEST;
         g.roomNpcFace = FACE_ELDER;
         g.roomNpcName = v.startVillage ? "Father Osric" : "Shrine Keeper";
-        addP(RP_STATUE, room.w * 0.5f, 2.0f, true, 1.0f, 1.0f);
-        addP(RP_CANDLE, room.w * 0.5f - 2.2f, 2.4f, false, 0.5f, 0.5f);
-        addP(RP_CANDLE, room.w * 0.5f + 2.2f, 2.4f, false, 0.5f, 0.5f);
+        room.npcY = 3.2f;
+        addP(RP_STATUE, room.w * 0.5f, 1.9f, true, 1.1f, 1.0f);
+        addP(RP_CANDLE, room.w * 0.5f - 2.3f, 2.3f, false, 0.5f, 0.5f);
+        addP(RP_CANDLE, room.w * 0.5f + 2.3f, 2.3f, false, 0.5f, 0.5f);
         for (int y = 4; y <= room.h - 4; y += 3) {
             addP(RP_PILLAR, 3.0f, (float)y, true, 0.8f, 0.8f);
             addP(RP_PILLAR, room.w - 3.0f, (float)y, true, 0.8f, 0.8f);
         }
         addP(RP_URN, 2.0f, 2.2f);
         addP(RP_URN, room.w - 2.0f, 2.2f);
+        addP(RP_PLANT, 2.0f, room.h - 2.5f);
+        addP(RP_PLANT, room.w - 2.0f, room.h - 2.5f);
+    } else if (b.kind == 8) {
+        // Elder's Hall / Council Manor
+        room.kind = ROOM_HOUSE;
+        room.title = v.startVillage ? "Elder's Hall" : (vname + " Council Hall");
+        g.roomNpcSprite = NS_ELDER;
+        g.roomNpcFace = FACE_ELDER;
+        g.roomNpcName = v.startVillage ? "Old Maren" : "Village Elder";
+        room.npcX = room.w * 0.5f;
+        room.npcY = 2.9f;
+        addP(RP_SHELF, 3.6f, 1.8f, true, 2.6f, 0.85f);
+        addP(RP_SHELF, room.w - 3.6f, 1.8f, true, 2.6f, 0.85f);
+        addP(RP_PILLAR, 3.0f, 4.4f, true, 0.8f, 0.8f);
+        addP(RP_PILLAR, room.w - 3.0f, 4.4f, true, 0.8f, 0.8f);
+        // Council map/archive tables flanking the central carpet
+        addP(RP_LONGTABLE, 4.5f, 6.8f, true, 2.7f, 0.9f);
+        addP(RP_LONGTABLE, room.w - 4.5f, 6.8f, true, 2.7f, 0.9f);
+        addP(RP_CANDLE, 4.5f, 6.45f, false, 0.4f, 0.4f);
+        addP(RP_CANDLE, room.w - 4.5f, 6.45f, false, 0.4f, 0.4f);
+        addP(RP_STOOL, 4.5f, 7.65f, false, 0.6f, 0.6f);
+        addP(RP_STOOL, room.w - 4.5f, 7.65f, false, 0.6f, 0.6f);
+        addP(RP_URN, 2.0f, 2.2f);
+        addP(RP_URN, room.w - 2.0f, 2.2f);
+        addP(RP_PLANT, 2.0f, room.h - 2.5f);
+        addP(RP_PLANT, room.w - 2.0f, room.h - 2.5f);
     } else {
         room.kind = ROOM_HOUSE;
-        bool isManor = (b.kind == 8);
-        room.title = isManor ? (v.startVillage ? "Elder's Hall" : (vname + " Hall")) : "Cottage";
-        g.roomNpcSprite = isManor ? 4 : (b.kind % 4);
-        g.roomNpcFace = isManor ? FACE_ELDER : (FACE_VILLAGER0 + (b.kind % 4));
-        g.roomNpcName = isManor ? (v.startVillage ? "Old Maren" : "Village Elder") : "Homeowner";
-        addP(RP_BED,   2.5f, 2.8f, true, 1.1f, 1.4f);
-        addP(RP_TABLE, room.w - 4.0f, 5.2f, true, 1.3f, 0.9f);
-        addP(RP_SHELF, room.w - 3.0f, 1.8f, true, 0.9f, 0.8f);
+        static const char* kCottageNames[5] = {
+            "Weaver's Cottage", "Cooper's Cottage", "Herbalist's Home", "Cartographer's Nook", "Lantern Cottage"
+        };
+        room.title = v.startVillage ? kCottageNames[b.kind % 5] : "Village Cottage";
+        g.roomNpcSprite = b.kind % 4;
+        g.roomNpcFace = FACE_VILLAGER0 + (b.kind % 4);
+        g.roomNpcName = v.startVillage ? (b.kind % 2 == 0 ? "Cottager" : "Townsperson") : "Homeowner";
+        room.npcX = (b.kind & 1) ? 5.2f : 9.6f;
+        room.npcY = 3.2f;
+        addP(RP_BED,   2.5f, 2.9f, true, 1.1f, 1.4f);
+        addP(RP_SHELF, room.w - 3.4f, 1.8f, true, 2.6f, 0.85f);
+        addP(RP_TABLE, room.w - 4.2f, 5.6f, true, 1.3f, 0.9f);
+        addP(RP_PLATE, room.w - 4.2f, 5.25f, false, 0.4f, 0.4f);
+        addP(RP_STOOL, room.w - 5.4f, 5.8f, false, 0.6f, 0.6f);
         addP(RP_PLANT, 2.0f, room.h - 2.6f);
         addP(RP_BARREL, room.w - 2.2f, room.h - 2.6f);
     }
@@ -115,13 +164,11 @@ int roomPropNear(const Room& room, float x, float y, float r) {
 }
 
 bool roomBlocked(const Room& room, float x, float y, float r) {
-    // Allow walking into the bottom doorway gap
     bool inDoorGap = (fabsf(x - room.exitX) < 1.1f && y > room.h - 1.6f);
     if (x - r < 1.0f || x + r > room.w - 1.0f || y - r < 1.7f) return true;
     if (!inDoorGap && y + r > room.h - 1.0f) return true;
     if (y > room.h - 0.1f) return false;
 
-    // NPC solid body
     if (fabsf(x - room.npcX) < 0.48f + r && fabsf(y - room.npcY) < 0.42f + r) return true;
 
     for (const auto& p : room.props) {
@@ -133,8 +180,8 @@ bool roomBlocked(const Room& room, float x, float y, float r) {
 }
 
 static void roomOrigin(const Room& r, float& ox, float& oy) {
-    ox = floorf((VRES_W - r.w * TILE) * 0.5f);
-    oy = floorf((VRES_H - r.h * TILE) * 0.5f) + 8.0f;
+    ox = floorf((g.vw - r.w * TILE) * 0.5f);
+    oy = floorf((g.vh - r.h * TILE) * 0.5f) + 4.0f;
 }
 
 void enterBuilding(int buildingIndex) {
@@ -181,11 +228,13 @@ void exitRoom() {
     if (g.villageLoaded && g.room.buildingIndex >= 0 &&
         g.room.buildingIndex < (int)g.village.buildings.size()) {
         const Building& b = g.village.buildings[g.room.buildingIndex];
-        float ex = (float)b.tx + 0.5f;
-        float ey = (float)b.ty + 1.55f;
+        int dtx = buildingDoorTx(b);
+        int dty = buildingDoorTy(b);
+        float ex = (float)dtx + 0.5f;
+        float ey = (float)dty + 0.55f;
         if (positionBlocked(ex, ey, 0.28f)) {
-            int ox = b.tx, oy = b.ty + 2;
-            nearestWalkable(b.tx, b.ty + 1, ox, oy);
+            int ox = dtx, oy = dty + 1;
+            nearestWalkable(dtx, dty, ox, oy);
             ex = ox + 0.5f; ey = oy + 0.5f;
         }
         g.px = ex;
@@ -226,7 +275,14 @@ static void talkToKeeper() {
             act = DLG_START_QUEST_CROWN;
         }
     } else {
-        lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Make yourselves at home! Mind the third floorboard — it squeaks.\"" });
+        static const char* kHomeLines[4] = {
+            "\"Make yourselves at home! Mind the third floorboard — it squeaks.\"",
+            "\"If you're heading past Millbrook, pack an Antidote or two. Hornets nest in the reeds.\"",
+            "\"Pip's herbs kept half the village standing through last winter's frost.\"",
+            "\"Old Maren keeps every survey chart in the Elder's Hall up by the north bluff.\""
+        };
+        int idx = (g.room.buildingIndex >= 0) ? (g.room.buildingIndex & 3) : 0;
+        lines.push_back({ g.roomNpcFace, g.roomNpcName, kHomeLines[idx] });
     }
     startDialog(lines, act);
 }
@@ -260,8 +316,9 @@ void roomUpdate(float dt) {
         if (kx != 0 && !roomBlocked(r, nx, g.roomPy, 0.28f)) { g.roomPx = nx; g.roomMoving = true; }
         else if (ky != 0 && !roomBlocked(r, g.roomPx, ny, 0.28f)) { g.roomPy = ny; g.roomMoving = true; }
     } else if (g.roomHasTarget) {
-        float dx = g.roomTargetX - g.roomPx;
-        float dy = g.roomTargetY - g.roomPy;
+        float dx = g.roomPx - g.roomTargetX;
+        float dy = g.roomPy - g.roomTargetY;
+        dx = -dx; dy = -dy;
         float dist = sqrtf(dx * dx + dy * dy);
         if (dist <= speed * dt + 0.14f) {
             if (!roomBlocked(r, g.roomTargetX, g.roomTargetY, 0.28f)) {
@@ -295,7 +352,6 @@ void roomUpdate(float dt) {
 
     if (g.roomMoving) g.roomAnimT += dt;
 
-    // stepped into exit rug
     if (g.roomPy >= r.exitY - 0.15f && fabsf(g.roomPx - r.exitX) < 1.25f) {
         exitRoom();
         return;
@@ -321,7 +377,6 @@ void roomUpdate(float dt) {
         return;
     }
 
-    // Mouse click inside room
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 m = getVirtualMouse();
         float ox, oy; roomOrigin(r, ox, oy);
@@ -365,13 +420,15 @@ void roomDraw() {
     float ox, oy;
     roomOrigin(r, ox, oy);
 
-    // Outer frame
+    // Outer frame + soft drop shadow
+    DrawRectangle((int)ox - 5, (int)oy - 3, r.w * TILE + 12, r.h * TILE + 10, Color{ 4, 6, 12, 255 });
     DrawRectangle((int)ox - 3, (int)oy - 3, r.w * TILE + 6, r.h * TILE + 6, Color{ 6, 8, 16, 255 });
-    DrawRectangleLines((int)ox - 2, (int)oy - 2, r.w * TILE + 4, r.h * TILE + 4, Color{ 78, 92, 134, 255 });
+    DrawRectangleLines((int)ox - 2, (int)oy - 2, r.w * TILE + 4, r.h * TILE + 4, Color{ 86, 102, 148, 255 });
 
+    bool isHall = (r.title.find("Hall") != std::string::npos);
     Texture2D& floorTex = (r.kind == ROOM_TEMPLE) ? g.assets.stoneFloor
-                        : (r.kind == ROOM_SHOP ? g.assets.tileFloor : g.assets.plankFloor);
-    Texture2D& wallTex = g.assets.brickFloor[r.kind == ROOM_TEMPLE ? 1 : 0];
+                        : ((r.kind == ROOM_SHOP || isHall) ? g.assets.tileFloor : g.assets.plankFloor);
+    Texture2D& wallTex = g.assets.brickFloor[(r.kind == ROOM_TEMPLE || isHall) ? 1 : 0];
 
     for (int y = 0; y < r.h; y++) {
         for (int x = 0; x < r.w; x++) {
@@ -382,7 +439,7 @@ void roomDraw() {
                 DrawRectangle((int)sx, (int)sy, TILE, TILE, Color{ 44, 38, 46, 255 });
                 if (wallTex.id)
                     DrawTexturePro(wallTex, { 0, 0, (float)wallTex.width, (float)wallTex.height },
-                                   { sx, sy, TILE, TILE }, { 0, 0 }, 0.0f, Color{ 150, 138, 130, 255 });
+                                   { sx, sy, TILE, TILE }, { 0, 0 }, 0.0f, Color{ 152, 140, 132, 255 });
             } else {
                 if (floorTex.id)
                     DrawTexturePro(floorTex, { 0, 0, (float)floorTex.width, (float)floorTex.height },
@@ -392,10 +449,17 @@ void roomDraw() {
         }
     }
 
-    // Back wall trim strip
+    // Back wall trim strip + warm interior ambient vignette
     DrawRectangle((int)(ox + TILE), (int)(oy + TILE), (r.w - 2) * TILE, 8, Color{ 62, 48, 42, 255 });
     DrawLine((int)(ox + TILE), (int)(oy + TILE + 8), (int)(ox + (r.w - 1) * TILE), (int)(oy + TILE + 8),
              Color{ 30, 22, 24, 255 });
+
+    // Central nave / council runner carpet for Chapel & Elder's Hall
+    if ((r.kind == ROOM_TEMPLE || isHall) && g.assets.carpet.id) {
+        DrawTexturePro(g.assets.carpet, { 0, 0, (float)g.assets.carpet.width, (float)g.assets.carpet.height },
+                       { ox + (r.exitX - 1.1f) * TILE, oy + 3.1f * TILE, TILE * 2.2f, (r.h - 4.8f) * TILE },
+                       { 0, 0 }, 0.0f, Fade(WHITE, 0.92f));
+    }
 
     // Exit rug
     if (g.assets.carpet.id) {
@@ -408,11 +472,15 @@ void roomDraw() {
     }
 
     // Y-sort props, keeper, and player cleanly
-    struct Item { float fy; int type; int idx; }; // 0=prop, 1=keeper, 2=player
+    struct Item { float fy; int type; int idx; };
     std::vector<Item> items;
     items.reserve(r.props.size() + 2);
-    for (int i = 0; i < (int)r.props.size(); i++)
-        items.push_back({ r.props[i].y * TILE, 0, i });
+    for (int i = 0; i < (int)r.props.size(); i++) {
+        float sortY = r.props[i].y * TILE;
+        if (r.props[i].tex == RP_PLATE || r.props[i].tex == RP_CANDLE)
+            sortY += 8.0f; // tabletop items sort cleanly in front of the table surface
+        items.push_back({ sortY, 0, i });
+    }
     items.push_back({ (r.npcY + 0.35f) * TILE, 1, 0 });
     items.push_back({ (g.roomPy + 0.35f) * TILE, 2, 0 });
     std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) { return a.fy < b.fy; });
@@ -425,16 +493,15 @@ void roomDraw() {
             float cx = ox + p.x * TILE;
             float fy = oy + (p.y + 0.45f) * TILE;
             DrawTexturePro(*t, { 0, 0, (float)t->width, (float)t->height },
-                           { cx - t->width * 0.5f, fy - t->height, (float)t->width, (float)t->height },
+                           { floorf(cx - t->width * 0.5f), floorf(fy - t->height), (float)t->width, (float)t->height },
                            { 0, 0 }, 0.0f, WHITE);
         } else if (it.type == 1) {
-            Texture2D& s = g.assets.npc[std::max(0, std::min(NS_KIND_COUNT-1, g.roomNpcSprite))];
+            Texture2D& s = g.assets.npc[std::max(0, std::min(NS_KIND_COUNT - 1, g.roomNpcSprite))];
             if (s.id == 0) continue;
             float cx = ox + r.npcX * TILE;
             float fy = oy + (r.npcY + 0.35f) * TILE;
             DrawEllipse((int)cx, (int)fy - 1, 5.5f, 2.5f, Fade(BLACK, 0.25f));
-            // Row 0 = front (facing DOWN toward the player!)
-            DrawTexturePro(s, { 0, 0, 24, 32 }, { cx - 12, fy - 32, 24, 32 }, { 0, 0 }, 0.0f, WHITE);
+            DrawTexturePro(s, { 0, 0, 24, 32 }, { floorf(cx - 12.0f), floorf(fy - 32.0f), 24, 32 }, { 0, 0 }, 0.0f, WHITE);
         } else {
             Texture2D& sheet = g.assets.heroWalk[std::max(0, std::min(2, g.party[0].klass))];
             int row = (g.roomFacing == 0) ? 0 : (g.roomFacing == 1 ? 1 : 2);
@@ -444,21 +511,27 @@ void roomDraw() {
             DrawEllipse((int)cx, (int)fy - 1, 5.5f, 2.5f, Fade(BLACK, 0.28f));
             Rectangle src{ (float)(frame * 24), (float)(row * 32), 24, 32 };
             if (g.roomFacing == 2 && g.roomSideFlip) src.width = -24;
-            DrawTexturePro(sheet, src, { cx - 12, fy - 32, 24, 32 }, { 0, 0 }, 0.0f, WHITE);
+            DrawTexturePro(sheet, src, { floorf(cx - 12.0f), floorf(fy - 32.0f), 24, 32 }, { 0, 0 }, 0.0f, WHITE);
         }
     }
 
     // Room title header
-    Vector2 tsz = measureText(r.title.c_str(), 8);
-    float tw = std::max(148.0f, tsz.x + 24.0f);
-    drawWindow({ VRES_W * 0.5f - tw * 0.5f, 6, tw, 22 });
-    drawTextCentered(r.title.c_str(), VRES_W * 0.5f, 13, Color{ 255, 236, 176, 255 }, 8);
+    if (g.mode != MODE_MENU) {
+        Vector2 tsz = measureText(r.title.c_str(), 8);
+        float tw = std::max(148.0f, tsz.x + 24.0f);
+        drawWindow({ floorf(g.vw * 0.5f - tw * 0.5f), 5.0f, tw, 21.0f });
+        drawTextCentered(r.title.c_str(), g.vw * 0.5f, 12.0f, Color{ 255, 236, 176, 255 }, 8);
+    }
 
-    // Bottom prompt
-    float dx = g.roomPx - r.npcX, dy = g.roomPy - r.npcY;
-    const char* hint = (dx * dx + dy * dy < 3.0f * 3.0f)
-        ? "SPACE or CLICK: talk  |  ESC: menu"
-        : "Walk down or click rug to leave  |  ESC: menu";
-    drawTextCentered(hint, VRES_W * 0.5f, VRES_H - 16, Color{ 195, 208, 240, 225 }, 8);
-    drawToast();
+    // Bottom prompt & toast ONLY when active in MODE_ROOM (never beneath MODE_DIALOG or MODE_MENU!)
+    if (g.mode == MODE_ROOM) {
+        float dx = g.roomPx - r.npcX, dy = g.roomPy - r.npcY;
+        const char* hint = (dx * dx + dy * dy < 3.0f * 3.0f)
+            ? "SPACE or CLICK: talk  |  ESC: menu"
+            : "Walk down or click rug to leave  |  ESC: menu";
+        float hw = measureText(hint, 8).x + 20.0f;
+        drawWindowBlue({ floorf(g.vw * 0.5f - hw * 0.5f), (float)g.vh - 22.0f, hw, 18.0f });
+        drawTextCentered(hint, g.vw * 0.5f, (float)g.vh - 17.0f, Color{ 235, 242, 255, 245 }, 8);
+        drawToast();
+    }
 }
