@@ -3,6 +3,7 @@
 #include "world.hpp"
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <cstddef>
 
@@ -12,35 +13,36 @@ float gAnimTime = 0.0f;
 // ================================================================ items
 static const ItemDef ITEMS[IT_COUNT] = {
     // consumables
-    { "Potion",      "Restores 60 HP.",                       15,  IK_CONSUMABLE, 60,   ICON_POTION,   true  },
-    { "Hi-Potion",   "Restores 180 HP.",                      60,  IK_CONSUMABLE, 180,  ICON_HIPOTION, true  },
-    { "Ether",       "Restores 30 MP.",                       40,  IK_CONSUMABLE, 30,   ICON_ETHER,    true  },
-    { "Hi-Ether",    "Restores 90 MP.",                      120,  IK_CONSUMABLE, 90,   ICON_ETHER,    true  },
-    { "Elixir",      "Fully restores one hero.",             400,  IK_CONSUMABLE, 9999, ICON_ELIXIR,   true  },
-    { "Antidote",    "Cures poison.",                         20,  IK_CONSUMABLE, 0,    ICON_FOOD,     true  },
-    { "Phoenix Down","Revives a fallen hero at half HP.",     80,  IK_CONSUMABLE, 1,    ICON_FEATHER,  true  },
+    { "Potion",       "Restores 60 HP.",                       15,  IK_CONSUMABLE, 60,   ICON_POTION,   true  },
+    { "Hi-Potion",    "Restores 180 HP.",                      60,  IK_CONSUMABLE, 180,  ICON_HIPOTION, true  },
+    { "Ether",        "Restores 30 MP.",                       40,  IK_CONSUMABLE, 30,   ICON_ETHER,    true  },
+    { "Hi-Ether",     "Restores 90 MP.",                      120,  IK_CONSUMABLE, 90,   ICON_ETHER,    true  },
+    { "Elixir",       "Fully restores HP, MP, and cures all.",400,  IK_CONSUMABLE, 9999, ICON_ELIXIR,   true  },
+    { "Antidote",     "Cures poison (or restores 20 HP).",     20,  IK_CONSUMABLE, 20,   ICON_FOOD,     true  },
+    { "Phoenix Down", "Revives a fallen hero at half HP.",     80,  IK_CONSUMABLE, 1,    ICON_FEATHER,  true  },
 
     // weapons
-    { "Bronze Sword","A serviceable blade. ATK +5",          140,  IK_WEAPON, 5,  ICON_SWORD0, true },
-    { "Iron Sword",  "Honest steel. ATK +11",                380,  IK_WEAPON, 11, ICON_SWORD1, true },
-    { "Mythril Sword","Light as a whisper. ATK +19",         900,  IK_WEAPON, 19, ICON_SWORD2, true },
-    { "Dragon Fang", "It hums when monsters near. ATK +30", 2400,  IK_WEAPON, 30, ICON_SWORD2, false },
+    { "Bronze Sword", "A serviceable blade. ATK +5",          140,  IK_WEAPON,  5, ICON_SWORD0, true  },
+    { "Iron Sword",   "Honest steel. ATK +11",                380,  IK_WEAPON, 11, ICON_SWORD1, true  },
+    { "Mythril Sword","Light as a whisper. ATK +19",          900,  IK_WEAPON, 19, ICON_SWORD2, true  },
+    { "Dragon Fang",  "It hums when monsters near. ATK +30", 2400,  IK_WEAPON, 30, ICON_SWORD2, false },
 
     // armour
-    { "Leather Vest","Boiled leather. DEF +4",               110,  IK_ARMOR, 4,  ICON_ARMOR0, true },
-    { "Chain Mail",  "Heavy but honest. DEF +9",             340,  IK_ARMOR, 9,  ICON_ARMOR1, true },
-    { "Mythril Mail","Rings like a bell. DEF +15",           820,  IK_ARMOR, 15, ICON_ARMOR2, true },
-    { "Dragon Scale","Scaled like its namesake. DEF +24",   2100,  IK_ARMOR, 24, ICON_ARMOR3, false },
+    { "Leather Vest", "Boiled leather. DEF +4",               110,  IK_ARMOR,  4, ICON_ARMOR0, true  },
+    { "Chain Mail",   "Heavy but honest. DEF +9",             340,  IK_ARMOR,  9, ICON_ARMOR1, true  },
+    { "Mythril Mail", "Rings like a bell. DEF +15",           820,  IK_ARMOR, 15, ICON_ARMOR2, true  },
+    { "Dragon Scale", "Scaled like its namesake. DEF +24",   2100,  IK_ARMOR, 24, ICON_ARMOR3, false },
 
     // shields & accessories
-    { "Wooden Shield","A round of oak. DEF +2",               70,  IK_ACCESSORY, 2,  ICON_SHIELD, true },
-    { "Iron Shield", "Banded and true. DEF +5",              260,  IK_ACCESSORY, 5,  ICON_SHIELD, true },
-    { "Power Ring",  "Strength hums in the band. ATK +6",    600,  IK_ACCESSORY, 6,  ICON_RING,   true },
-    { "Mana Amulet", "Thoughts flow easier. MAG +6",         600,  IK_ACCESSORY, 6,  ICON_RING,   true },
+    { "Wooden Shield","A round of oak. DEF +2",                70,  IK_ACCESSORY, 2, ICON_SHIELD, true },
+    { "Iron Shield",  "Banded and true. DEF +5",              260,  IK_ACCESSORY, 5, ICON_SHIELD, true },
+    { "Power Ring",   "Strength hums in the band. ATK +6",    600,  IK_ACCESSORY, 6, ICON_RING,   true },
+    { "Mana Amulet",  "Thoughts flow easier. MAG +6",         600,  IK_ACCESSORY, 6, ICON_RING,   true },
 
     // key items
-    { "Rusty Key",   "Opens the tower gate.",                  0,  IK_KEY, 0, ICON_GEM,  false },
-    { "Crown of Elm","The old crown of the first village.",    0,  IK_KEY, 0, ICON_COIN, false },
+    { "Rusty Key",    "Opens the old western watchtower chest.",0,  IK_KEY, 0, ICON_GEM,  false },
+    { "Lost Locket",  "A silver locket from the standing stones.",0,IK_KEY, 0, ICON_RING, false },
+    { "Crown of Elm", "The old crown of the first village.",    0,  IK_KEY, 0, ICON_COIN, false },
 };
 const ItemDef& itemDef(int id) {
     static const ItemDef none{ "Nothing", "", 0, IK_KEY, 0, ICON_GEM, false };
@@ -51,18 +53,18 @@ const ItemDef& itemDef(int id) {
 // ================================================================ heroes
 int heroAtk(const Hero& h) {
     int bonus = (h.weapon >= 0) ? itemDef(h.weapon).power : 0;
-    if (h.accessory >= 0 && itemDef(h.accessory).name[0] == 'P') bonus += itemDef(h.accessory).power;
+    if (h.accessory == IT_RING_POWER) bonus += itemDef(h.accessory).power;
     return h.atk + bonus;
 }
 int heroDef(const Hero& h) {
     int bonus = (h.armor >= 0) ? itemDef(h.armor).power : 0;
-    if (h.accessory >= 0 && itemDef(h.accessory).name[0] != 'P' && itemDef(h.accessory).kind == IK_ACCESSORY)
+    if (h.accessory == IT_SHIELD_WOOD || h.accessory == IT_SHIELD_IRON)
         bonus += itemDef(h.accessory).power;
     return h.def + bonus;
 }
 int heroMag(const Hero& h) {
     int bonus = 0;
-    if (h.accessory >= 0 && itemDef(h.accessory).name[0] == 'M') bonus += itemDef(h.accessory).power;
+    if (h.accessory == IT_AMULET_MANA) bonus += itemDef(h.accessory).power;
     return h.mag + bonus;
 }
 int xpToNext(const Hero& h) {
@@ -87,7 +89,7 @@ const char* heroName(int klass) {
 int partyLevel() {
     int sum = 0;
     for (auto& h : g.party) sum += h.level;
-    return sum / 3;
+    return std::max(1, sum / 3);
 }
 int levelUpCheck(Hero& h) {
     int gained = 0;
@@ -103,33 +105,59 @@ int levelUpCheck(Hero& h) {
             h.maxHp += 6; h.maxMp += 4 + h.level / 3; h.atk += 2; h.def += 2; h.spd += 2; h.mag += 3;
         }
         h.hp = h.maxHp; h.mp = h.maxMp;
+        h.poisoned = false;
         gained++;
     }
     return gained;
 }
 
+bool equipHeroItem(int heroIdx, int slot, int itemId) {
+    if (heroIdx < 0 || heroIdx > 2 || slot < 0 || slot > 2) return false;
+    if (itemId < 0 || itemId >= IT_COUNT) return false;
+    ItemKind want = (slot == 0) ? IK_WEAPON : (slot == 1 ? IK_ARMOR : IK_ACCESSORY);
+    if (itemDef(itemId).kind != want) return false;
+    if (g.inventory[itemId] <= 0) return false;
+    Hero& h = g.party[heroIdx];
+    int* eq = (slot == 0) ? &h.weapon : (slot == 1 ? &h.armor : &h.accessory);
+    if (*eq == itemId) return false;
+    if (*eq >= 0 && *eq < IT_COUNT) g.inventory[*eq]++;
+    g.inventory[itemId]--;
+    *eq = itemId;
+    return true;
+}
+
+bool unequipHeroSlot(int heroIdx, int slot) {
+    if (heroIdx < 0 || heroIdx > 2 || slot < 0 || slot > 2) return false;
+    Hero& h = g.party[heroIdx];
+    int* eq = (slot == 0) ? &h.weapon : (slot == 1 ? &h.armor : &h.accessory);
+    if (*eq < 0 || *eq >= IT_COUNT) return false;
+    g.inventory[*eq]++;
+    *eq = -1;
+    return true;
+}
+
 // ================================================================ spells
 static const SpellDef SPELLS[KLASS_COUNT][6] = {
-    // Knight
-    { { "Power Slash", 6, 0, false, false, SCH_PHYS, 1, 0 },
-      { "Shield Bash", 10, 26, false, false, SCH_PHYS, 3, 3 },
-      { "Whirlwind",  16, 30, false, true,  SCH_PHYS, 6, 0 },
-      { "Last Stand", 20, 0, true, false, SCH_HOLY, 10, 4 },
+    // Knight (SCH_PHYS skills scale with heroAtk; Last Stand heals + guards)
+    { { "Power Slash",  6, 24, false, false, SCH_PHYS, 1, 0 },
+      { "Shield Bash", 10, 20, false, false, SCH_PHYS, 3, 3 },
+      { "Whirlwind",   16, 22, false, true,  SCH_PHYS, 6, 0 },
+      { "Last Stand",  18, 45, true,  false, SCH_HOLY, 10, 4 },
       { "", 0, 0, false, false, SCH_NONE, 99, 0 },
       { "", 0, 0, false, false, SCH_NONE, 99, 0 } },
     // Mage
-    { { "Fire",        8, 34, false, false, SCH_FIRE, 1, 1 },
-      { "Spark",       5, 22, false, false, SCH_STORM, 2, 2 },
-      { "Frost",       12, 44, false, false, SCH_STORM, 4, 2 },
-      { "Firaga",      22, 70, false, false, SCH_FIRE, 7, 1 },
-      { "Stormcall",   30, 60, false, true,  SCH_STORM, 11, 2 },
+    { { "Fire",         8, 34, false, false, SCH_FIRE,  1, 1 },
+      { "Spark",        5, 24, false, false, SCH_STORM, 2, 2 },
+      { "Frost",       12, 46, false, false, SCH_STORM, 4, 2 },
+      { "Firaga",      22, 74, false, false, SCH_FIRE,  7, 1 },
+      { "Stormcall",   28, 62, false, true,  SCH_STORM, 11, 2 },
       { "", 0, 0, false, false, SCH_NONE, 99, 0 } },
     // Cleric
-    { { "Heal",        6, 62, true, false, SCH_HOLY, 1, 4 },
-      { "Cure All",   16, 48, true, true,  SCH_HOLY, 3, 4 },
-      { "Holy Bolt",  10, 36, false, false, SCH_HOLY, 5, 3 },
-      { "Revive",     24, 1, true, false, SCH_HOLY, 8, 4 },
-      { "Sanctuary",  36, 120, true, true, SCH_HOLY, 12, 4 },
+    { { "Heal",         6, 62, true,  false, SCH_HOLY,  1, 4 },
+      { "Cure All",    16, 48, true,  true,  SCH_HOLY,  3, 4 },
+      { "Holy Bolt",   10, 38, false, false, SCH_HOLY,  5, 3 },
+      { "Revive",      24,  1, true,  false, SCH_HOLY,  8, 4 },
+      { "Sanctuary",   36, 120,true,  true,  SCH_HOLY,  12, 4 },
       { "", 0, 0, false, false, SCH_NONE, 99, 0 } },
 };
 SpellList spellsFor(int klass, int level) {
@@ -159,7 +187,7 @@ static const EnemyDef ENEMIES[EN_COUNT] = {
     { "Serpent",       96, 23, 12, 12, 120,  95, 1 << SCH_STORM,  IT_HIETHER,     15, 4 },
     { "Golem",        150, 27, 20,  5, 190, 150, 1 << SCH_STORM,  IT_ELIXIR,      10, 4 },
     { "Night Rider",  190, 33, 16, 15, 260, 220, 1 << SCH_HOLY,   IT_HIPOTION,    25, 4 },
-    { "Slime King",   420, 40, 18, 11, 900, 800, 1 << SCH_FIRE,   IT_CROWN,      100, 5 },
+    { "Slime King",   420, 36, 16, 11, 900, 800, 1 << SCH_FIRE,   IT_CROWN,      100, 5 },
 };
 const EnemyDef& enemyDef(int kind) {
     static const EnemyDef none{ "???", 1, 1, 1, 1, 0, 0, 0, -1, 0, 0 };
@@ -174,12 +202,18 @@ static const char* QUEST_TITLES[QUEST_COUNT] = {
     "The Crown of Elm",
 };
 static const char* QUEST_GOALS[QUEST_COUNT] = {
-    "Thin out the slimes in the south meadow.",
-    "Find the locket a traveller lost in the wilds.",
-    "Recover the old crown from the Slime King.",
+    "Thin out 6 slimes in the meadow for Farmer Hedrick.",
+    "Find Tamsin's locket at the Standing Stones SE of Elmswick.",
+    "Defeat the Slime King at the Northern Castle and return the Crown.",
 };
-const char* questTitle(int id) { return QUEST_TITLES[id]; }
-const char* questGoalText(int id) { return QUEST_GOALS[id]; }
+const char* questTitle(int id) {
+    if (id < 0 || id >= QUEST_COUNT) return "";
+    return QUEST_TITLES[id];
+}
+const char* questGoalText(int id) {
+    if (id < 0 || id >= QUEST_COUNT) return "";
+    return QUEST_GOALS[id];
+}
 
 void questSetState(int id, int state) {
     if (id < 0 || id >= QUEST_COUNT) return;
@@ -194,6 +228,49 @@ void questAdvance(int id, int amount) {
     Quest& q = g.quests[id];
     if (q.state != QS_ACTIVE) return;
     q.progress += amount;
+}
+
+// ================================================================ audio helpers
+void playSoundIf(Sound& s) {
+    if (s.frameCount > 0) PlaySound(s);
+}
+
+void stopAllMusic() {
+    if (g.assets.title.frameCount > 0) StopMusicStream(g.assets.title);
+    if (g.assets.field.frameCount > 0) StopMusicStream(g.assets.field);
+    if (g.assets.battle.frameCount > 0) StopMusicStream(g.assets.battle);
+    if (g.assets.victory.frameCount > 0) StopMusicStream(g.assets.victory);
+    if (g.assets.gameover.frameCount > 0) StopMusicStream(g.assets.gameover);
+}
+
+void syncModeMusic() {
+    stopAllMusic();
+    if (!g.musicOn) return;
+    switch (g.mode) {
+        case MODE_TITLE:
+        case MODE_INTRO:
+            if (g.assets.title.frameCount > 0) PlayMusicStream(g.assets.title);
+            break;
+        case MODE_BATTLE:
+            if (g.assets.battle.frameCount > 0) PlayMusicStream(g.assets.battle);
+            break;
+        case MODE_GAMEOVER:
+            if (g.assets.gameover.frameCount > 0) PlayMusicStream(g.assets.gameover);
+            break;
+        default:
+            if (g.assets.field.frameCount > 0) PlayMusicStream(g.assets.field);
+            break;
+    }
+}
+
+void returnToTitle() {
+    g.mode = MODE_TITLE;
+    g.menuPage = 0;
+    g.titleIndex = 0;
+    g.fade = 1.0f;
+    g.fadeDir = -1;
+    refreshSaveExists();
+    syncModeMusic();
 }
 
 // ================================================================ assets
@@ -233,6 +310,7 @@ bool loadAllAssets() {
         snprintf(buf, sizeof(buf), "tiles/grass_%d.png", i);
         a.grass[i] = loadTex(d, buf, false);
     }
+    a.grassTall = loadTex(d, "tiles/grass_dark.png", false);
     for (int i = 0; i < 3; i++) {
         char buf[64];
         snprintf(buf, sizeof(buf), "tiles/tuft_%d.png", i);
@@ -312,7 +390,7 @@ bool loadAllAssets() {
     a.candle = loadTex(d, "sprites/candle.png");
     a.keg = loadTex(d, "sprites/keg.png");
     a.plate = loadTex(d, "sprites/plate.png");
-    a.shelf = loadTex(d, "sprites/longtable.png", false);
+    a.shelf = loadTex(d, "sprites/shelf.png", false);
     a.chestClosed = loadTex(d, "sprites/chest_closed.png");
     a.chestOpen = loadTex(d, "sprites/chest_open.png");
     a.jar = loadTex(d, "sprites/urn.png", false);
@@ -336,7 +414,6 @@ bool loadAllAssets() {
         char buf[64]; snprintf(buf, sizeof(buf), "sprites/hero_alt%d.png", i);
         a.heroExtra[i] = loadTex(d, buf, false);
     }
-    // npcs, in the order the world builds them (see NpcSprite)
     const char* npcs[16] = {
         "sprites/npc_villager0.png", "sprites/npc_villager1.png", "sprites/npc_villager2.png",
         "sprites/npc_villager3.png", "sprites/npc_elder.png", "sprites/npc_mayor.png",
@@ -440,7 +517,7 @@ bool loadAllAssets() {
     a.battle   = loadMus(d, "audio/battle.ogg");
     a.victory  = loadMus(d, "audio/victory.ogg");
     a.gameover = loadMus(d, "audio/gameover.ogg");
-    a.village  = loadMus(d, "audio/field.ogg");
+    a.village  = a.field;
 
     a.ok = true;
     return true;
@@ -453,24 +530,23 @@ static Color lerpCol(Color a, Color b, float t) {
 }
 
 void drawWindow(Rectangle r, bool dimInside) {
-    // RM2k-style window: a blue vertical gradient body, a pale border, a dark
-    // outer shadow.  Overlays the digitised OpenRTP window skin when loaded.
-    DrawRectangleRounded({ r.x + 2, r.y + 3, r.width, r.height }, 0.18f, 5, Fade(BLACK, 0.35f));
+    (void)dimInside;
+    DrawRectangleRounded({ r.x + 2, r.y + 3, r.width, r.height }, 0.14f, 5, Fade(BLACK, 0.35f));
     for (int i = 0; i < (int)r.height; i++) {
         float t = (float)i / std::max(1.0f, r.height - 1.0f);
         Color c = lerpCol(Color{ 26, 42, 116, 236 }, Color{ 10, 16, 54, 244 }, t);
         DrawRectangle((int)r.x, (int)r.y + i, (int)r.width, 1, c);
     }
-    DrawRectangleRoundedLinesEx({ r.x + 0.5f, r.y + 0.5f, r.width - 1, r.height - 1 }, 0.18f, 5,
+    DrawRectangleRoundedLinesEx({ r.x + 0.5f, r.y + 0.5f, r.width - 1, r.height - 1 }, 0.14f, 5,
                                 1.4f, Color{ 236, 240, 255, 255 });
-    DrawRectangleRoundedLinesEx({ r.x + 2.5f, r.y + 2.5f, r.width - 5, r.height - 5 }, 0.16f, 5,
+    DrawRectangleRoundedLinesEx({ r.x + 2.5f, r.y + 2.5f, r.width - 5, r.height - 5 }, 0.12f, 5,
                                 1.0f, Color{ 96, 118, 208, 255 });
 }
 
 void drawWindowBlue(Rectangle r) {
-    DrawRectangleRounded({ r.x + 2, r.y + 3, r.width, r.height }, 0.18f, 5, Fade(BLACK, 0.35f));
-    DrawRectangleRounded(r, 0.18f, 5, Color{ 16, 20, 48, 240 });
-    DrawRectangleRoundedLinesEx(r, 0.18f, 5, 1.4f, Color{ 255, 214, 130, 255 });
+    DrawRectangleRounded({ r.x + 2, r.y + 3, r.width, r.height }, 0.14f, 5, Fade(BLACK, 0.35f));
+    DrawRectangleRounded(r, 0.14f, 5, Color{ 16, 20, 48, 240 });
+    DrawRectangleRoundedLinesEx(r, 0.14f, 5, 1.4f, Color{ 255, 214, 130, 255 });
 }
 
 Vector2 measureText(const char* text, int size) {
@@ -478,18 +554,71 @@ Vector2 measureText(const char* text, int size) {
     return MeasureTextEx(f, text, (float)size, 1.0f);
 }
 
-static void drawWrappedLine(const char* s, float x, float y, Color c, int size) {
+static void drawLine(const char* s, float x, float y, Color c, int size) {
     Font f = (size >= 24) ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8);
     DrawTextEx(f, s, { x, y }, (float)size, 1.0f, c);
 }
 
 void drawText(const char* text, float x, float y, Color c, int size) {
-    drawWrappedLine(text, x, y, c, size);
+    drawLine(text, x, y, c, size);
 }
 void drawTextCentered(const char* text, float cx, float y, Color c, int size) {
     Vector2 s = measureText(text, size);
-    drawWrappedLine(text, cx - s.x / 2, y, c, size);
+    drawLine(text, floorf(cx - s.x * 0.5f), y, c, size);
 }
+
+void drawTextWrapped(const char* text, float x, float y, float maxW, float lineH, Color c, int size) {
+    if (!text || !text[0]) return;
+    std::string line;
+    float cy = y;
+    const char* p = text;
+    while (*p) {
+        if (*p == '\n') {
+            if (!line.empty()) { drawText(line.c_str(), x, cy, c, size); line.clear(); }
+            cy += lineH;
+            p++;
+            continue;
+        }
+        // grab next word (including leading spaces if mid-line)
+        std::string word;
+        while (*p == ' ') { word += *p++; }
+        while (*p && *p != ' ' && *p != '\n') { word += *p++; }
+        if (line.empty()) {
+            // trim leading spaces on fresh line
+            size_t first = word.find_first_not_of(' ');
+            if (first != std::string::npos) word = word.substr(first);
+            else continue;
+            // if a single word is wider than maxW, split by character
+            if (measureText(word.c_str(), size).x > maxW) {
+                std::string chunk;
+                for (char ch : word) {
+                    std::string cand = chunk + ch;
+                    if (!chunk.empty() && measureText(cand.c_str(), size).x > maxW) {
+                        drawText(chunk.c_str(), x, cy, c, size);
+                        cy += lineH;
+                        chunk.clear();
+                    }
+                    chunk += ch;
+                }
+                line = chunk;
+            } else {
+                line = word;
+            }
+        } else {
+            std::string cand = line + word;
+            if (measureText(cand.c_str(), size).x > maxW) {
+                drawText(line.c_str(), x, cy, c, size);
+                cy += lineH;
+                size_t first = word.find_first_not_of(' ');
+                line = (first != std::string::npos) ? word.substr(first) : "";
+            } else {
+                line = cand;
+            }
+        }
+    }
+    if (!line.empty()) drawText(line.c_str(), x, cy, c, size);
+}
+
 void drawBar(float x, float y, float w, float h, float frac, Color fill, Color back) {
     DrawRectangle((int)x, (int)y, (int)w, (int)h, back);
     float f = std::max(0.0f, std::min(1.0f, frac));
@@ -512,25 +641,33 @@ std::string formatGil(int gil) {
     return buf;
 }
 
-void drawButton(const char* text, Rectangle r, int size) {
+void drawButton(const char* text, Rectangle r, int size, bool selected) {
     Vector2 m = getVirtualMouse();
     bool hover = CheckCollisionPointRec(m, r);
     if (hover) g.hotButtons++;
-    DrawRectangleRounded(r, 0.25f, 4, hover ? Color{ 64, 74, 150, 255 } : Color{ 30, 38, 92, 255 });
-    DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.4f, hover ? Color{ 255, 214, 130, 255 }
-                                                          : Color{ 140, 150, 220, 255 });
+    bool hi = hover || selected;
+    DrawRectangleRounded(r, 0.25f, 4, hi ? Color{ 64, 74, 150, 255 } : Color{ 30, 38, 92, 255 });
+    DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.4f, hi ? Color{ 255, 214, 130, 255 }
+                                                      : Color{ 140, 150, 220, 255 });
     drawTextCentered(text, r.x + r.width / 2, r.y + r.height / 2 - size / 2.0f + 1,
-                     hover ? WHITE : Color{ 214, 220, 250, 255 }, size);
+                     hi ? WHITE : Color{ 214, 220, 250, 255 }, size);
+}
+
+bool uiButtonHit(Rectangle r) {
+    Vector2 m = getVirtualMouse();
+    if (CheckCollisionPointRec(m, r)) {
+        g.hotButtons++;
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            playSoundIf(g.assets.confirm);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool uiButtonAt(const char* text, Rectangle r, int size) {
     drawButton(text, r, size);
-    Vector2 m = getVirtualMouse();
-    if (CheckCollisionPointRec(m, r) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        PlaySound(g.assets.confirm);
-        return true;
-    }
-    return false;
+    return uiButtonHit(r);
 }
 
 void pushToast(const std::string& msg) {
@@ -547,14 +684,16 @@ int itemCount(int itemId) {
     if (itemId < 0 || itemId >= IT_COUNT) return 0;
     return g.inventory[itemId];
 }
-void addItem(int itemId, int amount) {
-    if (itemId < 0 || itemId >= IT_COUNT) return;
+void addItem(int itemId, int amount, bool silent) {
+    if (itemId < 0 || itemId >= IT_COUNT || amount <= 0) return;
     g.inventory[itemId] += amount;
-    pushToast(std::string("Received ") + itemDef(itemId).name +
-              (amount > 1 ? (" x" + std::to_string(amount)) : ""));
+    if (!silent) {
+        pushToast(std::string("Received ") + itemDef(itemId).name +
+                  (amount > 1 ? (" x" + std::to_string(amount)) : ""));
+    }
 }
 bool takeItem(int itemId, int amount) {
-    if (itemId < 0 || itemId >= IT_COUNT) return false;
+    if (itemId < 0 || itemId >= IT_COUNT || amount <= 0) return false;
     if (g.inventory[itemId] < amount) return false;
     g.inventory[itemId] -= amount;
     return true;
@@ -575,10 +714,14 @@ bool applyConsumable(int itemId, int heroIdx) {
                            h.mp = std::min(h.maxMp, h.mp + 30); break;
         case IT_HIETHER:   if (h.ko || h.mp >= h.maxMp) return false;
                            h.mp = std::min(h.maxMp, h.mp + 90); break;
-        case IT_ELIXIR:    h.hp = h.maxHp; h.mp = h.maxMp; h.ko = false; break;
+        case IT_ELIXIR:    if (!h.ko && !h.poisoned && h.hp >= h.maxHp && h.mp >= h.maxMp) return false;
+                           h.hp = h.maxHp; h.mp = h.maxMp; h.ko = false; h.poisoned = false; break;
         case IT_PHOENIX:   if (!h.ko) return false;
-                           h.ko = false; h.hp = std::max(1, h.maxHp / 2); break;
-        case IT_ANTIDOTE:  break;     // no status ailments in this build
+                           h.ko = false; h.poisoned = false; h.hp = std::max(1, h.maxHp / 2); break;
+        case IT_ANTIDOTE:  if (h.ko || (!h.poisoned && h.hp >= h.maxHp)) return false;
+                           if (h.poisoned) h.poisoned = false;
+                           else h.hp = std::min(h.maxHp, h.hp + 20);
+                           break;
         default: return false;
     }
     g.inventory[itemId]--;
@@ -586,6 +729,7 @@ bool applyConsumable(int itemId, int heroIdx) {
 }
 
 // ================================================================ save / load
+constexpr int SAVE_MAX_IDS = 256;
 struct SaveBlob {
     uint32_t magic;
     uint32_t version;
@@ -596,14 +740,19 @@ struct SaveBlob {
     int32_t inventory[IT_COUNT];
     struct HS {
         int32_t klass, level, xp, hp, mp, maxHp, maxMp, atk, def, spd, mag;
-        int32_t weapon, armor, accessory, ko;
+        int32_t weapon, armor, accessory, ko, row, poisoned;
     } heroes[3];
-    int32_t questState[QUEST_COUNT], questProgress[QUEST_COUNT];
-    int32_t flags;                 // bit0 boss defeated
+    int32_t questState[QUEST_COUNT], questProgress[QUEST_COUNT], questGoal[QUEST_COUNT];
+    uint32_t flags;                // bit0 bossDefeated, bit1 locketFound, bit2 towerChestOpened,
+                                   // bit3 startVillageSeen, bit4 musicOn, bit5 waitBattle
+    int32_t openedChestCount;
+    uint64_t openedChests[SAVE_MAX_IDS];
+    int32_t defeatedMonsterCount;
+    uint64_t defeatedMonsters[SAVE_MAX_IDS];
     uint32_t checksum;
 };
-static const uint32_t SAVE_MAGIC = 0x41504641;   // 'AFPA'
-static const uint32_t SAVE_VERSION = 3;
+static const uint32_t SAVE_MAGIC = 0x41504641;   // 'APFA'
+static const uint32_t SAVE_VERSION = 4;
 
 static uint32_t blobChecksum(const SaveBlob& b) {
     uint32_t h = 2166136261u;
@@ -618,10 +767,12 @@ std::string saveFilePath() {
     return std::string(GetApplicationDirectory()) + "aplaceforagents_save.sav";
 }
 bool saveExists() { return FileExists(saveFilePath().c_str()); }
+void refreshSaveExists() { g.saveExists = saveExists(); }
 
 bool saveGame() {
     SaveBlob b{};
-    b.magic = SAVE_MAGIC; b.version = SAVE_VERSION;
+    b.magic = SAVE_MAGIC;
+    b.version = SAVE_VERSION;
     b.worldSeed = g.worldSeed;
     b.px = g.px; b.py = g.py;
     b.runTime = g.runTime;
@@ -633,15 +784,39 @@ bool saveGame() {
         const Hero& h = g.party[i];
         b.heroes[i] = { h.klass, h.level, h.xp, h.hp, h.mp, h.maxHp, h.maxMp,
                         h.atk, h.def, h.spd, h.mag, h.weapon, h.armor, h.accessory,
-                        h.ko ? 1 : 0 };
+                        h.ko ? 1 : 0, h.row, h.poisoned ? 1 : 0 };
     }
     for (int q = 0; q < QUEST_COUNT; q++) {
         b.questState[q] = g.quests[q].state;
         b.questProgress[q] = g.quests[q].progress;
+        b.questGoal[q] = g.quests[q].goal;
     }
-    b.flags = g.bossDefeated ? 1 : 0;
+    b.flags = 0;
+    if (g.bossDefeated)     b.flags |= (1u << 0);
+    if (g.locketFound)      b.flags |= (1u << 1);
+    if (g.towerChestOpened) b.flags |= (1u << 2);
+    if (g.startVillageSeen) b.flags |= (1u << 3);
+    if (g.musicOn)          b.flags |= (1u << 4);
+    if (g.waitBattle)       b.flags |= (1u << 5);
+
+    int oc = 0;
+    for (uint64_t id : g.openedChests) {
+        if (oc >= SAVE_MAX_IDS) break;
+        b.openedChests[oc++] = id;
+    }
+    b.openedChestCount = oc;
+
+    int dm = 0;
+    for (uint64_t id : g.defeatedMonsters) {
+        if (dm >= SAVE_MAX_IDS) break;
+        b.defeatedMonsters[dm++] = id;
+    }
+    b.defeatedMonsterCount = dm;
+
     b.checksum = blobChecksum(b);
-    return SaveFileData(saveFilePath().c_str(), &b, sizeof(b));
+    bool ok = SaveFileData(saveFilePath().c_str(), &b, sizeof(b));
+    if (ok) g.saveExists = true;
+    return ok;
 }
 
 bool loadGame() {
@@ -652,39 +827,72 @@ bool loadGame() {
     SaveBlob b;
     memcpy(&b, data, sizeof(b));
     UnloadFileData(data);
-    if (b.magic != SAVE_MAGIC || blobChecksum(b) != b.checksum) return false;
+    if (b.magic != SAVE_MAGIC || b.version != SAVE_VERSION || blobChecksum(b) != b.checksum)
+        return false;
 
     g.worldSeed = b.worldSeed;
     g.px = b.px; g.py = b.py;
     g.runTime = b.runTime;
-    g.gil = b.gil;
-    g.defeatedCount = b.defeatedCount;
-    g.slimesSlain = b.slimesSlain;
-    memcpy(g.inventory, b.inventory, sizeof(g.inventory));
+    g.gil = std::max(0, (int)b.gil);
+    g.defeatedCount = std::max(0, (int)b.defeatedCount);
+    g.slimesSlain = std::max(0, (int)b.slimesSlain);
+    for (int i = 0; i < IT_COUNT; i++) g.inventory[i] = std::max(0, (int)b.inventory[i]);
     for (int i = 0; i < 3; i++) {
         Hero& h = g.party[i];
-        h.klass = b.heroes[i].klass;
-        h.level = b.heroes[i].level;
-        h.xp = b.heroes[i].xp;
-        h.hp = b.heroes[i].hp; h.mp = b.heroes[i].mp;
-        h.maxHp = b.heroes[i].maxHp; h.maxMp = b.heroes[i].maxMp;
-        h.atk = b.heroes[i].atk; h.def = b.heroes[i].def; h.spd = b.heroes[i].spd;
-        h.mag = b.heroes[i].mag;
-        h.weapon = b.heroes[i].weapon; h.armor = b.heroes[i].armor;
-        h.accessory = b.heroes[i].accessory;
-        h.ko = b.heroes[i].ko != 0;
-        h.row = 0;
+        h.klass = std::max(0, std::min(KLASS_COUNT - 1, (int)b.heroes[i].klass));
+        h.level = std::max(1, (int)b.heroes[i].level);
+        h.xp = std::max(0, (int)b.heroes[i].xp);
+        h.maxHp = std::max(1, (int)b.heroes[i].maxHp);
+        h.maxMp = std::max(0, (int)b.heroes[i].maxMp);
+        h.hp = std::max(0, std::min(h.maxHp, (int)b.heroes[i].hp));
+        h.mp = std::max(0, std::min(h.maxMp, (int)b.heroes[i].mp));
+        h.atk = std::max(1, (int)b.heroes[i].atk);
+        h.def = std::max(1, (int)b.heroes[i].def);
+        h.spd = std::max(1, (int)b.heroes[i].spd);
+        h.mag = std::max(1, (int)b.heroes[i].mag);
+        h.weapon = (b.heroes[i].weapon >= -1 && b.heroes[i].weapon < IT_COUNT) ? b.heroes[i].weapon : -1;
+        h.armor = (b.heroes[i].armor >= -1 && b.heroes[i].armor < IT_COUNT) ? b.heroes[i].armor : -1;
+        h.accessory = (b.heroes[i].accessory >= -1 && b.heroes[i].accessory < IT_COUNT) ? b.heroes[i].accessory : -1;
+        h.ko = b.heroes[i].ko != 0 || h.hp == 0;
+        h.row = b.heroes[i].row;
+        h.poisoned = b.heroes[i].poisoned != 0;
     }
     for (int q = 0; q < QUEST_COUNT; q++) {
-        g.quests[q].state = b.questState[q];
-        g.quests[q].progress = b.questProgress[q];
+        g.quests[q].state = std::max(0, std::min((int)QS_DONE, (int)b.questState[q]));
+        g.quests[q].progress = std::max(0, (int)b.questProgress[q]);
+        g.quests[q].goal = std::max(0, (int)b.questGoal[q]);
     }
-    g.bossDefeated = (b.flags & 1) != 0;
-    g.defeatedMonsters.clear();
+    g.quests[QUEST_SLIMES].goal = 6;
+    g.quests[QUEST_LOCKET].goal = 1;
+    g.quests[QUEST_CROWN].goal = 1;
+
+    g.bossDefeated     = (b.flags & (1u << 0)) != 0;
+    g.locketFound      = (b.flags & (1u << 1)) != 0;
+    g.towerChestOpened = (b.flags & (1u << 2)) != 0;
+    g.startVillageSeen = (b.flags & (1u << 3)) != 0;
+    g.musicOn          = (b.flags & (1u << 4)) != 0;
+    g.waitBattle       = (b.flags & (1u << 5)) != 0;
+
     g.openedChests.clear();
+    int oc = std::max(0, std::min(SAVE_MAX_IDS, (int)b.openedChestCount));
+    for (int i = 0; i < oc; i++) g.openedChests.insert(b.openedChests[i]);
+
+    g.defeatedMonsters.clear();
+    int dm = std::max(0, std::min(SAVE_MAX_IDS, (int)b.defeatedMonsterCount));
+    for (int i = 0; i < dm; i++) g.defeatedMonsters.insert(b.defeatedMonsters[i]);
+
     g.villageLoaded = false;
+    g.villageKey = ~0ull;
     g.npcKey = ~0ull;
     g.npcs.clear();
+    g.walkQueue.clear();
+    g.hasMoveTarget = false;
+    g.walkDoorBuilding = -1;
+    g.walkTargetNpc = -1;
+    g.walkTargetChest = 0;
+    g.walkTargetInteract = false;
+    g.encounterGrace = 3.0f;
+    g.stepDist = 0.0f;
     return true;
 }
 
@@ -692,6 +900,7 @@ void newGameState(uint32_t seed) {
     g.worldSeed = seed;
     g.px = 0.5f; g.py = 7.5f;      // just south of the Elmswick plaza
     g.facing = 0;
+    g.sideFlip = false;
     g.runTime = 0;
     g.gil = 80;
     g.defeatedCount = 0;
@@ -699,27 +908,41 @@ void newGameState(uint32_t seed) {
     memset(g.inventory, 0, sizeof(g.inventory));
     g.inventory[IT_POTION] = 3;
     g.inventory[IT_ETHER] = 1;
+    g.inventory[IT_ANTIDOTE] = 1;
     g.inventory[IT_PHOENIX] = 1;
+    // "You are three, and you have one sword." — Aldric starts with the Bronze Sword.
     Hero base[3] = {
-        { KLASS_KNIGHT, 1, 0, 40, 8,  40, 8,  10, 8,  8, 2, -1, -1, -1, false, 0 },
-        { KLASS_MAGE,   1, 0, 24, 18, 24, 18, 6,  4,  7, 9, -1, -1, -1, false, 1 },
-        { KLASS_CLERIC, 1, 0, 30, 16, 30, 16, 7,  6,  9, 6, -1, -1, -1, false, 1 },
+        { KLASS_KNIGHT, 1, 0, 42, 8,  42, 8,   7, 8,  8, 2, IT_SWORD_BRONZE, -1, -1, false, 0, false },
+        { KLASS_MAGE,   1, 0, 26, 18, 26, 18,  6, 4,  7, 9, -1,              -1, -1, false, 1, false },
+        { KLASS_CLERIC, 1, 0, 32, 16, 32, 16,  7, 6,  9, 6, -1,              -1, -1, false, 1, false },
     };
     memcpy(g.party, base, sizeof(base));
     for (int q = 0; q < QUEST_COUNT; q++) { g.quests[q] = Quest{}; }
-    g.quests[QUEST_SLIMES].state = QS_OFFERED;
-    g.quests[QUEST_LOCKET].state = QS_OFFERED;
+    g.quests[QUEST_SLIMES] = { QS_OFFERED, 0, 6 };
+    g.quests[QUEST_LOCKET] = { QS_OFFERED, 0, 1 };
+    g.quests[QUEST_CROWN]  = { QS_OFFERED, 0, 1 };
+
     g.defeatedMonsters.clear();
     g.openedChests.clear();
     g.villageLoaded = false;
+    g.villageKey = ~0ull;
     g.npcKey = ~0ull;
     g.npcs.clear();
     g.hasMoveTarget = false;
     g.walkQueue.clear();
+    g.walkDoorBuilding = -1;
+    g.walkTargetNpc = -1;
+    g.walkTargetChest = 0;
+    g.walkTargetInteract = false;
     g.encounterGrace = 4.0f;
     g.stepCounter = 0;
+    g.stepDist = 0.0f;
     g.bossDefeated = false;
+    g.locketFound = false;
+    g.towerChestOpened = false;
     g.startVillageSeen = false;
+    g.menuPage = 0;
+    g.menuReturn = MODE_OVERWORLD;
     g.introT = 0;
 }
 
@@ -730,4 +953,5 @@ void startNewAdventure() {
     g.introT = 0;
     g.fade = 1.0f;
     g.fadeDir = -1;
+    syncModeMusic();
 }

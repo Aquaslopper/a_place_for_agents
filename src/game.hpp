@@ -14,8 +14,6 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <algorithm>
-#include <vector>
-#include <string>
 
 constexpr int VRES_W = 512;      // virtual framebuffer, letterboxed to the window
 constexpr int VRES_H = 288;
@@ -28,7 +26,7 @@ enum ItemId {
     IT_ARMOR_LEATHER, IT_ARMOR_CHAIN, IT_ARMOR_MYTHRIL, IT_ARMOR_DRAGON,
     IT_SHIELD_WOOD, IT_SHIELD_IRON,
     IT_RING_POWER, IT_AMULET_MANA,
-    IT_RUSTY_KEY, IT_CROWN,
+    IT_RUSTY_KEY, IT_LOCKET, IT_CROWN,
     IT_COUNT
 };
 enum ItemKind { IK_CONSUMABLE, IK_WEAPON, IK_ARMOR, IK_ACCESSORY, IK_KEY };
@@ -37,7 +35,7 @@ struct ItemDef {
     const char* desc;
     int price;
     ItemKind kind;
-    int power;          // heal amount / attack or defence bonus
+    int power;          // heal amount / attack or defence or magic bonus
     int icon;           // index into the loaded icon atlas
     bool sells;
 };
@@ -54,6 +52,7 @@ struct Hero {
     int weapon = -1, armor = -1, accessory = -1;
     bool ko = false;
     int row = 0;                       // 0 front, 1 back
+    bool poisoned = false;
 };
 int  heroAtk(const Hero& h);
 int  heroDef(const Hero& h);
@@ -63,6 +62,8 @@ const char* klassName(int klass);
 const char* heroName(int klass);
 int  levelUpCheck(Hero& h);
 int  partyLevel();
+bool equipHeroItem(int heroIdx, int slot, int itemId);
+bool unequipHeroSlot(int heroIdx, int slot);
 
 // ============================================================== spells
 enum SpellSchool { SCH_NONE = 0, SCH_FIRE, SCH_STORM, SCH_HOLY, SCH_PHYS };
@@ -91,10 +92,11 @@ struct EnemyDef {
     int weak;        // bitmask of SpellSchool it is weak to (1<<school)
     int drop;        // ItemId or -1
     int dropChance;  // percent
-    int tier;        // 1..4, where it starts appearing
+    int tier;        // 1..5, where it starts appearing
 };
 const EnemyDef& enemyDef(int kind);
 EnemyKind rollBiomeEnemy(int tx, int ty, int zoneLevel);
+std::vector<EnemyKind> buildEncounterGroup(EnemyKind primary, int tx, int ty, int zoneLevel);
 
 // ============================================================== assets
 enum IconId {
@@ -120,7 +122,7 @@ struct Assets {
     Texture2D well{}, sign{}, bench{}, torch{}, campfire{}, cauldron{}, bucket{}, flowerbed{};
     Texture2D fence{}, fencePost{}, fenceGate{}, ladder{};
     Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{};
-    Texture2D barrel{}, table{}, counter{}, lantern{}, candle, keg{}, plate{}, shelf{};
+    Texture2D barrel{}, table{}, counter{}, lantern{}, candle{}, keg{}, plate{}, shelf{};
     Texture2D chestClosed{}, chestOpen{}, jar{}, stump{}, bed{};
     Texture2D cloud{};
     // buildings
@@ -178,20 +180,20 @@ struct WorldProp { PropKind kind = P_NONE; uint8_t variant = 0; };
 
 struct Village;
 struct Building {
-    int kind = 0;      // 0..4 house variants, 5 shop, 6 inn, 7 temple, 8 manor
+    int kind = 0;         // 0..4 house variants, 5 shop, 6 inn, 7 temple, 8 manor
     int tx = 0, ty = 0;   // anchor tile: footprint bottom-centre, door below
     int w = 4, h = 3;     // footprint in tiles
     int sprite = 0;       // texture selector
 };
-struct VillageProp { Texture2D* tex = nullptr; float x = 0, y = 0; bool solid = false; float w = 0, h = 0; };
 
 struct Village {
     bool valid = false;
-    uint32_t sectorX = 0, sectorY = 0, seed = 0;
+    int sectorX = 0, sectorY = 0;
+    uint32_t seed = 0;
     int cx = 0, cy = 0;                 // plaza centre in tiles
     std::string name;
     std::vector<Building> buildings;
-    struct Deco { int kind; float x, y; int variant; };   // see drawVillageDeco
+    struct Deco { int kind; float x, y; int variant; };
     std::vector<Deco> decos;
     std::vector<std::pair<int, int>> paths;               // road tiles (dirt)
     std::vector<std::pair<int, int>> plaza;               // cobbled tiles
@@ -221,11 +223,12 @@ struct Npc {
     uint64_t id = 0;
     int sprite = 0;         // index into assets.npc
     int face = FACE_VILLAGER0;
-    float x = 0, y = 0;     // tile units
+    float x = 0, y = 0;     // tile units (tile center)
     float homeX = 0, homeY = 0;
     float dx = 0, dy = 0;
     float thinkT = 0;
-    int facing = 0;
+    int facing = 0;         // 0 down, 1 up, 2 side
+    bool sideFlip = false;
     float animT = 0;
     bool moving = false;
     int role = NPC_VILLAGER;
@@ -286,14 +289,15 @@ enum RoomKind { ROOM_SHOP = 0, ROOM_INN, ROOM_TEMPLE, ROOM_HOUSE };
 struct RoomProp { int tex; float x, y; bool solid; float w, h; };
 struct Room {
     RoomKind kind = ROOM_SHOP;
-    int w = 13, h = 9;
+    int w = 15, h = 11;
     int buildingIndex = -1;
     std::string title;
     std::vector<RoomProp> props;
-    float exitX = 0, exitY = 0;      // door back to the overworld
+    float exitX = 7.5f, exitY = 9.0f;
+    float npcX = 7.5f, npcY = 3.6f;
 };
 void roomBuild(Room& room, const Building& b, const Village& v);
-int  roomPropNear(const Room& room, float x, float y, float r);   // returns index or -1
+int  roomPropNear(const Room& room, float x, float y, float r);
 bool roomBlocked(const Room& room, float x, float y, float r);
 
 // ============================================================== modes
@@ -311,7 +315,8 @@ struct DialogLine {
 enum DialogAction {
     DLG_NONE = 0, DLG_SHOP, DLG_INN, DLG_TEMPLE, DLG_START_QUEST_SLIMES,
     DLG_FINISH_QUEST_SLIMES, DLG_START_QUEST_LOCKET, DLG_FINISH_QUEST_LOCKET,
-    DLG_GIVE_KEY, DLG_HEAL, DLG_CROWN_REWARD, DLG_SAVE_TIP
+    DLG_START_QUEST_CROWN, DLG_GIVE_KEY, DLG_HEAL, DLG_CROWN_REWARD,
+    DLG_BOSS_SLIME_KING, DLG_SAVE_TIP
 };
 void startDialog(const std::vector<DialogLine>& lines, DialogAction action = DLG_NONE);
 
@@ -341,8 +346,12 @@ struct Game {
     float walkAnimT = 0;
     float encounterGrace = 0;
     int stepCounter = 0;
+    float stepDist = 0.0f;
     std::vector<std::pair<int, int>> walkQueue;
     int walkDoorBuilding = -1;
+    int walkTargetNpc = -1;
+    uint64_t walkTargetChest = 0;
+    bool walkTargetInteract = false;
     bool hasMoveTarget = false;
     float clickFlashT = 0, clickFlashX = 0, clickFlashY = 0;
     float blockedFx = 0;
@@ -358,17 +367,24 @@ struct Game {
     uint64_t npcKey = ~0ull;
     std::vector<Npc> npcs;
 
-    // chests
+    // chests & world flags
     std::unordered_set<uint64_t> openedChests;
     std::unordered_set<uint64_t> defeatedMonsters;
     bool bossDefeated = false;
+    bool locketFound = false;
+    bool towerChestOpened = false;
 
     // interior
     Room room;
     float roomPx = 0, roomPy = 0;
     int roomFacing = 1;
+    bool roomSideFlip = false;
     bool roomMoving = false;
     float roomAnimT = 0;
+    bool roomHasTarget = false;
+    float roomTargetX = 0, roomTargetY = 0;
+    bool roomClickTalk = false;
+    bool roomClickExit = false;
     int roomNpcSprite = 0;
     int roomNpcFace = FACE_SHOPKEEPER;
     std::string roomNpcName;
@@ -377,25 +393,30 @@ struct Game {
     std::vector<DialogLine> dialog;
     int dialogIndex = 0;
     float dialogReveal = 0;
+    int dialogLastBlip = -1;
     DialogAction dialogAction = DLG_NONE;
     Mode dialogReturn = MODE_OVERWORLD;
 
     // shop
     int shopTab = 0;               // 0 buy, 1 sell
     int shopIndex = 0;
-    int shopEquipHero = -1;
-    int shopEquipItem = -1;
+    int shopScroll = 0;
+    std::string shopTitle;
+    std::string innTitle;
 
     // inn
     int innCost = 20;
+    int innChoice = 0;             // 0 rest, 1 leave
 
     // menu
-    int menuPage = 0;              // 0 party, 1 items, 2 equip, 3 quests, 4 options
+    Mode menuReturn = MODE_OVERWORLD;
+    int menuPage = 0;              // 0 party, 1 items, 2 equip, 3 quests, 4 options, 5 shop, 6 inn
     int menuIndex = 0;
     int menuItem = -1;
-    int menuUseHero = -1;
+    int menuUseHero = 0;
     int equipHero = 0, equipSlot = 0, equipIndex = 0;
-    bool waitBattle = false;
+    int optionsIndex = 0;
+    bool waitBattle = true;        // true = ATB pauses in menus (WAIT), false = ACTIVE
     bool musicOn = true;
 
     // title
@@ -408,7 +429,7 @@ struct Game {
     float shakeT = 0, shakeMag = 0;
     float fade = 0;
     int fadeDir = 0;
-    bool fadeToTitle = false;
+    bool quitRequested = false;
 
     // clouds
     float cloudX[6]{}, cloudY[6]{}, cloudScale[6]{};
@@ -422,7 +443,7 @@ struct Game {
 
     bool showHelp = true;
     bool debugMode = false;
-    int hotButtons = 0;           // reset each frame; >0 suppresses click-to-move
+    int hotButtons = 0;            // reset each frame; >0 suppresses click-to-move
 };
 
 extern Game g;
@@ -430,26 +451,32 @@ extern float gAnimTime;
 Vector2 getVirtualMouse();
 void pushToast(const std::string& msg);
 void shakeScreen(float mag, float t);
+void returnToTitle();
+void stopAllMusic();
+void syncModeMusic();
 
 // ============================================================== ui helpers
 void drawWindow(Rectangle r, bool dimInside = true);
 void drawWindowBlue(Rectangle r);
 void drawText(const char* text, float x, float y, Color c, int size = 8);
 void drawTextCentered(const char* text, float cx, float y, Color c, int size = 8);
+void drawTextWrapped(const char* text, float x, float y, float maxW, float lineH, Color c, int size = 8);
 Vector2 measureText(const char* text, int size = 8);
 void drawBar(float x, float y, float w, float h, float frac, Color fill, Color back);
 void drawItemIcon(int itemId, float x, float y, float size = 16);
 std::string formatGil(int gil);
-void drawButton(const char* text, Rectangle r, int size = 8);
+void drawButton(const char* text, Rectangle r, int size = 8, bool selected = false);
 bool uiButtonAt(const char* text, Rectangle r, int size = 8);
+bool uiButtonHit(Rectangle r);
 
 // ============================================================== save / load
 bool saveGame();
 bool loadGame();
 bool saveExists();
+void refreshSaveExists();
 void newGameState(uint32_t seed);
 bool applyConsumable(int itemId, int heroIdx);
-void addItem(int itemId, int amount);
+void addItem(int itemId, int amount, bool silent = false);
 bool takeItem(int itemId, int amount = 1);
 int  itemCount(int itemId);
 void startNewAdventure();
@@ -469,6 +496,7 @@ const char* interactionPrompt();
 extern std::vector<FieldMonster> gFieldMonsters;
 
 // render.cpp
+void updateClouds(float dt);
 void drawWorld();
 void drawFieldMonsters();
 void drawHUD();
@@ -477,15 +505,12 @@ void drawTitleScreen();
 void drawGameOverScreen();
 void drawIntroScreen();
 void drawMenuScreen();
-void drawShopScreen();
 void drawToast();
 void drawTransitionFx();
 
 // dialog.cpp
 void dialogUpdate(float dt);
 void resolveDialogAction(DialogAction a);
-
-// menu.cpp
 void menuUpdate(float dt);
 
 // room.cpp

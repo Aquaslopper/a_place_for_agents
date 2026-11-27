@@ -2,11 +2,11 @@
 #include "world.hpp"
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <queue>
 #include <limits>
 #include <string>
 #include <algorithm>
-
 
 // ================================================================ hashing
 uint32_t hash2i(int x, int y, uint32_t seed) {
@@ -49,29 +49,59 @@ static float elevationAt(float x, float y, uint32_t seed) {
 static float temperatureAt(float x, float y, uint32_t seed) {
     float t = fbm(x * 0.010f + 313.1f, y * 0.010f + 47.9f, seed ^ 0x7e47u, 3);
     // colder far to the north, warmer to the south
-    t += (y < 0 ? 0.06f : -0.04f);
+    t += (y < 0 ? -0.05f : 0.04f);
     return t;
 }
 float moistureAt(float x, float y) {
     return fbm(x * 0.022f + 91.7f, y * 0.022f + 17.3f, g.worldSeed ^ 0x5eedu, 4);
 }
 
-// The meadow around the origin is always kind ground, so the opening village
-// can exist no matter what seed the world rolled.
-static void flattenStart(float x, float y, float& e, float& t, float& m) {
-    float d = sqrtf(x * x + y * y);
-    // The meadow of first steps is guaranteed dry, temperate grassland out to
-    // 34 tiles so no seed can fence the opening village in with water or peaks.
-    if (d < 34.0f) {
-        float k = (d <= 26.0f) ? 1.0f : 1.0f - (d - 26.0f) / 8.0f;
+static void flattenSite(float x, float y, float cx, float cy, float innerR, float outerR,
+                        float& e, float& t, float& m, float targetE, float targetT, float targetM) {
+    float dx = x - cx, dy = y - cy;
+    float d = sqrtf(dx * dx + dy * dy);
+    if (d < outerR) {
+        float k = (d <= innerR) ? 1.0f : 1.0f - (d - innerR) / (outerR - innerR);
         k = k * k * (3.0f - 2.0f * k);
-        e = e * (1.0f - k) + 0.52f * k;
-        t = t * (1.0f - k) + 0.55f * k;
-        m = m * (1.0f - k) + 0.58f * k;
+        e = e * (1.0f - k) + targetE * k;
+        t = t * (1.0f - k) + targetT * k;
+        m = m * (1.0f - k) + targetM * k;
+        if (d < innerR + 2.0f) {
+            if (e < 0.47f) e = 0.47f;
+            if (e > 0.62f) e = 0.62f;
+        }
     }
-    // hard floor on elevation in the protected meadow: never water, never rock
-    if (d < 30.0f && e < 0.47f) e = 0.47f;
-    if (d < 30.0f && e > 0.62f) e = 0.62f;
+}
+
+// Keep Elmswick and the three quest landmark clearings always walkable on any seed.
+static void flattenSpecialSites(float x, float y, float& e, float& t, float& m) {
+    // Elmswick meadow
+    flattenSite(x, y, 0.0f, 0.0f, 26.0f, 34.0f, e, t, m, 0.52f, 0.55f, 0.58f);
+    // Northern Castle courtyard
+    flattenSite(x, y, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY, 12.0f, 19.0f,
+                e, t, m, 0.54f, 0.42f, 0.48f);
+    // Standing Stones (Lost Locket)
+    flattenSite(x, y, (float)LOCKET_SITE_TX, (float)LOCKET_SITE_TY, 8.0f, 14.0f,
+                e, t, m, 0.52f, 0.54f, 0.52f);
+    // Old Watchtower (Rusty Key)
+    flattenSite(x, y, (float)TOWER_SITE_TX, (float)TOWER_SITE_TY, 7.0f, 13.0f,
+                e, t, m, 0.53f, 0.50f, 0.50f);
+    // Gentle dry corridor along the North Road so the castle is reachable even across rivers
+    if (y <= 0.0f && y >= (float)BOSS_CASTLE_TY && fabsf(x) < 4.5f) {
+        if (e < 0.46f) e = 0.46f;
+        if (e > 0.64f) e = 0.64f;
+    }
+}
+
+static bool nearSpecialSite(int tx, int ty) {
+    auto nearPt = [&](int cx, int cy, int r) {
+        int dx = tx - cx, dy = ty - cy;
+        return dx * dx + dy * dy <= r * r;
+    };
+    if (nearPt(BOSS_CASTLE_TX, BOSS_CASTLE_TY, 10)) return true;
+    if (nearPt(LOCKET_SITE_TX, LOCKET_SITE_TY, 7)) return true;
+    if (nearPt(TOWER_SITE_TX, TOWER_SITE_TY, 6)) return true;
+    return false;
 }
 
 GroundTile sampleGround(int tx, int ty) {
@@ -81,10 +111,22 @@ GroundTile sampleGround(int tx, int ty) {
     float e = elevationAt(x, y, seed);
     float t = temperatureAt(x, y, seed);
     float m = moistureAt(x, y);
-    flattenStart(x, y, e, t, m);
+    flattenSpecialSites(x, y, e, t, m);
 
     uint32_t h = hash2i(tx, ty, seed ^ 0x9a11u);
     out.variant = (uint8_t)(h % 4);
+
+    // Northern Castle stone courtyard floor
+    int cdx = tx - BOSS_CASTLE_TX, cdy = ty - BOSS_CASTLE_TY;
+    if (cdx >= -6 && cdx <= 6 && cdy >= -4 && cdy <= 7) {
+        out.kind = (abs(cdx) <= 2 && cdy >= 1) ? G_COBBLE : G_FLOOR;
+        return out;
+    }
+    // Dirt road leading north from Elmswick toward the Northern Castle
+    if (ty <= -15 && ty >= BOSS_CASTLE_TY + 7 && (tx == 0 || tx == 1)) {
+        out.kind = G_DIRT;
+        return out;
+    }
 
     if (e < 0.355f) {
         out.kind = (t < 0.24f) ? G_ICE : ((e < 0.31f) ? G_DEEP : G_WATER);
@@ -105,12 +147,10 @@ GroundTile sampleGround(int tx, int ty) {
     // sparse ground decoration
     float d = hashf(tx, ty, seed ^ 0xc0ffeeu);
     if (out.kind == G_GRASS || out.kind == G_GRASS_DARK) {
-        if (d < 0.024f) { out.deco = 1; out.decoVariant = (uint8_t)(h % 4); }
+        if (d < 0.022f) { out.deco = 1; out.decoVariant = (uint8_t)(h % 3); }
         else if (d < 0.038f) { out.deco = 2; out.decoVariant = (uint8_t)((h >> 5) % 2); }
-    } else if (out.kind == G_SNOW) {
-        if (d < 0.03f) { out.deco = 1; out.decoVariant = 3; }
     } else if (out.kind == G_ROCK) {
-        if (d < 0.10f) { out.deco = 3; }
+        if (d < 0.12f) { out.deco = 3; }
     }
     return out;
 }
@@ -119,18 +159,69 @@ static bool groundWalkable(GroundKind k) {
     return k != G_WATER && k != G_DEEP && k != G_ROCK;
 }
 
+bool villageDecoSolid(int kind) {
+    switch (kind) {
+        case VD_WELL:
+        case VD_SIGN:
+        case VD_BENCH:
+        case VD_TORCH:
+        case VD_CAMPFIRE:
+        case VD_BARREL:
+        case VD_STATUE:
+        case VD_CAULDRON:
+        case VD_URN:
+        case VD_FENCE_H:
+        case VD_FENCE_V:
+        case VD_TEMPLE_PILLAR:
+        case VD_CRATE:
+        case VD_TABLE:
+        case VD_BUCKET:
+        case VD_FLOWERBED:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool landmarkCellBlocked(int tx, int ty) {
+    // Northern Castle keep (anchored at BOSS_CASTLE_TX, BOSS_CASTLE_TY)
+    if (tx >= BOSS_CASTLE_TX - 2 && tx <= BOSS_CASTLE_TX + 2 &&
+        ty >= BOSS_CASTLE_TY - 3 && ty <= BOSS_CASTLE_TY)
+        return true;
+    // Standing Stones centre statue
+    if (tx == LOCKET_SITE_TX && ty == LOCKET_SITE_TY) return true;
+    // Old Watchtower base
+    if (tx >= TOWER_SITE_TX - 1 && tx <= TOWER_SITE_TX + 1 &&
+        ty >= TOWER_SITE_TY - 1 && ty <= TOWER_SITE_TY)
+        return true;
+    return false;
+}
+
 bool cellWalkable(int tx, int ty) {
     GroundTile gt = sampleGround(tx, ty);
     if (!groundWalkable(gt.kind)) return false;
+    if (landmarkCellBlocked(tx, ty)) return false;
+
     PropKind p = propAt(tx, ty);
     if (p == P_TREE0 || p == P_TREE1 || p == P_TREE2 || p == P_PINE0 || p == P_PINE1 ||
         p == P_PINE2 || p == P_DEADTREE || p == P_TREE_SNOW || p == P_ROCK0 || p == P_ROCK1 ||
-        p == P_BOULDER)
+        p == P_ROCK2 || p == P_BOULDER || p == P_CRYSTAL || p == P_STUMP)
         return false;
+
     if (g.villageLoaded) {
         for (const Building& b : g.village.buildings) {
             int x0 = b.tx - b.w / 2, y0 = b.ty - b.h + 1;
             if (tx >= x0 && tx <= x0 + b.w - 1 && ty >= y0 && ty <= b.ty) return false;
+        }
+        for (const auto& d : g.village.decos) {
+            if (!villageDecoSolid(d.kind)) continue;
+            int dx = (int)floorf(d.x + 0.5f), dy = (int)floorf(d.y + 0.5f);
+            if (d.kind == VD_WELL || d.kind == VD_FLOWERBED || d.kind == VD_BENCH) {
+                // 2-tile wide street furniture centered on d.x
+                if (ty == dy && (tx == dx || tx == dx - 1)) return false;
+            } else {
+                if (tx == dx && ty == dy) return false;
+            }
         }
     }
     return true;
@@ -148,7 +239,7 @@ bool positionBlocked(float x, float y, float r) {
 bool inVillage(float x, float y) {
     if (!g.villageLoaded) return false;
     float dx = x - g.village.cx, dy = y - g.village.cy;
-    return dx * dx + dy * dy < 17.0f * 17.0f;
+    return dx * dx + dy * dy < 18.0f * 18.0f;
 }
 bool nearStartVillage(float x, float y) {
     return (x * x + y * y) < 30.0f * 30.0f;
@@ -156,46 +247,49 @@ bool nearStartVillage(float x, float y) {
 
 // ================================================================ props
 PropKind propAt(int tx, int ty) {
-    if (!g.villageLoaded || !inVillage((float)tx + 0.5f, (float)ty + 0.5f)) {
-        GroundTile gt = sampleGround(tx, ty);
-        if (gt.kind == G_WATER || gt.kind == G_DEEP || gt.kind == G_ICE) return P_NONE;
-        uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0x77ee5u);
-        float hf = (float)h / 4294967295.0f;
-        float m = moistureAt((float)tx, (float)ty);
-        // never block the meadow where the game starts
-        bool meadow = (tx * tx + ty * ty) < 24 * 24;
-        switch (gt.kind) {
-            case G_GRASS:
-            case G_GRASS_DARK:
-                if (!meadow && m > 0.52f && hf < 0.20f)
-                    return (hf < 0.03f) ? P_PINE0 : (hf < 0.10f ? P_TREE0 : P_TREE1);
-                if (hf > 0.985f) return P_ROCK0;
-                if (hf > 0.960f) return P_BUSH;
-                if (hf < 0.018f) return P_BUSH_PLAIN;
-                if (hf > 0.945f && hf <= 0.960f) return P_MUSHROOM;
-                if (hf > 0.940f && hf <= 0.945f) return P_PLANT;
-                return P_NONE;
-            case G_SNOW:
-                if (hf < 0.16f) return (hf < 0.06f) ? P_PINE2 : P_TREE_SNOW;
-                if (hf > 0.975f) return P_ROCK2;
-                return P_NONE;
-            case G_ROCK:
-                if (hf < 0.14f) return P_BOULDER;
-                return P_NONE;
-            case G_SAND:
-                if (hf < 0.03f) return P_ROCK1;
-                if (hf > 0.99f) return P_CRYSTAL;
-                return P_NONE;
-            case G_SWAMP:
-                if (hf < 0.12f) return P_MUSHROOM;
-                if (hf < 0.16f) return P_DEADTREE;
-                return P_NONE;
-            default:
-                return P_NONE;
-        }
+    if (g.villageLoaded && inVillage((float)tx + 0.5f, (float)ty + 0.5f)) return P_NONE;
+    if (nearSpecialSite(tx, ty)) return P_NONE;
+    // Keep the North Road clear of trees/rocks
+    if (ty <= -12 && ty >= BOSS_CASTLE_TY && tx >= -1 && tx <= 2) return P_NONE;
+
+    GroundTile gt = sampleGround(tx, ty);
+    if (gt.kind == G_WATER || gt.kind == G_DEEP || gt.kind == G_ICE ||
+        gt.kind == G_DIRT || gt.kind == G_COBBLE || gt.kind == G_FLOOR)
+        return P_NONE;
+
+    uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0x77ee5u);
+    float hf = (float)h / 4294967295.0f;
+    float m = moistureAt((float)tx, (float)ty);
+    bool meadow = (tx * tx + ty * ty) < 24 * 24;
+    switch (gt.kind) {
+        case G_GRASS:
+        case G_GRASS_DARK:
+            if (!meadow && m > 0.50f && hf < 0.20f)
+                return (hf < 0.04f) ? P_PINE0 : (hf < 0.11f ? P_TREE0 : (hf < 0.16f ? P_TREE1 : P_TREE2));
+            if (hf > 0.985f) return P_ROCK0;
+            if (hf > 0.960f) return P_BUSH;
+            if (hf < 0.018f) return P_BUSH_PLAIN;
+            if (hf > 0.946f && hf <= 0.960f) return P_MUSHROOM;
+            if (!meadow && hf > 0.938f && hf <= 0.946f) return P_STUMP;
+            return P_NONE;
+        case G_SNOW:
+            if (hf < 0.16f) return (hf < 0.06f) ? P_PINE2 : P_TREE_SNOW;
+            if (hf > 0.975f) return P_ROCK2;
+            return P_NONE;
+        case G_ROCK:
+            if (hf < 0.14f) return P_BOULDER;
+            return P_NONE;
+        case G_SAND:
+            if (hf < 0.03f) return P_ROCK1;
+            if (hf > 0.99f) return P_CRYSTAL;
+            return P_NONE;
+        case G_SWAMP:
+            if (hf < 0.12f) return P_MUSHROOM;
+            if (hf < 0.16f) return P_DEADTREE;
+            return P_NONE;
+        default:
+            return P_NONE;
     }
-    // inside a village: the village's own deco list decides
-    return P_NONE;
 }
 
 Texture2D* propTexture(PropKind kind, int* outW, int* outH) {
@@ -219,6 +313,7 @@ Texture2D* propTexture(PropKind kind, int* outW, int* outH) {
         case P_MUSHROOM: t = &g.assets.mushroom; break;
         case P_PLANT: t = &g.assets.plant; break;
         case P_URN: t = &g.assets.urn; break;
+        case P_STUMP: t = &g.assets.stump; break;
         default: break;
     }
     if (t && outW) { *outW = t->width; *outH = t->height; }
@@ -256,7 +351,7 @@ void villageDecoTexture(int kind, int variant, Texture2D*& tex, int& w, int& h) 
     h = t ? t->height : 0;
 }
 
-// ================================================================ names
+// ================================================================ names & compass
 static const char* NAME_A[] = {
     "Elm", "Bran", "Kes", "Dun", "Wych", "Tor", "Ash", "Raven", "Kar", "Sten",
     "Hol", "Grim", "Mar", "Bel", "Thorn", "Karn", "Ul", "Wyn", "Oak", "Silver"
@@ -268,6 +363,26 @@ static const char* NAME_B[] = {
 std::string villageNameFor(int sx, int sy, uint32_t seed) {
     uint32_t h = hash2i(sx, sy, seed ^ 0x7ab1e5u);
     return std::string(NAME_A[h % 20]) + NAME_B[(h / 20) % 18];
+}
+
+std::string compassHint(float fromX, float fromY, float toX, float toY) {
+    float dx = toX - fromX, dy = toY - fromY;
+    int dist = (int)roundf(sqrtf(dx * dx + dy * dy));
+    if (dist < 6) return "here";
+    // atan2(dy, dx): 0=E, +pi/2=S, -pi/2=N, pi=W
+    float ang = atan2f(dy, dx) * 180.0f / 3.14159265f;
+    const char* dir = "E";
+    if (ang >= -22.5f && ang < 22.5f) dir = "E";
+    else if (ang >= 22.5f && ang < 67.5f) dir = "SE";
+    else if (ang >= 67.5f && ang < 112.5f) dir = "S";
+    else if (ang >= 112.5f && ang < 157.5f) dir = "SW";
+    else if (ang >= 157.5f || ang < -157.5f) dir = "W";
+    else if (ang >= -157.5f && ang < -112.5f) dir = "NW";
+    else if (ang >= -112.5f && ang < -67.5f) dir = "N";
+    else dir = "NE";
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%s ~%d", dir, dist);
+    return buf;
 }
 
 // ================================================================ villages
@@ -284,12 +399,24 @@ static bool siteFit(int cx, int cy, int R) {
     return true;
 }
 
-// --------------------------------------------------------------------------
-// The starting village.  Hand-authored on one seed-independent plan so the
-// opening scene is always the same warm, walkable little town: cobbled plaza
-// with a well, a shop and an inn on either side of the road, a temple, houses
-// with fences and gardens, and the meadow gate to the wide world in the south.
-// --------------------------------------------------------------------------
+static bool buildingsOverlap(const Building& a, const Building& b, int pad = 2) {
+    int ax0 = a.tx - a.w / 2 - pad, ax1 = a.tx - a.w / 2 + a.w - 1 + pad;
+    int ay0 = a.ty - a.h + 1 - pad, ay1 = a.ty + 1 + pad;
+    int bx0 = b.tx - b.w / 2,       bx1 = b.tx - b.w / 2 + b.w - 1;
+    int by0 = b.ty - b.h + 1,       by1 = b.ty + 1;
+    return !(ax1 < bx0 || ax0 > bx1 || ay1 < by0 || ay0 > by1);
+}
+
+static bool decoHitsBuildingOrDoor(const Village& v, float dx, float dy) {
+    int tx = (int)floorf(dx + 0.5f), ty = (int)floorf(dy + 0.5f);
+    for (const Building& b : v.buildings) {
+        int x0 = b.tx - b.w / 2 - 1, x1 = b.tx - b.w / 2 + b.w;
+        int y0 = b.ty - b.h, y1 = b.ty + 2;
+        if (tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1) return true;
+    }
+    return false;
+}
+
 void buildStartVillage(Village& v, uint32_t seed) {
     v = Village{};
     v.valid = true;
@@ -311,9 +438,9 @@ void buildStartVillage(Village& v, uint32_t seed) {
     addHouse(6, 8, -1);       // inn, east of the plaza
     addHouse(7, 0, -11);      // temple, north
     addHouse(0, -12, -8);
-    addHouse(1, 12, -9);
+    addHouse(1, 12, -8);
     addHouse(2, -12, 5);
-    addHouse(3, 12, 4);
+    addHouse(3, 12, 5);
     addHouse(4, -5, 10);
     addHouse(0, 6, 10);
 
@@ -337,82 +464,89 @@ void buildStartVillage(Village& v, uint32_t seed) {
             if (e2 < dx) { err += dx; y += sy; }
         }
     };
-    // roads from the plaza to every door
-    for (const Building& b : v.buildings) road(0, 0, b.tx, b.ty + 1);
-    // the gate road running south out of town
-    road(0, 4, 0, 16);
-    road(0, -4, 30, -4);
+    // clean roads from the plaza to every building doorstep
+    road(-5, 0, -8, 0);
+    road(5, 0, 8, 0);
+    road(0, -4, 0, -10);
+    road(-8, 0, -12, 6);
+    road(8, 0, 12, 6);
+    road(-8, -5, -12, -7);
+    road(8, -5, 12, -7);
+    road(0, 4, -5, 11);
+    road(0, 4, 6, 11);
+    // the gate road running south out of town, and north path around the temple
+    road(0, 4, 0, 17);
+    road(0, -15, 0, -18);
 
     auto deco = [&](int kind, float x, float y, int variant = 0) {
         v.decos.push_back({ kind, x, y, variant });
     };
-    deco(VD_WELL, 0.0f, 1.0f);
-    deco(VD_SIGN, 4.0f, 5.0f);
+    deco(VD_WELL, 0.0f, 0.0f);
+    deco(VD_BUCKET, 2.0f, 0.0f);
+    deco(VD_SIGN, 3.0f, 5.0f);
     deco(VD_SIGN, -3.0f, 6.0f);
     deco(VD_BENCH, -3.0f, 2.0f);
     deco(VD_BENCH, 3.0f, 2.0f);
-    deco(VD_FLOWERBED, -5.0f, -2.0f);
-    deco(VD_FLOWERBED, 5.0f, -2.0f);
+    deco(VD_FLOWERBED, -4.0f, -3.0f);
+    deco(VD_FLOWERBED, 5.0f, -3.0f);
     deco(VD_TORCH, -6.0f, 3.0f);
     deco(VD_TORCH, 6.0f, 3.0f);
-    deco(VD_STATUE, -2.0f, -6.0f);
-    deco(VD_PLANT, -10.0f, 3.0f);
+    deco(VD_STATUE, -3.0f, -6.0f);
+    deco(VD_STATUE, 3.0f, -6.0f);
+    deco(VD_PLANT, -10.0f, 2.0f);
     deco(VD_PLANT, 10.0f, 2.0f);
-    deco(VD_BARREL, -10.0f, -2.0f);
-    deco(VD_BARREL, 10.0f, -2.0f);
-    deco(VD_CRATE, 7.0f, 5.0f);
-    deco(VD_BUCKET, 1.0f, 3.0f);
-    deco(VD_CAMPFIRE, -7.0f, 8.0f);
-    deco(VD_CAULDRON, 8.0f, 8.0f);
-    deco(VD_LADDER, -13.0f, -5.0f);
-    deco(VD_TABLE, -6.0f, 4.0f);
+    deco(VD_BARREL, -11.0f, -1.0f);
+    deco(VD_BARREL, 11.0f, -1.0f);
+    deco(VD_CRATE, 8.0f, 4.0f);
+    deco(VD_CAMPFIRE, -8.0f, 8.0f);
+    deco(VD_CAULDRON, 9.0f, 8.0f);
+    deco(VD_TABLE, -7.0f, 4.0f);
     deco(VD_FENCE_H, -14.0f, 8.0f);
     deco(VD_FENCE_H, -13.0f, 8.0f);
-    deco(VD_FENCE_H, 13.0f, 7.0f);
+    deco(VD_FENCE_H, 13.0f, 8.0f);
     deco(VD_FENCE_V, -14.0f, 9.0f);
-    deco(VD_FENCE_V, 14.0f, 8.0f);
+    deco(VD_FENCE_V, 14.0f, 9.0f);
 }
 
 // Generated villages --------------------------------------------------------
 static void layoutVillage(Village& v) {
     uint32_t rs = v.seed;
-    int count = 5 + (rs % 4);
     v.buildings.clear();
-    for (int i = 0; i < count; i++) {
-        float ang = (float)i / (float)count * 6.2831853f + (float)(rs % 100) / 100.0f;
-        int dist = 6 + (int)(hashf(i, 77, rs) * 3.0f);
-        int hx = v.cx + (int)(cosf(ang) * dist);
-        int hy = v.cy + (int)(sinf(ang) * dist * 0.8f);
+
+    // Always place Shop, Inn, Temple first at well-spaced anchors
+    Building shop{ 5, v.cx + 7, v.cy + 1, 4, 3, 5 };
+    Building inn{ 6, v.cx - 7, v.cy + 1, 4, 3, 6 };
+    Building temple{ 7, v.cx, v.cy - 8, 5, 4, 7 };
+    v.buildings.push_back(shop);
+    v.buildings.push_back(inn);
+    v.buildings.push_back(temple);
+
+    int targetHouses = 3 + (int)(rs % 3);
+    for (int i = 0; i < targetHouses * 3 && (int)v.buildings.size() < 3 + targetHouses; i++) {
+        float ang = hashf(i, 71, rs) * 6.2831853f;
+        int dist = 8 + (int)(hashf(i, 77, rs) * 4.0f);
         Building b;
         b.w = 4; b.h = 3;
-        b.tx = hx; b.ty = hy;
+        b.tx = v.cx + (int)(cosf(ang) * dist);
+        b.ty = v.cy + (int)(sinf(ang) * dist * 0.85f);
         b.kind = (int)(hashf(i, 31, rs) * 5.0f) % 5;
-        v.buildings.push_back(b);
-    }
-    if (!v.buildings.empty()) {
-        v.buildings[0].kind = 5;                       // shop
-        v.buildings[0].tx = v.cx + 7; v.buildings[0].ty = v.cy + 1;
-        if (v.buildings.size() > 1) {
-            v.buildings[1].kind = 6;                   // inn
-            v.buildings[1].tx = v.cx - 7; v.buildings[1].ty = v.cy + 1;
-        }
-        if (v.buildings.size() > 2) {
-            v.buildings[2].kind = 7;                   // temple
-            v.buildings[2].w = 5; v.buildings[2].h = 4;
-            v.buildings[2].tx = v.cx; v.buildings[2].ty = v.cy - 8;
-        }
-    }
-    for (int i = 0; i < (int)v.buildings.size(); i++) {
-        Building& b = v.buildings[i];
         b.sprite = b.kind;
-        if (b.kind == 7) { b.w = 5; b.h = 4; }
+        // Never overlap plaza or other buildings
+        if (abs(b.tx - v.cx) <= 5 && abs(b.ty - v.cy) <= 4) continue;
+        bool bad = false;
+        for (const auto& ex : v.buildings) {
+            if (buildingsOverlap(b, ex, 2)) { bad = true; break; }
+        }
+        if (!bad) v.buildings.push_back(b);
     }
+
     v.plaza.clear();
     for (int ty = -3; ty <= 3; ty++)
         for (int tx = -4; tx <= 4; tx++) {
             float dx = (float)tx / 4.0f, dy = (float)ty / 3.0f;
             if (dx * dx + dy * dy <= 1.0f) v.plaza.push_back({ v.cx + tx, v.cy + ty });
         }
+
     v.paths.clear();
     auto road = [&](int x0, int y0, int x1, int y1) {
         int dx = abs(x1 - x0), dy = abs(y1 - y0);
@@ -427,24 +561,25 @@ static void layoutVillage(Village& v) {
         }
     };
     for (const Building& b : v.buildings) road(v.cx, v.cy, b.tx, b.ty + 1);
+
     v.decos.clear();
-    auto deco = [&](int kind, float x, float y, int variant = 0) {
+    auto tryDeco = [&](int kind, float x, float y, int variant = 0) {
+        if (decoHitsBuildingOrDoor(v, x, y)) return;
         v.decos.push_back({ kind, x, y, variant });
     };
-    deco(VD_WELL, (float)v.cx, (float)v.cy + 1.0f);
-    deco(VD_SIGN, (float)v.cx + 2.0f, (float)v.cy + 3.0f);
-    deco(VD_BENCH, (float)v.cx - 2.0f, (float)v.cy + 2.0f);
-    deco(VD_FLOWERBED, (float)v.cx + 3.0f, (float)v.cy - 1.0f);
+    tryDeco(VD_WELL, (float)v.cx, (float)v.cy);
+    tryDeco(VD_SIGN, (float)v.cx + 2.0f, (float)v.cy + 3.0f);
+    tryDeco(VD_BENCH, (float)v.cx - 2.0f, (float)v.cy + 2.0f);
+    tryDeco(VD_FLOWERBED, (float)v.cx + 3.0f, (float)v.cy - 2.0f);
     for (int i = 0; i < 6; i++) {
         float a = hashf(i, 5, rs) * 6.2831853f;
-        float r = 4.0f + hashf(i, 9, rs) * 6.0f;
+        float r = 4.5f + hashf(i, 9, rs) * 5.0f;
         int kind = (i % 3 == 0) ? VD_BARREL : (i % 3 == 1 ? VD_PLANT : VD_TORCH);
-        deco(kind, v.cx + cosf(a) * r, v.cy + sinf(a) * r * 0.8f);
+        tryDeco(kind, floorf(v.cx + cosf(a) * r), floorf(v.cy + sinf(a) * r * 0.8f));
     }
 }
 
 void villageLoadAt(float x, float y) {
-    // The starting village always wins near the origin.
     if (nearStartVillage(x, y)) {
         if (g.villageLoaded && g.village.startVillage) return;
         buildStartVillage(g.village, g.worldSeed);
@@ -462,9 +597,14 @@ void villageLoadAt(float x, float y) {
     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
         int cx = sx + dx, cy = sy + dy;
         uint32_t h = hash2i(cx, cy, g.worldSeed ^ 0x71a9eu);
-        if ((h % 1000) / 1000.0f >= 0.26f) continue;
+        if ((h % 1000) / 1000.0f >= 0.28f) continue;
         int baseX = cx * SECTOR + SECTOR / 2, baseY = cy * SECTOR + SECTOR / 2;
-        if (baseX * baseX + baseY * baseY < 60 * 60) continue;    // keep clear of Elmswick
+        if (baseX * baseX + baseY * baseY < 56 * 56) continue;
+        // Keep clear of story landmarks
+        if (abs(baseX - BOSS_CASTLE_TX) < 28 && abs(baseY - BOSS_CASTLE_TY) < 28) continue;
+        if (abs(baseX - LOCKET_SITE_TX) < 22 && abs(baseY - LOCKET_SITE_TY) < 22) continue;
+        if (abs(baseX - TOWER_SITE_TX) < 22 && abs(baseY - TOWER_SITE_TY) < 22) continue;
+
         int bx = baseX, by = baseY;
         bool ok = false;
         for (int r = 0; r < 40 && !ok; r += 2) {
@@ -481,7 +621,7 @@ void villageLoadAt(float x, float y) {
             bestDist = d;
             best = Village{};
             best.valid = true;
-            best.sectorX = (uint32_t)cx; best.sectorY = (uint32_t)cy;
+            best.sectorX = cx; best.sectorY = cy;
             best.seed = h;
             best.cx = bx; best.cy = by;
             best.name = villageNameFor(cx, cy, g.worldSeed);
@@ -490,7 +630,7 @@ void villageLoadAt(float x, float y) {
     }
     if (!found) { g.villageLoaded = false; g.villageKey = ~0ull; return; }
 
-    uint64_t key = ((uint64_t)best.sectorX << 32) | best.sectorY;
+    uint64_t key = ((uint64_t)(uint32_t)best.sectorX << 32) | (uint32_t)best.sectorY;
     if (g.villageLoaded && g.villageKey == key) return;
     layoutVillage(best);
     g.village = best;
@@ -501,7 +641,7 @@ void villageLoadAt(float x, float y) {
 // ================================================================ npcs
 static const char* VILLAGER_LINES[] = {
     "The wilds hum tonight. The trees keep secrets that aren't yours.",
-    "They say a castle waits beyond the peaks. Nobody walks that far and back.",
+    "They say a castle waits straight up the North Road. The Slime King sits on Elm's old throne.",
     "Rest well, traveller. The meadow feeds the bold and the foolish alike.",
     "I heard bells under the hills last winter. Beautiful, terrible bells.",
     "Take the left fork at the old pine. The right fork bites.",
@@ -521,7 +661,7 @@ static const char* CHILD_LINES[] = {
 };
 static const char* GUARD_LINES[] = {
     "Keep your blade sheathed in town and we'll get along fine.",
-    "East road's clear. West road has wolves. Your call.",
+    "North road climbs to the old castle. West lies a ruined watchtower.",
 };
 static const char* SHOP_LINES[] = {
     "Steel, salves and sundries. No credit, no haggling, no exceptions.",
@@ -533,7 +673,7 @@ static const char* PRIEST_LINES[] = {
     "The light mends what the road breaks. Rest a moment, child.",
 };
 static const char* ANIMAL_LINES[] = {
-    "Woof.", "Moo.", "Cluck.", "...meow.",
+    "Woof! *wag*", "Arf! *sniffs your boots*", "*happy tail thump*", "Woof!",
 };
 static const char* QUEST_LINES[] = {
     "Those slimes are eating my turnips. Thin them out and I'll make it worth your while.",
@@ -570,67 +710,88 @@ const char* npcRoleName(int role) {
     }
 }
 
-// NPC sprite indices (see import_openrtp.py order)
 enum NpcSprite {
     NS_VILLAGER0 = 0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_ELDER, NS_MAYOR,
     NS_WOMAN, NS_CHILD, NS_GUARD, NS_SOLDIER, NS_KNIGHT, NS_MERCHANT, NS_SMITH,
-    NS_PRIEST, NS_FARMER, NS_KIND_COUNT
+    NS_PRIEST, NS_FARMER, NS_DOG, NS_KIND_COUNT
 };
 
 void npcsLoadFor(float x, float y, bool force) {
     bool useVillage = g.villageLoaded && inVillage(x, y);
-    uint64_t key = useVillage ? (0x10000ull | g.villageKey) : 0ull;
-    if (!force && key != 0 && g.npcKey == key && !g.npcs.empty()) return;
+    int sx = (int)floorf(x / 32), sy = (int)floorf(y / 32);
+    uint64_t key = useVillage
+        ? (0x1000000000000ull | g.villageKey)
+        : (0x2000000000000ull | (((uint64_t)(uint32_t)sx << 24) ^ (uint32_t)sy));
+    if (!force && g.npcKey == key) return;
 
     g.npcs.clear();
     g.npcKey = key;
-    uint32_t seed = useVillage ? g.village.seed : hash2i((int)floorf(x / 32), (int)floorf(y / 32), g.worldSeed);
+    uint32_t seed = useVillage ? g.village.seed : hash2i(sx, sy, g.worldSeed);
 
-    auto add = [&](int sprite, int face, int role, float px, float py, const char* name, int lineSet) {
+    auto add = [&](int sprite, int face, int role, float px, float py, const char* name, int lineSet,
+                   int quest = -1) {
+        int tx = (int)floorf(px), ty = (int)floorf(py);
+        nearestWalkable(tx, ty, tx, ty);
         Npc n;
         n.id = (uint64_t)(g.npcs.size() + 1) * 7919ull ^ (uint64_t)seed;
-        n.sprite = sprite; n.face = face; n.role = role;
-        n.x = n.homeX = px; n.y = n.homeY = py;
+        n.sprite = sprite; n.face = face; n.role = role; n.quest = quest;
+        n.x = n.homeX = (float)tx + 0.5f;
+        n.y = n.homeY = (float)ty + 0.5f;
         n.name = name; n.lineSet = lineSet;
-        n.thinkT = hashf((int)px, (int)py, seed) * 2.0f;
+        n.thinkT = 1.0f + hashf(tx, ty, seed) * 2.5f;
         g.npcs.push_back(n);
     };
 
     if (useVillage) {
         const Village& v = g.village;
-        // shopkeeper and innkeeper stand beside their doors
         for (const Building& b : v.buildings) {
-            if (b.kind == 5) add(NS_MERCHANT, FACE_SHOPKEEPER, NPC_SHOPKEEP, (float)b.tx - 1.4f, (float)b.ty + 1.2f, "Mira the Trader", 0);
-            else if (b.kind == 6) add(NS_WOMAN, FACE_INNKEEPER, NPC_INNKEEP, (float)b.tx + 1.4f, (float)b.ty + 1.2f, "Bren the Innkeep", 0);
-            else if (b.kind == 7) add(NS_PRIEST, FACE_ELDER, NPC_PRIEST, (float)b.tx + 1.6f, (float)b.ty + 1.4f, "Father Osric", 0);
+            if (b.kind == 5)
+                add(NS_MERCHANT, FACE_SHOPKEEPER, NPC_SHOPKEEP, (float)b.tx - 2.0f, (float)b.ty + 1.5f,
+                    v.startVillage ? "Mira the Trader" : "Village Trader", 0);
+            else if (b.kind == 6)
+                add(NS_WOMAN, FACE_INNKEEPER, NPC_INNKEEP, (float)b.tx + 2.0f, (float)b.ty + 1.5f,
+                    v.startVillage ? "Bren the Innkeep" : "Innkeeper", 0);
+            else if (b.kind == 7)
+                add(NS_PRIEST, FACE_ELDER, NPC_PRIEST, (float)b.tx + 2.5f, (float)b.ty + 1.5f,
+                    v.startVillage ? "Father Osric" : "Shrine Keeper", 0);
         }
-        // townfolk wandering the plaza
-        const int sprites[] = { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3 };
-        const int faces[] = { FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3 };
-        int n = v.startVillage ? 7 : 4 + (int)(v.seed % 3);
-        for (int i = 0; i < n; i++) {
-            float ang = hashf(i, 11, v.seed) * 6.2831853f;
-            float r = 2.0f + hashf(i, 13, v.seed) * 7.0f;
-            float px = (float)v.cx + cosf(ang) * r;
-            float py = (float)v.cy + sinf(ang) * r * 0.8f;
-            int role = (i == 0) ? NPC_ELDER : (i == 1 ? NPC_CHILD : (i == 2 ? NPC_GUARD : NPC_VILLAGER));
-            int sprite = (role == NPC_ELDER) ? NS_ELDER : (role == NPC_CHILD ? NS_CHILD : (role == NPC_GUARD ? NS_GUARD : sprites[i % 4]));
-            int face = (role == NPC_ELDER) ? FACE_ELDER : (role == NPC_CHILD ? FACE_CHILD : (role == NPC_GUARD ? FACE_GUARD : faces[i % 4]));
-            const char* names[] = { "Old Maren", "Pip the Younger", "Watchman Odo", "Tamsin", "Rook", "Sable", "Wren" };
-            add(sprite, face, role, px, py, names[i % 7], i);
+
+        if (v.startVillage) {
+            // Elmswick's named residents & quest givers placed cleanly around the town
+            add(NS_ELDER,     FACE_ELDER,     NPC_ELDER,    -2.5f, -2.5f, "Old Maren",      0, QUEST_CROWN);
+            add(NS_WOMAN,     FACE_WOMAN,     NPC_QUEST,     3.5f, -1.5f, "Tamsin",         1, QUEST_LOCKET);
+            add(NS_CHILD,     FACE_CHILD,     NPC_CHILD,    -2.5f,  3.5f, "Pip the Younger",2);
+            add(NS_GUARD,     FACE_GUARD,     NPC_GUARD,     2.5f,  7.5f, "Watchman Odo",   3);
+            add(NS_VILLAGER1, FACE_VILLAGER1, NPC_VILLAGER, -6.5f,  2.5f, "Rook",           4);
+            add(NS_VILLAGER2, FACE_VILLAGER2, NPC_VILLAGER,  6.5f,  1.5f, "Sable",          5);
+            add(NS_VILLAGER3, FACE_VILLAGER3, NPC_VILLAGER,  2.5f, -5.5f, "Wren",           6);
+            add(NS_FARMER,    FACE_SMITH,     NPC_QUEST,    -2.5f, 12.5f, "Farmer Hedrick", 0, QUEST_SLIMES);
+            add(NS_DOG,       FACE_WOLF,      NPC_ANIMAL,    2.5f,  1.5f, "Town Dog",       0);
+        } else {
+            const int sprites[] = { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3 };
+            const int faces[] = { FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3 };
+            const char* names[] = { "Elder Rowan", "Kip", "Guard Bram", "Elin", "Corin", "Mina" };
+            int n = 4 + (int)(v.seed % 3);
+            for (int i = 0; i < n; i++) {
+                float ang = hashf(i, 11, v.seed) * 6.2831853f;
+                float r = 2.5f + hashf(i, 13, v.seed) * 5.0f;
+                float px = (float)v.cx + cosf(ang) * r;
+                float py = (float)v.cy + sinf(ang) * r * 0.8f;
+                int role = (i == 0) ? NPC_ELDER : (i == 1 ? NPC_CHILD : (i == 2 ? NPC_GUARD : NPC_VILLAGER));
+                int sprite = (role == NPC_ELDER) ? NS_ELDER : (role == NPC_CHILD ? NS_CHILD : (role == NPC_GUARD ? NS_GUARD : sprites[i % 4]));
+                int face = (role == NPC_ELDER) ? FACE_ELDER : (role == NPC_CHILD ? FACE_CHILD : (role == NPC_GUARD ? FACE_GUARD : faces[i % 4]));
+                add(sprite, face, role, px, py, names[i % 6], i);
+            }
+            add(NS_DOG, FACE_WOLF, NPC_ANIMAL, (float)v.cx + 2.5f, (float)v.cy + 1.5f, "Village Dog", 0);
         }
-        // a farmer out past the fence with a small request
-        add(NS_FARMER, FACE_VILLAGER0, NPC_QUEST, (float)v.cx - 5.5f, (float)v.cy + 7.5f, "Farmer Hedrick", 0);
-        // animals
-        add(NS_VILLAGER0 - 12 + 14, FACE_VILLAGER0, NPC_ANIMAL, (float)v.cx + 3.0f, (float)v.cy - 4.0f, "Town Dog", 1);
     } else {
-        // lone wanderers out in the wilds (rare, and never in the deep snow)
-        int sx = (int)floorf(x / 32), sy = (int)floorf(y / 32);
         uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x4e3c17u);
-        if ((h % 100) < 18 && (x * x + y * y) > 60 * 60) {
+        if ((h % 100) < 20 && (x * x + y * y) > 45 * 45) {
             float px = sx * 32 + 8.0f + hashf(sx, sy, h) * 14.0f;
             float py = sy * 32 + 8.0f + hashf(sy, sx, h) * 14.0f;
-            add(NS_VILLAGER3, FACE_RANGER, NPC_VILLAGER, px, py, "Wandering Ranger", (int)(h % 8));
+            int tx = (int)floorf(px), ty = (int)floorf(py);
+            if (cellWalkable(tx, ty))
+                add(NS_VILLAGER3, FACE_RANGER, NPC_VILLAGER, px, py, "Wandering Ranger", (int)(h % 8));
         }
     }
 }
@@ -655,32 +816,48 @@ void chestsLoadFor(float x, float y) {
     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
         int cx = sx + dx, cy = sy + dy;
         uint32_t h = hash2i(cx, cy, g.worldSeed ^ 0xc4e57u);
-        if ((h % 100) >= 34) continue;
+        if ((h % 100) >= 36) continue;
         int tx = cx * SECTOR + 4 + (int)(hashf(cx, cy, h) * (SECTOR - 8));
         int ty = cy * SECTOR + 4 + (int)(hashf(cy, cx, h + 7) * (SECTOR - 8));
         if (!cellWalkable(tx, ty)) continue;
-        if (inVillage((float)tx, (float)ty)) continue;
+        if (inVillage((float)tx + 0.5f, (float)ty + 0.5f)) continue;
+        if (nearSpecialSite(tx, ty)) continue;
         Chest c;
         c.id = ((uint64_t)(uint32_t)cx << 32) ^ (uint32_t)cy ^ 0x9e37ull;
         c.tx = tx; c.ty = ty;
+        int zl = zoneLevelAt((float)tx, (float)ty);
         int roll = (int)((h >> 8) % 100);
-        if (roll < 42) { c.item = IT_POTION; c.amount = 1 + (int)((h >> 16) % 2); }
-        else if (roll < 62) { c.gil = 20 + (int)((h >> 16) % 90); }
-        else if (roll < 76) { c.item = IT_ETHER; c.amount = 1; }
-        else if (roll < 88) { c.item = IT_HIPOTION; c.amount = 1; }
-        else { c.item = IT_PHOENIX; c.amount = 1; }
+        if (roll < 36) { c.item = IT_POTION; c.amount = 1 + (int)((h >> 16) % 2); }
+        else if (roll < 56) { c.gil = 25 + zl * 15 + (int)((h >> 16) % 80); }
+        else if (roll < 70) { c.item = IT_ETHER; c.amount = 1; }
+        else if (roll < 82) { c.item = IT_HIPOTION; c.amount = 1; }
+        else if (roll < 92) { c.item = IT_PHOENIX; c.amount = 1; }
+        else { c.item = (zl >= 6) ? IT_ELIXIR : IT_HIETHER; c.amount = 1; }
         gChestsInView.push_back(c);
     }
 }
 
 // ================================================================ landmarks
 bool landmarkNear(int tx, int ty, Landmark& out) {
+    if (abs(tx - BOSS_CASTLE_TX) <= 10 && abs(ty - BOSS_CASTLE_TY) <= 10) {
+        out = { LK_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, 0xca571eu };
+        return true;
+    }
+    if (abs(tx - LOCKET_SITE_TX) <= 8 && abs(ty - LOCKET_SITE_TY) <= 8) {
+        out = { LK_STONES, LOCKET_SITE_TX, LOCKET_SITE_TY, 0x10c4e7u };
+        return true;
+    }
+    if (abs(tx - TOWER_SITE_TX) <= 8 && abs(ty - TOWER_SITE_TY) <= 8) {
+        out = { LK_TOWER, TOWER_SITE_TX, TOWER_SITE_TY, 0x703e2u };
+        return true;
+    }
     const int SECTOR = 128;
     int sx = (int)floorf((float)tx / SECTOR), sy = (int)floorf((float)ty / SECTOR);
     uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
     if ((h % 100) >= 55) return false;
     int lx = sx * SECTOR + SECTOR / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
     int ly = sy * SECTOR + SECTOR / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
+    if (lx * lx + ly * ly < 42 * 42) return false;
     if (abs(lx - tx) > 8 || abs(ly - ty) > 8) return false;
     out.kind = (LandmarkKind)(1 + (h >> 6) % 5);
     out.tx = lx; out.ty = ly;
@@ -688,17 +865,48 @@ bool landmarkNear(int tx, int ty, Landmark& out) {
     return true;
 }
 
+void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out) {
+    out.clear();
+    auto maybeAdd = [&](LandmarkKind kind, int tx, int ty, uint32_t seed) {
+        if (tx >= x0 - 6 && tx <= x1 + 6 && ty >= y0 - 6 && ty <= y1 + 8)
+            out.push_back({ kind, tx, ty, seed });
+    };
+    // Deterministic story landmarks
+    maybeAdd(LK_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, 0xca571eu);
+    maybeAdd(LK_STONES, LOCKET_SITE_TX, LOCKET_SITE_TY, 0x10c4e7u);
+    maybeAdd(LK_TOWER,  TOWER_SITE_TX,  TOWER_SITE_TY,  0x703e2u);
+
+    // Procedural sector landmarks
+    const int SECTOR = 128;
+    int sx0 = (int)floorf((float)(x0 - 8) / SECTOR);
+    int sx1 = (int)floorf((float)(x1 + 8) / SECTOR);
+    int sy0 = (int)floorf((float)(y0 - 8) / SECTOR);
+    int sy1 = (int)floorf((float)(y1 + 8) / SECTOR);
+    for (int sy = sy0; sy <= sy1; sy++) {
+        for (int sx = sx0; sx <= sx1; sx++) {
+            uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
+            if ((h % 100) >= 55) continue;
+            int lx = sx * SECTOR + SECTOR / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
+            int ly = sy * SECTOR + SECTOR / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
+            if (lx * lx + ly * ly < 42 * 42) continue;
+            if (nearSpecialSite(lx, ly)) continue;
+            if (g.villageLoaded && inVillage((float)lx, (float)ly)) continue;
+            GroundTile gt = sampleGround(lx, ly);
+            if (gt.kind == G_WATER || gt.kind == G_DEEP) continue;
+            LandmarkKind kind = (LandmarkKind)(1 + (h >> 6) % 5);
+            maybeAdd(kind, lx, ly, h);
+        }
+    }
+}
+
 bool inBossArena(float x, float y) {
-    // the castle sits far to the north; its gate is the final arena
-    int csx = 0, csy = -3;
-    int cx = csx * 128 + 64, cy = csy * 128 + 64;
-    float dx = x - cx, dy = y - cy;
-    return (dx * dx + dy * dy) < 26.0f * 26.0f;
+    float dx = x - (float)BOSS_CASTLE_TX, dy = y - (float)BOSS_CASTLE_TY;
+    return (dx * dx + dy * dy) < 16.0f * 16.0f;
 }
 
 // ================================================================ field monsters
 static const EnemyKind TIER1[] = { EN_SLIME, EN_SLIME, EN_IMP, EN_BAT };
-static const EnemyKind TIER2[] = { EN_SLIME, EN_IMP, EN_BAT, EN_HORNET, EN_WISP };
+static const EnemyKind TIER2[] = { EN_SLIME, EN_IMP, EN_BAT, EN_HORNET, EN_WISP, EN_WOLF };
 static const EnemyKind TIER3[] = { EN_WISP, EN_WOLF, EN_SKELETON, EN_GHOST, EN_ORC };
 static const EnemyKind TIER4[] = { EN_ORC, EN_SERPENT, EN_GOLEM, EN_NIGHT_RIDER };
 
@@ -707,44 +915,62 @@ EnemyKind rollBiomeEnemy(int tx, int ty, int zoneLevel) {
     uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0xbad1ceu);
     const EnemyKind* table = TIER1;
     int n = 4;
-    if (zoneLevel >= 12) { table = TIER4; }
-    else if (zoneLevel >= 7) { table = TIER3; }
-    else if (zoneLevel >= 3) { table = TIER2; }
-    // snow favours wisps and ghosts, water edges favour slimes
+    if (zoneLevel >= 12) { table = TIER4; n = 4; }
+    else if (zoneLevel >= 7) { table = TIER3; n = 5; }
+    else if (zoneLevel >= 3) { table = TIER2; n = 6; }
     if ((gt.kind == G_SNOW || gt.kind == G_ICE) && zoneLevel >= 3) { table = TIER3; n = 5; }
-    if (gt.kind == G_SWAMP && zoneLevel >= 3) { table = TIER2; n = 5; }
+    if (gt.kind == G_SWAMP && zoneLevel >= 3) { table = TIER2; n = 6; }
     return table[h % (uint32_t)n];
+}
+
+std::vector<EnemyKind> buildEncounterGroup(EnemyKind primary, int tx, int ty, int zoneLevel) {
+    std::vector<EnemyKind> group;
+    group.push_back(primary);
+    uint32_t h = hash2i(tx + g.stepCounter, ty + g.defeatedCount, g.worldSeed ^ 0x51a9u);
+    int extraChance = (zoneLevel <= 1) ? 35 : (zoneLevel <= 3 ? 55 : 70);
+    if ((int)(h % 100) < extraChance) {
+        EnemyKind second = ((h >> 8) % 2 == 0) ? primary : rollBiomeEnemy(tx + 3, ty - 2, zoneLevel);
+        group.push_back(second);
+        if (zoneLevel >= 4 && (int)((h >> 16) % 100) < 35) {
+            group.push_back(rollBiomeEnemy(tx - 2, ty + 5, zoneLevel));
+        }
+    }
+    return group;
 }
 
 void fieldMonstersInView(float x, float y, std::vector<FieldMonster>& out) {
     out.clear();
     const int SECTOR = 24;
     int sx = (int)floorf(x / SECTOR), sy = (int)floorf(y / SECTOR);
-    int zl = zoneLevelAt(x, y);
     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
         int cx = sx + dx, cy = sy + dy;
         uint32_t h = hash2i(cx, cy, g.worldSeed ^ 0xf11du);
-        if ((h % 100) >= 78) continue;
+        if ((h % 100) >= 80) continue;
         int count = 1 + (int)((h >> 8) % 2);
         for (int i = 0; i < count; i++) {
             float a = hashf(i, cx * 7 + 1, h) * 6.2831853f;
-            float r = 3.0f + hashf(i, cy * 13 + 5, h) * (SECTOR * 0.40f);
+            float r = 3.0f + hashf(i, cy * 13 + 5, h) * (SECTOR * 0.38f);
             float mx = cx * SECTOR + SECTOR * 0.5f + cosf(a) * r;
             float my = cy * SECTOR + SECTOR * 0.5f + sinf(a) * r;
-            if (mx * mx + my * my < 26.0f * 26.0f) continue;      // never in Elmswick
-            GroundTile t = sampleGround((int)floorf(mx), (int)floorf(my));
-            if (t.kind == G_WATER || t.kind == G_DEEP || t.kind == G_ROCK || t.kind == G_ICE) continue;
-            if (propAt((int)floorf(mx), (int)floorf(my)) != P_NONE) continue;
-            uint64_t id = ((uint64_t)(uint32_t)cx << 40) ^ ((uint64_t)(uint32_t)cy << 8) ^ (uint64_t)i;
+            if (mx * mx + my * my < 22.0f * 22.0f) continue;      // never inside Elmswick
+            if (g.villageLoaded && inVillage(mx, my)) continue;   // never inside any village
+            int mtx = (int)floorf(mx), mty = (int)floorf(my);
+            if (nearSpecialSite(mtx, mty)) continue;
+            if (!cellWalkable(mtx, mty)) continue;
+            uint64_t id = ((uint64_t)(uint32_t)cx << 40) ^ ((uint64_t)(uint32_t)cy << 8) ^ (uint64_t)(i + 1);
             if (g.defeatedMonsters.count(id)) continue;
-            float ddx = mx - x, ddy = my - y;
 
             FieldMonster fm;
             fm.id = id;
             fm.anchorX = mx; fm.anchorY = my;
             fm.x = mx; fm.y = my;
             fm.phase = hashf(i, cx + cy + 99, h) * 6.2831853f;
-            fm.kind = rollBiomeEnemy((int)floorf(mx), (int)floorf(my), zl);
+            int zl = zoneLevelAt(mx, my);
+            // South meadow near Elmswick favours slimes so Turnip Trouble is fun to complete
+            if (my > 18.0f && my < 56.0f && fabsf(mx) < 34.0f && ((h >> 12) % 100) < 68)
+                fm.kind = EN_SLIME;
+            else
+                fm.kind = rollBiomeEnemy(mtx, mty, zl);
             out.push_back(fm);
         }
     }
@@ -752,24 +978,27 @@ void fieldMonstersInView(float x, float y, std::vector<FieldMonster>& out) {
 
 int zoneLevelAt(float x, float y) {
     float dist = sqrtf(x * x + y * y);
-    int zl = 1 + (int)(dist / 110.0f);
+    int zl = 1 + (int)(dist / 95.0f);
     int avg = partyLevel();
-    return std::max(1, std::min(zl + avg / 3, 26));
+    return std::max(1, std::min(zl + (avg - 1) / 3, 26));
 }
 
 const char* zoneNameAt(float x, float y) {
     if (inVillage(x, y) && g.villageLoaded) return g.village.name.c_str();
+    if (inBossArena(x, y)) return "Castle of Elm";
+    if (fabsf(x - LOCKET_SITE_TX) < 10.0f && fabsf(y - LOCKET_SITE_TY) < 10.0f) return "The Standing Stones";
+    if (fabsf(x - TOWER_SITE_TX) < 9.0f && fabsf(y - TOWER_SITE_TY) < 9.0f) return "The Old Watchtower";
     float dist = sqrtf(x * x + y * y);
     GroundTile t = sampleGround((int)floorf(x), (int)floorf(y));
     float temp = temperatureAt(x, y, g.worldSeed);
-    if (dist < 26.0f) return "The Meadow of First Steps";
+    if (dist < 26.0f) return "Meadow of First Steps";
     if (t.kind == G_SNOW || t.kind == G_ICE || temp < 0.26f) return "The Frozenreach";
     if (t.kind == G_SAND) return "The Sunscorch Flats";
     if (t.kind == G_SWAMP) return "The Mirefen";
     if (t.kind == G_ROCK) return "The Stonelands";
-    if (y < -160.0f) return "The North Road";
-    if (x < -180.0f) return "The Howling West";
-    if (dist > 300.0f) return "The Far Wilds";
+    if (y < -40.0f && fabsf(x) < 30.0f) return "The North Road";
+    if (x < -120.0f) return "The Howling West";
+    if (dist > 260.0f) return "The Far Wilds";
     return "The Greenmere";
 }
 
@@ -797,11 +1026,12 @@ bool findWalkPath(float fromX, float fromY, int toTx, int toTy, WalkPath& out) {
     int sx = (int)floorf(fromX), sy = (int)floorf(fromY);
     int targetX = toTx, targetY = toTy;
 
-    // clicking a building aims for the doorstep and remembers the door
     if (g.villageLoaded) {
         for (int i = 0; i < (int)g.village.buildings.size(); i++) {
             const Building& b = g.village.buildings[i];
-            if (abs(toTx - b.tx) <= b.w / 2 + 1 && toTy >= b.ty - b.h && toTy <= b.ty + 1) {
+            int x0 = b.tx - b.w / 2, x1 = x0 + b.w - 1;
+            int y0 = b.ty - b.h + 1;
+            if (toTx >= x0 && toTx <= x1 && toTy >= y0 && toTy <= b.ty) {
                 out.doorBuilding = i;
                 targetX = b.tx; targetY = b.ty + 1;
                 break;
@@ -827,13 +1057,13 @@ bool findWalkPath(float fromX, float fromY, int toTx, int toTy, WalkPath& out) {
         float dx = (float)(x - targetX), dy = (float)(y - targetY);
         return sqrtf(dx * dx + dy * dy);
     };
-    auto relax = [&](int x, int y, float g, uint64_t from) {
+    auto relax = [&](int x, int y, float gc, uint64_t from) {
         uint64_t k = navKey(x, y);
         auto it = gScore.find(k);
-        if (it != gScore.end() && it->second <= g + 1e-4f) return;
-        gScore[k] = g;
+        if (it != gScore.end() && it->second <= gc + 1e-4f) return;
+        gScore[k] = gc;
         parent[k] = from;
-        open.push({ x, y, g + hcost(x, y) });
+        open.push({ x, y, gc + hcost(x, y) });
     };
     relax(sx, sy, 0.0f, 0);
     bool found = false;
