@@ -1134,23 +1134,18 @@ void dungeonDraw() {
             float bob = sinf(ph * 3.0f) * 1.5f;
             float sx = m.x * TILE - camX;
             float sy = (m.y + 0.35f) * TILE - camY;
-            DrawEllipse((int)sx, (int)sy - 1, t.width * 0.28f, 3.0f, Fade(BLACK, 0.25f));
-            texFootLocal(t, sx, sy + bob, WHITE, 0.62f);
+            DrawEllipse((int)sx, (int)sy - 1, t.width * 0.32f, 3.0f, Fade(BLACK, 0.25f));
+            texFootLocal(t, sx, sy + bob, WHITE, 1.0f);
             float dx = D.px - m.x, dy = D.py - m.y;
             if (dx * dx + dy * dy < 9.0f && fmodf(g.totalTime * 2.0f, 1.0f) < 0.6f)
-                drawWorldLabel("!", sx, sy - t.height * 0.62f - 13,
+                drawWorldLabel("!", sx, sy - (float)t.height - 12.0f,
                                Color{ 255, 110, 110, 255 }, 8);
         } else {
             Texture2D& sheet = g.assets.heroWalk[std::max(0, std::min(2, g.party[0].klass))];
-            int row = (D.facing == 0) ? 0 : (D.facing == 1 ? 1 : 2);
-            int frame = D.moving ? (1 + ((int)(D.animT * 7.0f) & 1)) : 0;
             float cx = D.px * TILE - camX;
             float fy = (D.py + 0.35f) * TILE - camY;
             DrawEllipse((int)cx, (int)fy - 1, 5.5f, 2.5f, Fade(BLACK, 0.28f));
-            Rectangle src{ (float)(frame * 24), (float)(row * 32), 24, 32 };
-            if (D.facing == 2 && D.sideFlip) src.width = -24;
-            DrawTexturePro(sheet, src, { floorf(cx - 12.0f), floorf(fy - 32.0f), 24, 32 },
-                           { 0, 0 }, 0.0f, WHITE);
+            drawCharFrame(sheet, D.facing, D.sideFlip, D.moving, D.animT, cx, fy);
         }
     }
 

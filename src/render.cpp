@@ -26,20 +26,6 @@ static void drawBackdropCover(Texture2D& tex) {
                    { dx, dy, dw, dh }, { 0, 0 }, 0.0f, WHITE);
 }
 
-static void drawCharSheet(Texture2D& sheet, int row, int frame, float cx, float footY, bool flip,
-                          Color tint = WHITE) {
-    if (sheet.id == 0) return;
-    int cols = sheet.width / 24;
-    int rows = sheet.height / 32;
-    if (cols < 3 || rows < 1) return;
-    row = std::max(0, std::min(rows - 1, row));
-    frame = std::max(0, std::min(2, frame));
-    Rectangle src{ (float)(frame * 24), (float)(row * 32), 24, 32 };
-    if (flip) src.width = -24;
-    Rectangle dst{ floorf(cx - 12.0f), floorf(footY - 32.0f), 24, 32 };
-    DrawTexturePro(sheet, src, dst, { 0, 0 }, 0.0f, tint);
-}
-
 static Texture2D* buildingTexture(const Building& b) {
     switch (b.kind) {
         case 5: return &g.assets.shop;
@@ -196,7 +182,7 @@ static void drawGround(int x0, int y0, int x1, int y1) {
 void updateClouds(float dt) {
     for (int i = 0; i < 6; i++) {
         if (g.cloudScale[i] == 0) {
-            g.cloudScale[i] = 0.6f + hashf(i, 3, 11u) * 0.7f;
+            g.cloudScale[i] = 0.7f + hashf(i, 3, 11u) * 0.6f; // used only for parallax speed variance
             g.cloudX[i] = hashf(i, 5, 13u) * (g.vw + 200) - 100;
             g.cloudY[i] = hashf(i, 7, 17u) * 140 - 20;
         }
@@ -209,10 +195,8 @@ static void drawClouds(bool shadows = false) {
     if (c.id == 0) return;
     for (int i = 0; i < 6; i++) {
         if (g.cloudScale[i] == 0) continue;
-        float s = g.cloudScale[i] * 0.55f;
-        DrawTexturePro(c, { 0, 0, (float)c.width, (float)c.height },
-                       { g.cloudX[i], g.cloudY[i], c.width * s, c.height * s }, { 0, 0 }, 0.0f,
-                       shadows ? Color{ 39, 54, 75, 20 } : Fade(WHITE, 0.45f));
+        DrawTexture(c, (int)floorf(g.cloudX[i]), (int)floorf(g.cloudY[i]),
+                    shadows ? Color{ 39, 54, 75, 22 } : Fade(WHITE, 0.45f));
     }
 }
 
@@ -223,11 +207,11 @@ void drawFieldMonsters() {
         float bob = sinf(ph * 3.0f) * 1.5f;
         float sx = m.x * TILE - g.camX;
         float sy = (m.y + 0.35f) * TILE - g.camY;
-        DrawEllipse((int)sx, (int)sy - 1, (float)t.width * 0.28f, 3.0f, Fade(BLACK, 0.25f));
-        texFoot(t, sx, sy + bob, WHITE, 0.62f);
+        DrawEllipse((int)sx, (int)sy - 1, (float)t.width * 0.32f, 3.0f, Fade(BLACK, 0.25f));
+        texFoot(t, sx, sy + bob, WHITE, 1.0f);
         float dx = g.px - m.x, dy = g.py - m.y;
         if (dx * dx + dy * dy < 9.0f && fmodf(g.totalTime * 2.0f, 1.0f) < 0.6f)
-            drawWorldLabel("!", sx, sy - t.height * 0.62f - 13, Color{ 255, 110, 110, 255 }, 8);
+            drawWorldLabel("!", sx, sy - (float)t.height - 12.0f, Color{ 255, 110, 110, 255 }, 8);
     }
 }
 
@@ -488,19 +472,17 @@ void drawWorld() {
                 float pulse = 0.5f + 0.5f * sinf(g.totalTime * 5.0f);
                 DrawCircleGradient((int)cx, (int)(fy - 4), 12 + pulse * 5,
                                    Fade(Color{ 180, 230, 255, 255 }, 0.45f), BLANK);
-                drawItemIcon(IT_LOCKET, cx - 6, fy - 11 - pulse * 2.0f, 12);
+                drawItemIcon(IT_LOCKET, floorf(cx - 8.0f), floorf(fy - 16.0f - roundf(pulse * 2.0f)), 16);
                 break;
             }
             case RK_NPC: {
                 const Npc& n = g.npcs[it.a];
                 Texture2D* sheet = charsetFor(n.sprite);
                 if (!sheet || sheet->id == 0) break;
-                int row = n.facing;
-                int frame = n.moving ? (1 + ((int)(n.animT * 6.0f) & 1)) : 0;
                 float cx = n.x * TILE - g.camX;
                 float fy = (n.y + 0.35f) * TILE - g.camY;
                 DrawEllipse((int)cx, (int)fy - 2, 5.5f, 2.5f, Fade(BLACK, 0.24f));
-                drawCharSheet(*sheet, row, frame, cx, fy, n.facing == 2 && n.sideFlip);
+                drawCharFrame(*sheet, n.facing, n.sideFlip, n.moving, n.animT, cx, fy);
                 break;
             }
             case RK_MONSTER: {
@@ -510,8 +492,8 @@ void drawWorld() {
                 float bob = sinf(ph * 3.0f) * 1.5f;
                 float sx = m.x * TILE - g.camX;
                 float sy = (m.y + 0.35f) * TILE - g.camY;
-                DrawEllipse((int)sx, (int)sy - 1, (float)t.width * 0.28f, 3.0f, Fade(BLACK, 0.25f));
-                texFoot(t, sx, sy + bob, WHITE, 0.62f);
+                DrawEllipse((int)sx, (int)sy - 1, (float)t.width * 0.32f, 3.0f, Fade(BLACK, 0.25f));
+                texFoot(t, sx, sy + bob, WHITE, 1.0f);
                 break;
             }
             case RK_BOSS: {
@@ -519,16 +501,14 @@ void drawWorld() {
                 float bob = sinf(g.totalTime * 2.8f) * 2.0f;
                 float sx = it.fx * TILE - g.camX;
                 float sy = (it.fy + 0.45f) * TILE - g.camY;
-                DrawCircleGradient((int)sx, (int)(sy - 16), 28, Fade(Color{ 120, 255, 160, 255 }, 0.22f), BLANK);
+                DrawCircleGradient((int)sx, (int)(sy - 18), 30, Fade(Color{ 120, 255, 160, 255 }, 0.22f), BLANK);
                 DrawEllipse((int)sx, (int)sy - 1, 18.0f, 5.0f, Fade(BLACK, 0.32f));
-                texFoot(t, sx, sy + bob, WHITE, 0.92f);
+                texFoot(t, sx, sy + bob, WHITE, 1.0f);
                 break;
             }
             case RK_PLAYER: {
                 int klass = g.party[0].klass;
                 Texture2D& sheet = g.assets.heroWalk[std::max(0, std::min(2, klass))];
-                int row = (g.facing == 0) ? 0 : (g.facing == 1 ? 1 : 2);
-                int frame = g.moving ? (1 + ((int)(g.walkAnimT * 7.0f) & 1)) : 0;
                 float cx = g.px * TILE - g.camX;
                 float fy = (g.py + 0.35f) * TILE - g.camY;
                 if (g.interactT > 0) fy -= sinf((0.25f - g.interactT) * 12.0f) * 2.0f;
@@ -538,7 +518,8 @@ void drawWorld() {
                     DrawEllipse((int)cx, (int)fy - 1, 3.0f + ph * 3.0f, 1.5f + ph * 1.0f,
                                 Fade(Color{ 230, 220, 190, 255 }, 0.30f * (1.0f - ph)));
                 }
-                drawCharSheet(sheet, row, frame, cx, fy, g.facing == 2 && g.sideFlip);
+                drawCharFrame(sheet, g.facing, g.sideFlip, g.moving, g.walkAnimT, cx, fy, WHITE,
+                              g.interactT > 0 ? 7 : -1);
                 break;
             }
         }
@@ -616,7 +597,7 @@ void drawWorld() {
         float bob = sinf(g.totalTime * 4.5f) * 2.0f;
         Color qc = (qm == '?') ? Color{ 120, 255, 160, 255 } : Color{ 255, 228, 96, 255 };
         char qbuf[2] = { qm, 0 };
-        drawWorldLabel(qbuf, cx, fy - 42.0f + bob, qc, 8);
+        drawWorldLabel(qbuf, cx, fy - 36.0f + bob, qc, 8);
     }
     for (const auto& lm : visibleLandmarks) {
         if (lm.kind != LK_CAVERN) continue;
@@ -633,7 +614,7 @@ void drawWorld() {
             Texture2D& t = g.assets.enemy[m.kind];
             float sx = m.x * TILE - g.camX;
             float sy = (m.y + 0.35f) * TILE - g.camY;
-            drawWorldLabel("!", sx, sy - t.height * 0.62f - 14.0f, Color{ 255, 110, 110, 255 }, 8);
+            drawWorldLabel("!", sx, sy - (float)t.height - 12.0f, Color{ 255, 110, 110, 255 }, 8);
         }
     }
     if (!g.bossDefeated &&
@@ -642,7 +623,7 @@ void drawWorld() {
         float bob = sinf(g.totalTime * 2.8f) * 2.0f;
         float sx = BOSS_KING_X * TILE - g.camX;
         float sy = (BOSS_KING_Y + 0.45f) * TILE - g.camY;
-        drawWorldLabel("SLIME KING", sx, sy - 48.0f + bob, Color{ 255, 228, 128, 255 }, 8);
+        drawWorldLabel("SLIME KING", sx, sy - 54.0f + bob, Color{ 255, 228, 128, 255 }, 8);
     }
 
     g.camX = saveCamX;
@@ -674,41 +655,40 @@ void drawHUD() {
         return;
     }
 
-    // Party strip: 3 generous 112px columns (344px total) so 6-char names ("Aldric") + PSN/KO & gauges never collide
-    constexpr int slotW = 112;
+    // Party strip: 3 crisp 122px columns with 1x (32x32) pixel-perfect portraits
+    constexpr int slotW = 122;
     constexpr int partyW = slotW * 3 + 8;
-    int by = g.vh - 36;
-    drawWindow({ 5, (float)by, (float)partyW, 31 });
+    int by = g.vh - 42;
+    drawWindow({ 5, (float)by, (float)partyW, 38 });
     for (int i = 0; i < 3; ++i) {
         const Hero& h = g.party[i];
         int x = 9 + slotW * i;
         Texture2D f = g.assets.face[h.klass == KLASS_KNIGHT ? FACE_KNIGHT : h.klass == KLASS_MAGE ? FACE_MAGE : FACE_CLERIC];
         if (f.id) {
-            DrawRectangle(x, by + 6, 19, 19, Color{ 10, 14, 28, 255 });
-            DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height },
-                           { (float)x + 0.5f, (float)by + 6.5f, 18, 18 }, { 0, 0 }, 0,
-                           h.ko ? Color{ 135, 135, 154, 255 } : WHITE);
+            DrawRectangle(x, by + 3, 32, 32, Color{ 10, 14, 28, 255 });
+            DrawTexture(f, x, by + 3, h.ko ? Color{ 135, 135, 154, 255 } : WHITE);
+            DrawRectangleLines(x, by + 3, 32, 32, Color{ 96, 118, 184, 200 });
         }
-        // Top row (by + 5): Hero name on left, KO / PSN badge right-aligned
-        drawText(heroName(h.klass), (float)x + 22.f, (float)by + 5.f,
+        // Top row (by + 6): Hero name on left, KO / PSN badge right-aligned
+        drawText(heroName(h.klass), (float)x + 36.f, (float)by + 6.f,
                  h.ko ? Color{ 226, 141, 139, 255 } : WHITE, 8);
         if (h.ko) {
             float kw = measureText("KO", 8).x;
-            drawText("KO", (float)(x + slotW - 5) - kw, (float)by + 5.f, Color{ 255, 110, 110, 255 }, 8);
+            drawText("KO", (float)(x + slotW - 5) - kw, (float)by + 6.f, Color{ 255, 110, 110, 255 }, 8);
         } else if (h.poisoned) {
             float pw = measureText("PSN", 8).x;
-            drawText("PSN", (float)(x + slotW - 5) - pw, (float)by + 5.f, Color{ 205, 140, 255, 255 }, 8);
+            drawText("PSN", (float)(x + slotW - 5) - pw, (float)by + 6.f, Color{ 205, 140, 255, 255 }, 8);
         }
 
-        // Bottom row (by + 17): Compact L# on left, crisp HP & MP gauges on right
+        // Bottom row (by + 20): Compact L# on left, crisp HP & MP gauges on right
         char lv[16];
         snprintf(lv, sizeof(lv), "L%d", h.level);
-        drawText(lv, (float)x + 22.f, (float)by + 17.f, Color{ 175, 192, 232, 255 }, 8);
-        drawBar((float)x + 53.f, (float)by + 16.f, 53.f, 5.f, (float)h.hp / std::max(1, h.maxHp),
+        drawText(lv, (float)x + 36.f, (float)by + 20.f, Color{ 175, 192, 232, 255 }, 8);
+        drawBar((float)x + 65.f, (float)by + 19.f, 52.f, 5.f, (float)h.hp / std::max(1, h.maxHp),
                 h.poisoned ? Color{ 187, 138, 192, 255 } : Color{ 96, 220, 120, 255 }, Color{ 20, 28, 58, 255 });
-        drawBar((float)x + 53.f, (float)by + 23.f, 53.f, 4.f, (float)h.mp / std::max(1, h.maxMp),
+        drawBar((float)x + 65.f, (float)by + 26.f, 52.f, 4.f, (float)h.mp / std::max(1, h.maxMp),
                 Color{ 96, 160, 255, 255 }, Color{ 20, 28, 58, 255 });
-        if (i < 2) DrawRectangle(x + slotW - 2, by + 5, 1, 21, Color{ 76, 92, 144, 200 });
+        if (i < 2) DrawRectangle(x + slotW - 2, by + 5, 1, 28, Color{ 76, 92, 144, 200 });
     }
 
     // Active quest tracker (top-right, below Gil box)
@@ -772,12 +752,12 @@ void drawDialogBox() {
     drawWindow({ bx, y, w, h });
     if (line.face >= 0 && line.face < FACE_COUNT && g.assets.face[line.face].id) {
         Texture2D& f = g.assets.face[line.face];
-        DrawRectangle((int)bx + 9, (int)y + 13, 50, 50, Color{ 10, 14, 28, 255 });
-        DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height }, { bx + 10, y + 14, 48, 48 },
+        DrawRectangle((int)bx + 9, (int)y + 11, 66, 66, Color{ 10, 14, 28, 255 });
+        DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height }, { bx + 10, y + 12, 64, 64 },
                        { 0, 0 }, 0.0f, WHITE);
-        DrawRectangleLines((int)bx + 10, (int)y + 14, 48, 48, Color{ 255, 232, 150, 255 });
+        DrawRectangleLines((int)bx + 10, (int)y + 12, 64, 64, Color{ 255, 232, 150, 255 });
     }
-    float tx = bx + ((line.face >= 0) ? 68.0f : 14.0f);
+    float tx = bx + ((line.face >= 0) ? 84.0f : 14.0f);
     float maxW = (bx + w) - tx - 14.0f;
     if (!line.speaker.empty()) {
         Vector2 nsz = measureText(line.speaker.c_str(), 8);
@@ -853,23 +833,21 @@ void drawTitleScreen() {
             float cx = walk + (float)i * 30.0f;
             float fy = gy + sinf(g.titleT * 9.0f + (float)i * 1.3f) * 1.5f;
             DrawEllipse((int)cx, (int)fy, 6.0f, 2.5f, Fade(BLACK, 0.28f));
-            int frame = 1 + ((int)(g.titleT * 7.0f + (float)i) & 1);
-            Rectangle src{ (float)(frame * 24), 64.0f, 24, 32 };
-            DrawTexturePro(sheet, src, { floorf(cx - 12.0f), floorf(fy - 32.0f), 24, 32 }, { 0, 0 }, 0.0f, WHITE);
+            drawCharFrame(sheet, 2, false, true, g.titleT + (float)i * 0.14f, cx, fy);
         }
         Texture2D& sl = g.assets.enemy[EN_SLIME];
         if (sl.id) {
             float cx = walk - 34.0f;
             float fy = gy + sinf(g.titleT * 6.0f) * 1.5f;
             DrawEllipse((int)cx, (int)fy, 8.0f, 3.0f, Fade(BLACK, 0.28f));
-            texFoot(sl, cx, fy, WHITE, 0.62f);
+            texFoot(sl, cx, fy, WHITE, 1.0f);
         }
     }
 
     DrawRectangle(0, g.vh - 28, g.vw, 28, Color{ 6, 8, 18, 185 });
     drawTextCentered("arrows / mouse to choose - SPACE to begin",
                      g.vw * 0.5f, (float)g.vh - 23.0f, Color{ 222, 230, 252, 240 }, 8);
-    drawTextCentered("(C) 2026 A Place for Agents - art: OpenRTP - v0.2.0",
+    drawTextCentered("(C) 2026 A Place for Agents - Valley Hearth - v0.2.0",
                      g.vw * 0.5f, (float)g.vh - 11.0f, Color{ 182, 194, 224, 210 }, 8);
     drawToast();
 }
