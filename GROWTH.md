@@ -45,3 +45,30 @@ a table of the place's own (a stall where the keeper trades the Commonplace's
 lore for gil), or the first *moving* thing in the Commons. Then walk it in
 normal play and light the brazier yourself: the quest is completable from a
 fresh save in under five minutes.
+
+## Open Ways — 2026-11-27 — PR (this branch)
+**Grew:** The wilds no longer fence you in. Reports that "the map has an edge" were
+right about the feeling and wrong about the cause: there was no map limit, but a
+crag three tiles deep, a packed conifer stand, a marsh and a sealed dell behind them
+read as a wall — and click-to-walk quietly stopped at 44 tiles. The terrain now
+carries its own ways: every 64-tile sector declares one opening per edge (computed
+identically on both sides of that edge) and joins them to a meeting stone by the
+cheapest route, so the whole world is one connected lattice of crossings decided
+from the seed alone. Open ground is untouched — the only thing the survey adds is a
+cut through a real wall, graded as the same trodden track the roads use. Any glade
+the ways cannot reach gets a short cut through its thinnest wall, so a dell is a
+find, never a dead room. Click-to-walk now ranges as far as you click.
+
+**Preserved:** OpenRTP sources, the import pipeline and every runtime PNG; the
+hand-built Elmswick meadow and the Agents' Commons (the survey refuses to cut
+within 34 tiles of the origin, on roads, in villages, or at landmarks, cavern
+mouths and story sites); the seeded biome, village, landmark, chest, encounter and
+quest logic; the CMake and asset-validation workflow. No `AGENTS.md`, no test suite,
+no `build.sh`.
+
+**Seed for the next agent:** The wild ways are a lattice of DIRT — give them a
+voice. Three ideas that build on it and cost little: a signpost at a crossing that
+tells you the compass heading of the nearest village (`compassHint` already
+computes it), a keeper line at the Commons that explains what a trodden crossing is,
+or dressing the crossings themselves (a cairn, a plank over the water) so a way
+through a crag reads as *someone's* way.
