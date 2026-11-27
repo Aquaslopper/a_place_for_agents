@@ -295,6 +295,33 @@ void questAdvance(int id, int amount) {
     q.progress += amount;
 }
 
+const char* dunThemeName(int theme) {
+    switch (theme) {
+        case TH_MOSSY:     return "Mossy Warren";
+        case TH_ROOTED:    return "Rooted Hollow";
+        case TH_AMBER:     return "Amber Vault";
+        case TH_MIRE:      return "Mire Grotto";
+        case TH_HEATH:     return "Stonevault";
+        case TH_FROST:     return "Frostvault";
+        case TH_SUNSCORCH: return "Sunscorch Delve";
+        case TH_CRYPT:     return "Deep Crypt";
+        default:           return "Cavern";
+    }
+}
+MusicCue dunThemeMusic(int theme) {
+    switch (theme) {
+        case TH_MOSSY:     return MUS_WOOD;
+        case TH_ROOTED:    return MUS_WOOD;
+        case TH_AMBER:     return MUS_WOOD;
+        case TH_MIRE:      return MUS_FEN;
+        case TH_HEATH:     return MUS_PASS;
+        case TH_FROST:     return MUS_PASS;
+        case TH_SUNSCORCH: return MUS_DUNES;
+        case TH_CRYPT:     return MUS_FEN;
+        default:           return MUS_FEN;
+    }
+}
+
 // ================================================================ audio helpers
 void playSoundIf(Sound& s) {
     if (s.frameCount > 0) PlaySound(s);
@@ -358,6 +385,36 @@ bool loadAllAssets() {
     a.stoneFloor = loadTex(d, "tiles/stone_floor.png", false);
     a.carpet = loadTex(d, "tiles/carpet.png", false);
     a.pebble = loadTex(d, "tiles/pebble.png", false);
+    // dungeon theme floors — all are existing 16×16 runtime tiles, already in ART_MANIFEST.md
+    a.dungeonFloor = loadTex(d, "tiles/dungeon_floor.png", false);
+    a.flagstoneFloor = loadTex(d, "tiles/flagstone.png", false);
+    a.cobbleFloor = loadTex(d, "tiles/cobble.png", false);
+    a.sandFloor = loadTex(d, "tiles/sand.png", false);
+    a.tundraFloor = loadTex(d, "tiles/tundra.png", false);
+    a.iceFloor = loadTex(d, "tiles/ice.png", false);
+    a.snowFloor = loadTex(d, "tiles/snow.png", false);
+    a.swampFloor = loadTex(d, "tiles/swamp.png", false);
+    a.arcaneFloor = loadTex(d, "tiles/arcane.png", false);
+    a.dirtFloor = loadTex(d, "tiles/dirt.png", false);
+    a.iceCrack = loadTex(d, "tiles/ice_crack.png", false);
+    // per-theme floor atlas (each theme picks a distinct base tile; tint adds mood)
+    a.dunFloor[TH_MOSSY]     = a.stoneFloor.id ? a.stoneFloor : a.dungeonFloor;
+    a.dunFloor[TH_ROOTED]    = a.dirtFloor.id ? a.dirtFloor : a.stoneFloor;
+    a.dunFloor[TH_AMBER]     = a.tileFloor.id ? a.tileFloor : a.stoneFloor;
+    a.dunFloor[TH_MIRE]      = a.swampFloor.id ? a.swampFloor : a.dungeonFloor;
+    a.dunFloor[TH_HEATH]     = a.cobbleFloor.id ? a.cobbleFloor : a.brickFloor[0];
+    a.dunFloor[TH_FROST]     = a.iceFloor.id ? a.iceFloor : a.snowFloor;
+    a.dunFloor[TH_SUNSCORCH] = a.sandFloor.id ? a.sandFloor : a.dungeonFloor;
+    a.dunFloor[TH_CRYPT]     = a.flagstoneFloor.id ? a.flagstoneFloor : a.dungeonFloor;
+    // per-theme wall tints reuse the brick atlas with theme colour; keep distinct warm/cold
+    a.dunWall[TH_MOSSY]     = a.brickFloor[1];
+    a.dunWall[TH_ROOTED]    = a.brickFloor[0];
+    a.dunWall[TH_AMBER]     = a.brickFloor[0];
+    a.dunWall[TH_MIRE]      = a.brickFloor[1];
+    a.dunWall[TH_HEATH]     = a.brickFloor[0];
+    a.dunWall[TH_FROST]     = a.brickFloor[1];
+    a.dunWall[TH_SUNSCORCH] = a.brickFloor[0];
+    a.dunWall[TH_CRYPT]     = a.brickFloor[1];
 
     const char* scenes[BI_COUNT] = {"meadow", "forest", "amber", "fen", "heath", "frost", "dunes"};
     for (int i=0; i<BI_COUNT; ++i)

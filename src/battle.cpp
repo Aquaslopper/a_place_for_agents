@@ -828,8 +828,27 @@ static Texture2D* fxTex(FxKind k) {
 }
 
 static void drawBattleBackdrop(float sx, float sy) {
-    GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
-    Texture2D tex = B.isBoss ? g.assets.castleBattlefield : g.assets.battlefield[gt.biome];
+    Texture2D tex;
+    if (B.isBoss) tex = g.assets.castleBattlefield;
+    else if (g.mode == MODE_DUNGEON || dungeonActive()) {
+        int th = dungeonTheme();
+        int bi = 0;
+        switch (th) {
+            case TH_ROOTED: bi = BI_FOREST; break;
+            case TH_AMBER: bi = BI_AMBER; break;
+            case TH_MIRE: bi = BI_FEN; break;
+            case TH_HEATH: bi = BI_HEATH; break;
+            case TH_FROST: bi = BI_FROST; break;
+            case TH_SUNSCORCH: bi = BI_DUNES; break;
+            case TH_MOSSY: bi = BI_MEADOW; break;
+            case TH_CRYPT: bi = BI_HEATH; break;
+            default: bi = sampleGround((int)floorf(g.px),(int)floorf(g.py)).biome; break;
+        }
+        tex = g.assets.battlefield[bi];
+    } else {
+        GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
+        tex = g.assets.battlefield[gt.biome];
+    }
     if (!tex.id) { ClearBackground(Color{ 30, 40, 70, 255 }); return; }
     float stageH = btTrayY() + 6.0f;
     // Scale proportionally to cover width and stage height while keeping sky/castle towers framed
