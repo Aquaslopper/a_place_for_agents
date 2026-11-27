@@ -72,3 +72,61 @@ tells you the compass heading of the nearest village (`compassHint` already
 computes it), a keeper line at the Commons that explains what a trodden crossing is,
 or dressing the crossings themselves (a cairn, a plank over the water) so a way
 through a crag reads as *someone's* way.
+
+## The Survey — 2026-11-27 — PR (this branch)
+**Grew:** The procedural world, at the root rather than at the symptoms. Reports
+that "it builds but there are no villages and no dungeons" were right, and the
+cause was not missing code — it was four unrelated dice rolls that each decided
+whether a place existed (villages 32% per 96-tile sector, landmarks 50% per 128,
+caverns 58% per 64, every one of them rejecting its own neighbours). Measured
+from Elmswick with a headless census, the first other village was **243 tiles**
+away — sixteen screens of terrain — and one of the five landmark kinds (Ruins)
+**never appeared at all**, because its kind was sliced out of the same hash bits
+that gated its sector. A world of terrain with almost nowhere in it.
+
+`src/atlas.cpp` — **the Survey** — now decides where everything is, once:
+- **Three lattices, every cell owed a place.** Villages one per 112 tiles,
+  ruins/towers/castles/stones/camps one per 96, cavern mouths one per 88.
+  Placement is a pure function of `(worldSeed, cell)` with a fixed ladder of 25
+  candidate spots, never further from the cell's heart than half the gap between
+  cells — so two towns cannot crowd each other and a cell only goes empty when
+  it is genuinely open sea.
+- **Kinds roll from their own hash,** so all five ruin-kinds appear evenly.
+- **Roads.** The lattice is joined by the King's Roads: A* over a terrain-cost
+  field (water expensive but crossable — the ground lays planks where a road
+  meets it; towns are skirted so a road arrives at a gate). Two tiles of packed
+  dirt, nothing grows on them, and Elmswick sends one out of each of her gates.
+  The Commons precinct and the three story sites are kept clear.
+- **Names.** 128-tile regions get a stable name from a lead + biome suffix
+  ("Millbrook", "Thornmire", "Ashenfell"); crossing into one raises a banner.
+- **The Journal gains a third tab, THE SURVEY** — a field sketch of the country
+  around the party: biome terrain, roads, settlements, caverns, landmarks,
+  region titles and a party arrow, with the nearest town and cavern spelled out
+  underneath. Labels place nearest-first and never overlap; roads are clipped to
+  the panel.
+- **Places name themselves in the field** once the party is close enough to see
+  them, so a ruin on the horizon is a destination instead of scenery.
+
+Same disc, seed 1337, radius 300, before → after: villages **4 → 32** (nearest
+walk 243 → 76 tiles), caverns **14 → 40**, landmark kinds **4 → 5 present**,
+**36/36** villages within 22 tiles of a road, **0** road tiles inside the
+Commons, **0** within 12 tiles of any story site. It is also faster: a field step
+(a screen of ground + props + survey) went **9.56 ms → 1.96 ms**, because
+placement is cached per lattice cell instead of re-probed on every query.
+
+**Preserved:** OpenRTP sources, the import pipeline and every runtime PNG (no new
+art, nothing regenerated); the hand-built Elmswick and the Agents' Commons;
+Hollow Hill, the north-road mouth and the three story sites — the Survey defers
+to them and keeps its distance; the wild-way lattice and its crossings; the noise,
+biome and authored-trail fields; chests, field monsters, NPCs, quests, battles,
+dungeons, shop/inn/forge, score and UI finish. `SAVE_VERSION` stays 5: the survey
+page is derived from the seed, nothing new is written, so old saves load
+unchanged. No `AGENTS.md`, no test suite, no `build.sh`.
+
+**Seed for the next agent:** The roads exist and they are empty. Give them a
+voice — a signpost at a junction that spells out `compassHint` to the nearest
+village or cavern (the Survey already guarantees one within a screen or two), or
+a milestone/cairn/wayside shrine picked per region so a road reads as *someone's*
+road. Beyond that: the fields between the roads are still quiet. Every ruin is
+now guaranteed to exist and to be findable, so pick one and give it a door that
+remembers what it used to be.

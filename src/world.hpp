@@ -26,6 +26,18 @@ inline float buildingCenterX(const Building& b) { return (buildingX0(b) + b.w * 
 inline int   buildingDoorTx(const Building& b)  { return buildingX0(b) + b.w / 2; }
 inline int   buildingDoorTy(const Building& b)  { return b.ty + 1; }
 
+// A cheap, cache-free read of the terrain. It runs the same noise generateGround
+// starts from, one layer below every cache, so the Survey (src/atlas.cpp) can
+// decide where a village or a cave mouth belongs without calling sampleGround()
+// — which calls back into the Survey, and would depend on visit order.
+struct SurveyTerrain {
+    float elevation = 0.0f;
+    float brookDistance = 99.0f;
+    Biome biome = BI_MEADOW;
+    bool water = false, deep = false, crag = false, ice = false, swamp = false;
+};
+SurveyTerrain worldSurveyTerrain(int tx, int ty);
+
 // Which prop stands on a tile (P_NONE when the tile is clear). The renderer,
 // the collision test and the pathfinder all read this, so they cannot disagree.
 PropKind propAt(int tx, int ty);

@@ -646,14 +646,28 @@ void drawWorld() {
         char qbuf[2] = { qm, 0 };
         drawWorldLabel(qbuf, cx, fy - 42.0f + bob, qc, 8);
     }
+    // Every surveyed place names itself once the party is close enough to see
+    // it, so a ruin or a camp on the horizon is something to walk toward rather
+    // than another piece of scenery.
     for (const auto& lm : visibleLandmarks) {
-        if (lm.kind != LK_CAVERN) continue;
+        if (std::max(abs(lm.tx - (int)floorf(g.px)), abs(lm.ty - (int)floorf(g.py))) > 34) continue;
         int sx, sy;
-        bool story = startCavernSite(sx, sy) && lm.tx == sx && lm.ty == sy;
+        bool storyCave = lm.kind == LK_CAVERN && startCavernSite(sx, sy) && lm.tx == sx && lm.ty == sy;
+        const char* label = "LANDMARK";
+        Color col{ 244, 216, 159, 255 };
+        switch (lm.kind) {
+            case LK_CAVERN: label = storyCave ? "HOLLOW HILL" : "CAVERN";
+                            col = Color{ 244, 216, 159, 255 }; break;
+            case LK_RUINS:  label = "RUINS";          col = Color{ 214, 202, 178, 255 }; break;
+            case LK_TOWER:  label = "WATCHTOWER";     col = Color{ 214, 222, 240, 255 }; break;
+            case LK_CASTLE: label = "CASTLE";         col = Color{ 236, 214, 176, 255 }; break;
+            case LK_STONES: label = "STANDING STONES"; col = Color{ 206, 226, 214, 255 }; break;
+            case LK_CAMP:   label = "CAMP";           col = Color{ 240, 196, 148, 255 }; break;
+            default: break;
+        }
         float cx = (lm.tx + 0.5f) * TILE - g.camX;
         float fy = (lm.ty + 1.0f) * TILE - g.camY;
-        drawWorldLabel(story ? "HOLLOW HILL" : "CAVERN", cx, fy - 47,
-                       Color{244, 216, 159, 255}, 8);
+        drawWorldLabel(label, cx, fy - 47, col, 8);
     }
     for (const auto& m : gFieldMonsters) {
         float dx = g.px - m.x, dy = g.py - m.y;
@@ -671,6 +685,21 @@ void drawWorld() {
         float sx = BOSS_KING_X * TILE - g.camX;
         float sy = (BOSS_KING_Y + 0.45f) * TILE - g.camY;
         drawWorldLabel("SLIME KING", sx, sy - 48.0f + bob, Color{ 255, 228, 128, 255 }, 8);
+    }
+
+    // The Survey names the country underfoot; crossing into a new one raises its
+    // name briefly, the way an old map writes a region in the middle of its hills.
+    if (!g.regionName.empty() && g.regionBannerT > 0.0f) {
+        float a = std::min(1.0f, g.regionBannerT * 1.5f);
+        if (4.0f - g.regionBannerT < 0.35f) a *= (4.0f - g.regionBannerT) / 0.35f;
+        Vector2 rs = measureText(g.regionName.c_str(), 8);
+        float cx = (float)g.vw * 0.5f;
+        drawWorldLabel(g.regionName.c_str(), cx, 26.0f,
+                       Fade(Color{ 255, 238, 190, 255 }, a * 0.95f), 8);
+        // two ink rules either side, so the name reads as a map's region title
+        Color rule = Fade(Color{ 236, 214, 168, 255 }, a * 0.55f);
+        DrawRectangle((int)(cx - rs.x * 0.5f) - 26, 30, 18, 1, rule);
+        DrawRectangle((int)(cx + rs.x * 0.5f) + 8, 30, 18, 1, rule);
     }
 
     g.camX = saveCamX;

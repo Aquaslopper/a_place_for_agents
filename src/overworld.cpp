@@ -2,6 +2,7 @@
 #include "game.hpp"
 #include "commons.hpp"
 #include "world.hpp"
+#include "atlas.hpp"
 #include "battle.hpp"
 #include <cstdio>
 
@@ -787,6 +788,7 @@ void overworldUpdate(float dt) {
     if (g.shakeT > 0) g.shakeT = std::max(0.0f, g.shakeT - dt);
 
     updateClouds(dt);
+    atlasUpdate(g.px, g.py, dt);   // name the country; raise the banner on a border
     villageLoadAt(g.px, g.py);
     npcsLoadFor(g.px, g.py);
     chestsLoadFor(g.px, g.py);
