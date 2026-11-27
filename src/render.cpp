@@ -617,9 +617,9 @@ void drawHUD() {
         char lv[24]; snprintf(lv,sizeof(lv),"Lv.%d",h.level);
         drawText(lv,x+20.f,by+14.f,Color{165,180,215,255},8);
         // HP/MP gauges with white SNES borders.
-        drawBar(x+44,by+15,32,4,(float)h.hp/std::max(1,h.maxHp),
+        drawBar(x+44.f,by+15.f,32.f,4.f,(float)h.hp/std::max(1,h.maxHp),
                 h.poisoned ? Color{187,138,192,255} : Color{96,220,120,255}, Color{24,34,68,255});
-        drawBar(x+44,by+21,32,3,(float)h.mp/std::max(1,h.maxMp),
+        drawBar(x+44.f,by+21.f,32.f,3.f,(float)h.mp/std::max(1,h.maxMp),
                 Color{96,160,255,255}, Color{24,34,68,255});
         if (h.ko) drawText("KO",x+20.f,by+21.f,Color{255,110,110,255},8);
         else if (h.poisoned) drawText("PSN",x+20.f,by+21.f,Color{195,130,255,255},8);

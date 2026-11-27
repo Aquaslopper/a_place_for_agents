@@ -5,6 +5,15 @@
 #include "battle.hpp"
 #include <cstdio>
 
+// The Windows build is a GUI-subsystem exe (WIN32 in CMake, so no console
+// window), but the game still uses the plain main() entry point. MSVC's
+// windows subsystem expects WinMain by default; point the linker at the
+// console-style startup so main() is used. (MinGW's -mwindows already
+// provides a WinMain that calls main(), so no pragma is needed there.)
+#if defined(_MSC_VER)
+#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
+#endif
+
 static void titleUpdate(float dt) {
     g.titleT += dt;
     updateClouds(dt);

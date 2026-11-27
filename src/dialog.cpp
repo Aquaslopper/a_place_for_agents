@@ -1024,7 +1024,7 @@ void drawMenuScreen() {
                 "- Follow the North Road to find the Castle of Elm.",
             };
             for (int i = 0; i < 10; i++)
-                drawText(help[i], 92, 76 + i * 14, Color{ 225, 235, 255, 255 }, 8);
+                drawText(help[i], 92.0f, 76.0f + i * 14.0f, Color{ 225, 235, 255, 255 }, 8);
             drawTextCentered("SPACE or CLICK to close", VRES_W * 0.5f, 224, Color{ 255, 232, 150, 255 }, 8);
         }
     }

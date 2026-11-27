@@ -36,6 +36,8 @@ target_link_libraries(aplaceforagents PRIVATE raylib)
 
 if (MSVC)
     target_compile_options(aplaceforagents PRIVATE /W3 /utf-8)
+    # getenv() is used for optional env overrides; silence the C4996 noise.
+    target_compile_definitions(aplaceforagents PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(aplaceforagents PRIVATE -Wall -Wno-unused-parameter)
 endif()
