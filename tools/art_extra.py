@@ -1,8 +1,8 @@
 """art_extra.py — generate ONLY the new content assets (dungeon & village 2.0).
 
-Unlike build_art.py this never rewrites existing art: it adds the cave mouth,
-dungeon stair tiles, the blacksmith's forge exterior and the new item icons
-that arrived with the dungeon / equipment expansion.
+Rebuild the cave mouth, dungeon stair tiles, blacksmith exterior and expanded
+item icons without regenerating the rest of the art. The forge shares the
+OpenRTP material/door composition used by tools/village_art.py.
 
     python3 tools/art_extra.py
 """
@@ -38,67 +38,51 @@ def save(img, sub, name):
 
 # ================================================================== cave mouth
 def cave_mouth():
-    """48x40 overworld cavern entrance: rocky mound, dark arch, lantern post."""
-    w, h = 48, 40
-    img = canvas(w, h)
+    """Walking-scale stone entrance: broken strata, deep arch and worn steps.
+
+    Use the village/landscape mineral palette, not smooth shaded circles.
+    The bottom-centre threshold matches the shared three-cell collision anchor.
+    """
+    img = canvas(48, 48)
     d = ImageDraw.Draw(img)
-    ROCK = ramp(H("#8e8b96"), shadow_hue=(-12, -18, 24), light_hue=(10, 8, -12))
-    ROCK_D = ramp(H("#6f6c7a"))
-    DARK = (14, 10, 20)
-
-    # --- grass skirt along the bottom so it beds into the turf
-    for x in range(2, w - 2):
-        put(img, x, h - 2, H("#3f7a38"))
-        put(img, x, h - 1, H("#2f5f2c"))
-
-    # --- mound silhouette: stacked rock lumps
-    d.ellipse([1, 8, 30, 39], fill=ROCK[1] + (255,))
-    d.ellipse([16, 3, 47, 39], fill=ROCK[1] + (255,))
-    d.ellipse([6, 14, 44, 40], fill=ROCK[1] + (255,))
-    # lit crowns (light from upper-left)
-    d.ellipse([5, 9, 26, 26], fill=ROCK[2] + (255,))
-    d.ellipse([8, 11, 22, 21], fill=ROCK[3] + (255,))
-    d.ellipse([26, 6, 45, 24], fill=ROCK[2] + (255,))
-    d.ellipse([30, 8, 42, 18], fill=ROCK[3] + (255,))
-
-    # --- dark arch opening, centred low
-    ax0, ax1 = 15, 34
-    ay1 = 38
-    d.polygon([(ax0, ay1), (ax0, 24), (ax0 + 2, 18), ((ax0 + ax1) // 2, 15),
-               (ax1 - 2, 18), (ax1, 24), (ax1, ay1)], fill=DARK + (255,))
-    # arch rim highlight
-    for i, x in enumerate(range(ax0 - 1, (ax0 + ax1) // 2 + 1)):
-        t = i / max(1, (ax1 - ax0) // 2)
-        y = int(24 - 8 * (1 - (2 * t - 1) ** 2))
-        put(img, x, y, ROCK[3])
-        put(img, x, y + 1, ROCK[2])
-    for x in range((ax0 + ax1) // 2, ax1 + 1):
-        t = (x - (ax0 + ax1) // 2) / max(1, (ax1 - ax0) // 2)
-        y = int(16 + 8 * t * t)
-        put(img, x, y, ROCK[2])
-    # inner glow: faint warm lantern light on the cave floor
-    for y in range(31, 38):
-        for x in range(ax0 + 2, ax1 - 1):
-            dist = abs(x - (ax0 + ax1) // 2) / ((ax1 - ax0) * 0.5)
-            if dist < 0.75 and img.getpixel((x, y))[3]:
-                put(img, x, y, mixc(DARK, (210, 150, 70), 0.28 * (1 - dist)))
-
-    # --- boulders flanking the mouth
-    for (cx, cy, r) in ((7, 33, 5), (41, 34, 4), (11, 27, 3)):
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ROCK_D[2] + (255,))
-        d.ellipse([cx - r + 1, cy - r, cx + r - 1, cy - 1], fill=ROCK_D[3] + (255,))
-
-    # --- lantern post beside the entrance (call to adventure)
-    px_, py_ = 40, 20
-    for y in range(py_, 38):
-        put(img, px_, y, H("#6b4a2a"))
-        put(img, px_ + 1, y, H("#543a22"))
-    d.rectangle([px_ - 3, py_ - 6, px_ + 4, py_ - 1], fill=H("#4a4458") + (255,))
-    d.rectangle([px_ - 2, py_ - 5, px_ + 3, py_ - 2], fill=H("#f0c060") + (255,))
-    put(img, px_ - 1, py_ - 4, H("#ffe8a0"))
-    d.line([(px_ - 4, py_ - 7), (px_ + 5, py_ - 7)], fill=H("#3a3448") + (255,))
-
-    return outline(img, OUTL)
+    edge = '#354253'; dark = '#49545d'; mid = '#616a70'
+    light = '#81898a'; crown = '#b8b6a4'
+    profile = [(1, 45), (2, 31), (5, 26), (5, 18), (10, 14), (13, 6),
+               (21, 3), (27, 5), (33, 2), (40, 10), (41, 18), (46, 24), (47, 45)]
+    d.polygon(profile, fill=mid, outline=edge)
+    # Broad angular planes and horizontal seams break up the mound.
+    for points, col in [([(5, 27), (10, 15), (14, 7), (22, 4), (19, 17), (12, 25)], light),
+                        ([(22, 5), (27, 7), (33, 3), (39, 11), (30, 13), (24, 19), (19, 17)], '#9ca29b'),
+                        ([(33, 14), (40, 12), (41, 22), (46, 26), (38, 30), (29, 24)], dark),
+                        ([(4, 32), (12, 27), (16, 31), (12, 42), (2, 44)], light),
+                        ([(35, 31), (43, 28), (46, 38), (43, 44), (35, 44)], light)]:
+        d.polygon(points, fill=col)
+    d.line([(13, 7), (20, 5), (25, 7)], fill=crown)
+    d.line([(29, 7), (33, 5), (38, 11)], fill=crown)
+    d.line([(6, 26), (12, 23), (18, 23)], fill=dark)
+    d.line([(27, 14), (32, 12), (38, 14)], fill=dark)
+    d.line([(8, 34), (6, 39), (10, 42)], fill=dark)
+    d.line([(39, 33), (42, 36), (40, 42)], fill=dark)
+    # Recessed stone arch, lit lip and almost-black interior.
+    arch = [(14, 44), (14, 28), (17, 20), (22, 16), (28, 17), (33, 22), (35, 30), (35, 44)]
+    d.polygon(arch, fill=dark)
+    d.line([(13, 40), (13, 28), (16, 20), (22, 15), (28, 16)], fill=crown)
+    d.polygon([(17, 43), (17, 29), (20, 23), (24, 21), (28, 23), (31, 29), (32, 43)], fill='#1d2734')
+    d.polygon([(20, 39), (20, 29), (23, 25), (26, 25), (29, 30), (29, 39)], fill='#111922')
+    # Broken, receding threshold stones lead visibly into the opening.
+    for x0, x1, y, col in [(19, 29, 39, dark), (17, 31, 42, mid), (14, 34, 45, light)]:
+        d.line((x0, y, x1, y), fill=col, width=2)
+        d.line((x0, y, x1, y), fill='#9ca29b')
+    d.line((25, 43, 25, 46), fill=dark)
+    # Sparse lichen and warm lamp: colour accents, not a hard grass rectangle.
+    for x, y in [(6, 29), (8, 28), (11, 16), (36, 17), (39, 43), (5, 43)]:
+        d.line((x, y, x+2, y), fill='#759475')
+    d.line((39, 23, 39, 44), fill='#5b453d', width=2)
+    d.rectangle((36, 24, 42, 31), fill=edge)
+    d.rectangle((37, 25, 41, 29), fill='#c19657')
+    d.rectangle((38, 26, 40, 28), fill='#ebc88c')
+    d.line((36, 23, 42, 23), fill=crown)
+    return img
 
 
 # ================================================================== stairs
@@ -143,57 +127,84 @@ def stair_up():
 
 # ================================================================== smithy
 def smithy():
-    """70x61 forge exterior: dark slate roof, stone walls, chimney smoke, anvil sign."""
-    w, h = 70, 61
-    img = canvas(w, h)
+    """Textured masonry and slate from the same material bank as Elmswick.
+
+    Keep the centre door readable and put the fire in a recessed forge bay,
+    not across the entrance. No baked smoke blobs: the chimney is architecture.
+    """
+    from village_art import cottage, TIMBER, WOOD_LIGHT
+    img = cottage('slate', 76, 64, kind=10, gable=False, stone=True)
     d = ImageDraw.Draw(img)
-    SLATE = ramp(H("#4a4f66"), shadow_hue=(-8, -12, 18), light_hue=(8, 8, -10))
-    STONE_W = ramp(H("#b9b0a0"), shadow_hue=(-8, -12, 20), light_hue=(8, 6, -8))
-    WOOD = AO.WOOD
-    WOOD_D = AO.WOOD_D
+    # Broad stone stack with individually coursed blocks and soot-dark throat.
+    d.rectangle((53, 5, 62, 26), fill='#81898a', outline=TIMBER)
+    for y in (10, 15, 20):
+        d.line((54, y, 61, y), fill='#49545d')
+        d.line((58 if y != 15 else 56, y-4, 58 if y != 15 else 56, y-1), fill='#616a70')
+    d.rectangle((51, 3, 64, 7), fill='#b8b6a4', outline=TIMBER)
+    d.line((54, 4, 61, 4), fill='#39434d')
+    # Replace the left cottage window with an open brick forge bay.
+    d.rectangle((7, 40, 25, 58), fill=TIMBER)
+    d.rectangle((8, 41, 24, 56), fill='#39434d')
+    d.rectangle((10, 44, 22, 55), fill='#583e41')
+    d.rectangle((11, 48, 21, 54), fill='#b9694f')
+    d.line((12, 53, 20, 53), fill='#efa974', width=2)
+    d.line((15, 51, 16, 49), fill='#ebc88c', width=2)
+    # Iron anvil silhouetted against the banked coals, stone workbench sill.
+    d.polygon([(10, 47), (23, 47), (20, 50), (18, 50), (18, 53), (13, 53),
+               (13, 51), (15, 50), (12, 50)], fill='#354253')
+    d.line((10, 46, 23, 46), fill='#819aa7')
+    d.rectangle((6, 57, 26, 59), fill='#616a70')
+    d.line((7, 57, 25, 57), fill='#b8b6a4')
+    # Small hanging trade sign beside, rather than over, the door.
+    d.line((52, 35, 68, 35), fill=TIMBER, width=2)
+    d.line((64, 35, 64, 39), fill='#a79b7a')
+    d.rectangle((57, 39, 71, 50), fill=TIMBER)
+    d.rectangle((58, 40, 70, 49), fill=WOOD_LIGHT)
+    d.polygon([(59, 42), (69, 42), (67, 44), (65, 44), (65, 46),
+               (67, 47), (61, 47), (62, 45), (62, 44), (60, 44)], fill='#354253')
+    return img
 
-    # body
-    AO._house_common(img, w, h, STONE_W, SLATE, SLATE, WOOD_D, windows=False)
 
-    # chimney with smoke puffs
-    d.rectangle([46, 6, 56, 24], fill=STONE_W[2] + (255,))
-    d.rectangle([44, 4, 58, 8], fill=STONE_W[3] + (255,))
-    for (sx, sy, r) in ((52, 2, 4), (57, -1 + 3, 3), (49, 0, 2)):
-        d.ellipse([sx - r, sy - r, sx + r, sy + r], fill=(210, 210, 220, 160))
+def forge_hearth():
+    """48px masonry furnace with a hood, banked coals and an iron grate."""
+    from village_art import pattern, STONE
+    from landscape_art import ramp as material
+    from rtp_sheet import tile, EXT
+    img = canvas(48, 48)
+    d = ImageDraw.Draw(img)
+    stone = material(tile(EXT, 13, 1), STONE)
+    pattern(img, [(5, 46), (5, 24), (12, 16), (15, 2), (34, 2), (37, 16), (43, 24), (43, 46)], stone)
+    d.line([(5, 46), (5, 24), (12, 16), (15, 2), (34, 2), (37, 16), (43, 24), (43, 46)], fill='#354253')
+    d.rectangle((11, 24, 37, 42), fill='#354253')
+    d.polygon([(13, 41), (13, 30), (17, 25), (31, 25), (35, 30), (35, 41)], fill='#583e41')
+    for x, y in [(15, 37), (20, 34), (25, 36), (30, 33)]:
+        d.polygon([(x-2, 40), (x, y-5), (x+1, y-2), (x+3, y-4), (x+4, 40)], fill='#b9694f')
+        d.line((x, 39, x+1, y), fill='#efa974', width=2)
+    for x in range(14, 36, 4): d.line((x, 38, x, 42), fill='#465873')
+    d.line((12, 41, 36, 41), fill='#819aa7')
+    d.rectangle((3, 44, 45, 47), fill='#49545d')
+    d.line((4, 44, 44, 44), fill='#b8b6a4')
+    d.line((10, 20, 38, 20), fill='#49545d', width=2)
+    d.line((11, 19, 37, 19), fill='#9ca29b')
+    return img
 
-    # forge glow in the doorway
-    dx0, dx1 = w // 2 - 6, w // 2 + 6
-    base_y = h - 1
-    d.rectangle([dx0, base_y - 18, dx1, base_y], fill=(30, 22, 24, 255))
-    d.rectangle([dx0 + 2, base_y - 10, dx1 - 2, base_y - 1], fill=H("#e8862c") + (255,))
-    d.rectangle([dx0 + 3, base_y - 8, dx1 - 3, base_y - 3], fill=H("#f8c040") + (255,))
-    put(img, w // 2, base_y - 6, H("#ffe8a0"))
 
-    # wide anvil window to the left of the door
-    d.rectangle([9, 32, 27, 46], fill=H("#3a3448") + (255,))
-    d.rectangle([10, 33, 26, 45], fill=H("#e0a040") + (255,))
-    # anvil silhouette inside the window
-    d.rectangle([13, 39, 23, 41], fill=(30, 24, 34, 255))
-    d.rectangle([15, 41, 21, 44], fill=(30, 24, 34, 255))
-    d.rectangle([12, 38, 16, 39], fill=(30, 24, 34, 255))
-    d.line([(18, 33), (18, 45)], fill=WOOD_D[1] + (255,))
-
-    # hanging anvil sign on the right
-    d.rectangle([40, 26, 58, 36], fill=WOOD[2] + (255,))
-    d.rectangle([40, 26, 58, 28], fill=WOOD[3] + (255,))
-    d.line([(49, 26), (49, 23)], fill=H("#c8b070") + (255,))
-    # tiny anvil pictogram
-    d.rectangle([44, 31, 54, 33], fill=(40, 34, 46, 255))
-    d.rectangle([47, 33, 51, 35], fill=(40, 34, 46, 255))
-    d.rectangle([43, 30, 47, 31], fill=(40, 34, 46, 255))
-
-    # barrels & sparks by the door
-    for bx in (6, 62):
-        d.rectangle([bx, 50, bx + 6, 59], fill=AO.WOOD[2] + (255,))
-        d.line([(bx, 53), (bx + 6, 53)], fill=(70, 50, 34, 255))
-        d.line([(bx, 57), (bx + 6, 57)], fill=(70, 50, 34, 255))
-
-    return outline(img, OUTL)
+def forge_anvil():
+    """32px iron anvil on a banded oak stump, readable from the field view."""
+    img = canvas(32, 32)
+    d = ImageDraw.Draw(img)
+    d.ellipse((7, 16, 26, 30), fill='#5b453d')
+    d.rectangle((7, 20, 26, 28), fill='#836043')
+    for x in (10, 15, 22): d.line((x, 21, x-1, 28), fill='#62493b')
+    d.line((8, 25, 25, 25), fill='#354253', width=2)
+    d.ellipse((7, 15, 26, 22), fill='#a0794c', outline='#5b453d')
+    d.polygon([(2, 5), (28, 5), (29, 9), (23, 11), (21, 15), (25, 18),
+               (10, 18), (14, 14), (12, 10), (7, 10)], fill='#354253')
+    d.polygon([(3, 5), (28, 5), (27, 7), (6, 7)], fill='#9ca29b')
+    d.line((8, 8, 26, 8), fill='#68869c')
+    d.line((15, 11, 17, 15), fill='#526e87', width=2)
+    d.line((11, 17, 24, 17), fill='#819aa7')
+    return img
 
 
 # ================================================================== icons
@@ -364,6 +375,8 @@ def main():
     save(stair_down(), "sprites", "stair_down.png")
     save(stair_up(), "sprites", "stair_up.png")
     save(smithy(), "sprites", "smithy.png")
+    save(forge_hearth(), "sprites", "forge_hearth.png")
+    save(forge_anvil(), "sprites", "forge_anvil.png")
     save(icon_staff(), "icons", "staff.png")
     save(icon_axe(), "icons", "axe.png")
     save(icon_spear(), "icons", "spear.png")

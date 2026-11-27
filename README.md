@@ -61,7 +61,13 @@ to listen to the score without roaming the wilds.
 - **A place to start.** Elmswick has a cobbled plaza, well, shop, inn, temple,
 Aldwin's Forge, a market quarter, ridge and orchard cottages, a graveyard,
 gardens, fences, torches, a campfire, neighbours, a farmer with a request, a
-dog and a signpost. Generated villages also grow a smithy of their own.
+dog and a signpost. The forge uses the same textured slate and masonry as the
+cottages, with a recessed hearth, a clear central door and a working yard.
+Inside are a stone furnace, an iron anvil, storage and a clear visitor aisle,
+not dining furniture standing in for smithing equipment.
+The added homes occupy spaced ridge, chapel and orchard plots rather than
+overlapping existing roofs and decorations. Generated villages reserve a
+smithy before placing cottages and route shared lanes around building envelopes.
 - **Seven regions.** Meadows, evergreen woods, autumn forests, fen, heath,
 frozen highlands and dunes have different ground, plants, encounter pools and
 battle horizons. Corner-masked ground transitions, banks, cliffs and river
@@ -76,7 +82,20 @@ the generated world. Interiors have their own small scenes. Stone mouths in
 the hills open into **procedurally generated cavern dungeons**: BSP-cut room
 networks with loops, dressing, roaming inhabitants, treasure off the main
 path, multiple floors and a deep vault — always the same layout for the same
-seed. Hollow Hill west of Elmswick runs four floors deep.
+seed. **To find a cave:** leave Elmswick by the west gate and follow the
+causeway until the short northbound dirt spur to **Hollow Hill** (four floors).
+A second seeded mouth lies just east of the north road in Briarwood. Both
+are guaranteed; further hillside caverns use their own 64-tile sector survey,
+not the decorative-landmark lottery. Click a cave mouth to walk up and enter,
+or press **Space / E / Enter** at its threshold. A lantern-revealed
+survey map tracks visited passages across floors during the current cavern
+visit (white: party, teal: ascent, blue: descent, gold: unopened treasure).
+Field HP/MP gauges and KO/poison badges keep party condition visible.
+Existing v5 saves still load, but this generation revision changes cavern
+entrance positions and village plots; old entrance locations are not retained.
+Furniture respects traversable routes; click-to-move routes around it and
+chooses a reachable approach to treasure. Defeated cavern inhabitants stay
+cleared, including after leaving and returning; fleeing does not clear them.
 - **Four quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
 locket, recover the Crown of Elm from the Slime King, and bring star metal up
 from the deep vaults for Nell at the forge. The quest log tracks progress and

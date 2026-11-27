@@ -469,7 +469,7 @@ static void interactWithNearest() {
                 if (d.kind == VD_NOTICEBOARD) {
                     lines.push_back({ -1, "", "ELMSWICK FIELD BOARD — Posted notices:" });
                     lines.push_back({ -1, "", "'Wanted: six fewer meadow slimes (see Farmer Hedrick). Lost: one silver locket near the Standing Stones (see Tamsin).'" });
-                    lines.push_back({ -1, "", "'The stone mouths west of town are open again. Nell at the forge pays well for star metal (see Nell).'" });
+                    lines.push_back({ -1, "", "'CAVES: take the west road, then the short north spur to Hollow Hill. Another mouth lies east of the north road in Briarwood. Click a mouth or press SPACE at its entrance.'" });
                 } else if (g.village.startVillage) {
                     lines.push_back({ -1, "", "ELMSWICK — 'Where the meadow begins.'" });
                     lines.push_back({ -1, "", "North past the chapel: Briarwood and the castle. West past the shop: the marsh and Old Watchtower." });
@@ -601,6 +601,29 @@ static void clickToMove() {
             }
             return;
         }
+    }
+
+    // Cavern silhouettes are doors too, not blocked ground-click targets.
+    Landmark cave;
+    if (landmarkNear((int)floorf(wx), (int)floorf(wy), cave) && cave.kind == LK_CAVERN &&
+        wx >= cave.tx - 1 && wx <= cave.tx + 2 && wy >= cave.ty - 2 && wy <= cave.ty + 1.5f) {
+        float dx = cave.tx + 0.5f - g.px, dy = cave.ty + 1.4f - g.py;
+        if (dx * dx + dy * dy < 2.4f * 2.4f) {
+            clearWalkTarget();
+            interactWithNearest();
+        } else {
+            WalkPath path;
+            if (findWalkPath(g.px, g.py, cave.tx, cave.ty + 1, path) && !path.cells.empty()) {
+                clearWalkTarget();
+                g.walkQueue = path.cells;
+                g.hasMoveTarget = true;
+                g.walkTargetInteract = true;
+                g.clickFlashT = 0.35f;
+                g.clickFlashX = cave.tx + 0.5f;
+                g.clickFlashY = cave.ty + 1.5f;
+            } else pulseBlocked();
+        }
+        return;
     }
 
     // 4. Clicking the Lost Locket or Watchtower chest

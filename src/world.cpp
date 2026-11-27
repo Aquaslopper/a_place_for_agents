@@ -180,6 +180,80 @@ static bool nearTrail(int tx, int ty, int r) {
     return false;
 }
 
+// Caverns have their own survey, independent of decorative landmark rolls.
+// These helpers never call sampleGround, propAt or loaded-village state: terrain,
+// entrances, collision and interaction therefore agree regardless of visit order.
+static bool surveyCavernSector(int sx, int sy, Landmark& out) {
+    uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0xCA7E51u);
+    if (h % 100u >= 58u) return false;
+    int x = sx * 64 + 20 + (int)((h >> 8) % 25u);
+    int y = sy * 64 + 20 + (int)((h >> 16) % 25u);
+    if ((float)x * x + (float)y * y < 52 * 52 || nearSpecialSite(x, y) || nearTrail(x, y, 7)) return false;
+    if ((abs(x - BOSS_CASTLE_TX) < 23 && abs(y - BOSS_CASTLE_TY) < 23) ||
+        (abs(x - LOCKET_SITE_TX) < 19 && abs(y - LOCKET_SITE_TY) < 19) ||
+        (abs(x - TOWER_SITE_TX) < 19 && abs(y - TOWER_SITE_TY) < 19)) return false;
+    // Reject sea/marsh basins rather than stranding a cave on an artificial island.
+    for (int dy = -6; dy <= 6; dy += 6)
+        for (int dx = -6; dx <= 6; dx += 6) {
+            float e = elevationAt((float)x + dx, (float)y + dy, g.worldSeed);
+            if (e < 0.41f || e > 0.71f ||
+                fabsf(y + (float)dy - brookCenterAt(x + (float)dx, g.worldSeed)) < 5.0f) return false;
+            float t = temperatureAt(x + (float)dx, y + (float)dy, g.worldSeed);
+            float m = moistureAt(x + (float)dx, y + (float)dy);
+            float patch = smoothNoise((x + dx) * 0.095f, (y + dy) * 0.095f, g.worldSeed ^ 0x4921u);
+            if (climate(x + dx, y + dy, e, t, m, patch) == BI_FEN) return false;
+        }
+    out = {LK_CAVERN, x, y, h};
+    return true;
+}
+
+static bool cavernInSector(int sx, int sy, Landmark& out) {
+    struct Entry { int x = 0, y = 0; uint32_t seed = 0; bool valid = false, exists = false; Landmark cave; };
+    static Entry cache[256];
+    auto& entry = cache[hash2i(sx, sy, 0xCA7Eu) & 255u];
+    if (!entry.valid || entry.x != sx || entry.y != sy || entry.seed != g.worldSeed) {
+        entry = {sx, sy, g.worldSeed, true, false, {}};
+        entry.exists = surveyCavernSector(sx, sy, entry.cave);
+    }
+    out = entry.cave;
+    return entry.exists;
+}
+
+static Landmark northRoadCavern() {
+    static uint32_t seed = 0;
+    static bool valid = false;
+    static Landmark cached;
+    if (valid && seed == g.worldSeed) return cached;
+    seed = g.worldSeed; valid = true;
+    int y = -36 - (int)(hash2i(1, 0, g.worldSeed ^ 0xCA7E51u) % 17u);
+    int roadX = 0;
+    for (int x = -12; x <= 12; ++x)
+        if (trailAt(x, y + 1) == 1) { roadX = x; break; }
+    cached = {LK_CAVERN, roadX + 7, y, 0xB21A2u};
+    return cached;
+}
+
+static bool surveyedCavernNear(int tx, int ty, int radius, Landmark& out) {
+    int x, y;
+    startCavernSite(x, y);
+    if (abs(tx - x) <= radius && abs(ty - y) <= radius) {
+        out = {LK_CAVERN, x, y, 0x57acu};
+        return true;
+    }
+    Landmark north = northRoadCavern();
+    if (abs(tx - north.tx) <= radius && abs(ty - north.ty) <= radius) {
+        out = north; return true;
+    }
+    int sx = (int)floorf((float)tx / 64), sy = (int)floorf((float)ty / 64);
+    for (int yy = sy - 1; yy <= sy + 1; ++yy)
+        for (int xx = sx - 1; xx <= sx + 1; ++xx) {
+            Landmark candidate;
+            if (cavernInSector(xx, yy, candidate) && abs(tx - candidate.tx) <= radius &&
+                abs(ty - candidate.ty) <= radius) { out = candidate; return true; }
+        }
+    return false;
+}
+
 static GroundTile generateGround(int tx, int ty) {
     GroundTile out;
     float x = (float)tx, y = (float)ty;
@@ -242,6 +316,22 @@ static GroundTile generateGround(int tx, int ty) {
         bool wet = out.kind == G_WATER || out.kind == G_DEEP;
         out.kind = wet ? (trail == 1 ? G_BRIDGE_NS : G_BRIDGE_EW) : G_DIRT;
         return out;
+    }
+
+    // Grade a rocky shoulder and a clear, two-wide approach into each cave.
+    // The story spur meets the west road exactly; other mouths get a dry apron.
+    Landmark cave;
+    if (surveyedCavernNear(tx, ty, 6, cave)) {
+        int dx = tx - cave.tx, dy = ty - cave.ty;
+        bool story = cave.seed == 0x57acu;
+        if ((cave.seed == 0xB21A2u && dx >= -6 && dx <= 0 && dy >= 1 && dy <= 2) ||
+            (abs(dx) <= 1 && dy >= 1 && dy <= (story ? 5 : 4))) {
+            out.kind = G_DIRT; out.deco = 0; return out;
+        }
+        if (dx * dx + dy * dy <= 25) {
+            out.kind = (dy <= -1 && abs(dx) <= 3) ? G_ROCK : G_HEATH;
+            out.deco = 0; return out;
+        }
     }
 
     // Castle of Elm grand stone courtyard & rocky rampart shoulders
@@ -370,50 +460,22 @@ float villageDecoCenterX(const Village::Deco& d) {
 
 // ================================================================ landmarks
 // Hollow Hill — the story cavern west of Elmswick on the Old Watchtower road.
-// Found by a pure, order-independent search so rendering, collision and
-// interaction always agree on the same mouth cell.
+// Derived directly from the seed and west causeway so rendering, collision
+// and interaction always agree, and no failed search can erase the quest site.
 bool startCavernSite(int& outTx, int& outTy) {
-    static int cacheTx = 0, cacheTy = 0;
-    static uint32_t cacheSeed = ~0u;
-    static bool cacheDone = false, cacheOk = false;
-    if (cacheDone && cacheSeed == g.worldSeed) { outTx = cacheTx; outTy = cacheTy; return cacheOk; }
-
-    int bestTx = -34, bestTy = 0;
-    uint32_t bestH = ~0u;
-    bool found = false;
-    auto consider = [&](int tx, int ty, bool relax) {
-        float d2 = (float)(tx * tx + ty * ty);
-        if (d2 < 26.0f * 26.0f || d2 > 70.0f * 70.0f) return;
-        if (!relax && tx > -18) return;                   // keep it on the west road
-        if (abs(tx - TOWER_SITE_TX) < 14 && abs(ty - TOWER_SITE_TY) < 14) return;
-        if (abs(tx - LOCKET_SITE_TX) < 14 && abs(ty - LOCKET_SITE_TY) < 14) return;
-        if (!relax && nearTrail(tx, ty, 2)) return;       // beside the road, not on it
-        GroundKind gk = sampleGround(tx, ty).kind;
-        if (!groundWalkable(gk) || gk == G_ICE) return;
-        GroundKind gk2 = sampleGround(tx, ty + 1).kind;
-        if (!groundWalkable(gk2) || gk2 == G_ICE) return; // stand cell stays open
-        uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0x57acu);
-        if (!found || h < bestH || (h == bestH && (tx < bestTx || (tx == bestTx && ty < bestTy)))) {
-            bestH = h; bestTx = tx; bestTy = ty; found = true;
-        }
-    };
-    for (int pass = 0; pass < 2 && !found; pass++) {
-        for (int r = 0; r <= 36; r++) {
-            int n = (r == 0) ? 1 : r * 8;
-            for (int i = 0; i < n; i++) {
-                float ang = (float)i / (float)n * 6.2831853f;
-                consider(-36 + (int)roundf(cosf(ang) * (float)r),
-                         (int)roundf(sinf(ang) * (float)r * 0.7f), pass == 1);
-            }
-        }
+    // A seeded spur immediately off the west causeway. This site must never
+    // disappear because a terrain-search happened not to find a candidate.
+    outTx = -29 - (int)(hash2i(0, 0, g.worldSeed ^ 0x57acu) % 10u);
+    static uint32_t seed = 0;
+    static int roadY = 0;
+    static bool valid = false;
+    if (!valid || seed != g.worldSeed) {
+        seed = g.worldSeed; valid = true; roadY = 0;
+        for (int y = -24; y <= 8; ++y)
+            if (trailAt(outTx, y) == 2) { roadY = y; break; }
     }
-    if (!found) { bestTx = -34; bestTy = 4; }             // last-resort mouth cell
-    cacheDone = true;
-    cacheOk = found;
-    cacheSeed = g.worldSeed;
-    cacheTx = bestTx; cacheTy = bestTy;
-    outTx = cacheTx; outTy = cacheTy;
-    return cacheOk;
+    outTy = roadY - 5;
+    return true;
 }
 
 static bool proceduralLandmark(int sx, int sy, Landmark& out) {
@@ -428,13 +490,11 @@ static bool proceduralLandmark(int sx, int sy, Landmark& out) {
         (abs(lx - TOWER_SITE_TX) < 15 && abs(ly - TOWER_SITE_TY) < 15)) return false;
     int scx, scy;
     if (startCavernSite(scx, scy) && abs(lx - scx) < 16 && abs(ly - scy) < 16) return false;
-    if (g.villageLoaded) {
-        float dx = (float)lx - g.village.cx, dy = (float)ly - g.village.cy;
-        if (dx * dx + dy * dy < 24.0f * 24.0f) return false;
-    }
+    Landmark cave;
+    if (surveyedCavernNear(lx, ly, 14, cave)) return false;
     GroundKind ground = sampleGround(lx, ly).kind;
     if (!groundWalkable(ground) || ground == G_ICE) return false;
-    out = { (LandmarkKind)(1 + (h >> 6) % 6), lx, ly, h };   // now includes LK_CAVERN
+    out = { (LandmarkKind)(1 + (h >> 6) % 5), lx, ly, h };   // caverns have their own survey
     return true;
 }
 
@@ -638,6 +698,8 @@ PropKind propAt(int tx, int ty) {
         }
     }
     if (nearSpecialSite(tx, ty)) return P_NONE;
+    Landmark surveyed;
+    if (surveyedCavernNear(tx, ty, 6, surveyed)) return P_NONE;
 
     Landmark lm;
     if (proceduralLandmarkNear(tx, ty, 5, lm)) return P_NONE;
@@ -881,6 +943,10 @@ std::string compassHint(float fromX, float fromY, float toX, float toY) {
 
 // ================================================================ villages
 static bool siteFit(int cx, int cy, int R) {
+    Landmark cave;
+    if (surveyedCavernNear(cx, cy, R + 7, cave)) return false;
+    Landmark landmark;
+    if (proceduralLandmarkNear(cx, cy, R + 10, landmark)) return false;
     for (int dy = -R; dy <= R; dy++) {
         for (int dx = -R; dx <= R; dx++) {
             if (dx * dx + dy * dy > R * R) continue;
@@ -988,13 +1054,13 @@ void buildStartVillage(Village& v, uint32_t seed) {
     addBuilding(2, -12, 4);     // 5: Weaver's Cottage (West Lane)        [-14..-11, 2.. 4], door (-12,5)
     addBuilding(4, -5,  8);     // 6: Farmer Hedrick's Farmhouse (SW)     [ -7..-4,  6.. 8], door (-5, 9)
     addBuilding(3,  6,  8);     // 7: Shepherd's Cottage (SE Pasture)     [  4.. 7,  6.. 8], door ( 6, 9)
-    // Village 2.0 — the market quarter grows west, homes climb the ridges,
-    // and Aldwin's Forge takes the old yard by the west lane.
-    addBuilding(10, -14, -5);   // 8: Aldwin's Forge (Smithy)             [-16..-12, -7..-5], door (-14,-4)
-    addBuilding(0,  13, -7);    // 9: Cooper's Cottage (NE Lane)          [ 11..14, -9..-7], door (13,-6)
-    addBuilding(2, -15, -9);    // 10: Ridge Cottage (NW Bluff)           [-17..-14,-11..-9], door (-15,-8)
-    addBuilding(3,  -5, -10);   // 11: Chapel-side Cottage                [ -7..-4,-12..-10], door (-5,-9)
-    addBuilding(1,  10,  5);    // 12: Orchard Cottage (SE Lane)          [  8..11,  3.. 5], door (10,6)
+    // The expansion forms three small neighbourhoods, not infill squeezed
+    // between roof silhouettes. Leave daylight around the chapel and hall.
+    addBuilding(10, -15, -3);   // 8: Forge and work yard, west gate
+    addBuilding(0,   14, -7);   // 9: Cooper's cottage, east lane
+    addBuilding(2,  -15,-11);   // 10: Ridge cottage, below the western bluff
+    addBuilding(3,    6,-11);   // 11: Chapel-side cottage, northeast terrace
+    addBuilding(1,   14,  5);   // 12: Orchard cottage, above the paddock
 
     // Cut-stone sanctuary terrace in front of the Chapel
     for (int ty = -9; ty <= -7; ty++)
@@ -1022,14 +1088,15 @@ void buildStartVillage(Village& v, uint32_t seed) {
     paveStreetL(v.paths, 0, 4, 0, 14, false);      // South Millbrook Highway -> Bridge
     paveStreetL(v.paths, -8, 9, 0, 9, true);       // Hedrick's Farmhouse & Turnip Croft Gate -> South Road
     paveStreetL(v.paths, 1, 9, 8, 9, true);        // South Road -> Shepherd's Cottage & Sheep Paddock Gate
-    // Village 2.0 lanes — market quarter, ridges and the orchard row
-    paveStreetL(v.paths, -14, -4, -14, 0, false);  // Forge door -> West Mirefen Gate lane
-    paveStreetL(v.paths, -15, -8, -13, -4, true);  // Ridge Cottage -> Forge doorstep
-    paveStreetL(v.paths, -5, -9, -3, -7, true);    // Chapel-side Cottage -> Chapel steps
-    paveStreetL(v.paths, 13, -6, 15, -6, true);    // Cooper's Cottage -> east verge
-    paveStreetL(v.paths, 15, -6, 15, 2, false);    // East verge -> Plaza/East Highway
-    paveStreetL(v.paths, 10, 6, 13, 6, true);      // Orchard Cottage -> south verge
-    paveStreetL(v.paths, 13, 6, 13, 2, false);     // South verge -> Plaza/East Highway
+    // Neighbourhood lanes keep through-traffic out of private courtyards.
+    paveStreetL(v.paths, -15, -2, -15, 0, false);
+    paveStreetL(v.paths, -15,-10, -12,-10, true);
+    paveStreetL(v.paths, -12,-10, -12, 0, false);
+    paveStreetL(v.paths,   6,-10,   3, -8, true);
+    paveStreetL(v.paths,  14, -6,  17, -6, true);
+    paveStreetL(v.paths,  17, -6,  17,  2, false);
+    paveStreetL(v.paths,  14,  6,  17,  6, true);
+    paveStreetL(v.paths,  17,  6,  17,  2, false);
 
     // Doorstep welcome aprons
     for (const Building& b : v.buildings) {
@@ -1055,6 +1122,14 @@ void buildStartVillage(Village& v, uint32_t seed) {
             v.soil.push_back({ tx, ty });
 
     auto deco = [&](int kind, int x, int y, int variant = 0) {
+        int left = x - ((kind == VD_FLOWERBED || kind == VD_BENCH || kind == VD_WELL || kind == VD_LONGTABLE) ? 1 : 0);
+        int right = x + (kind == VD_LONGTABLE ? 1 : 0);
+        for (const auto& b : v.buildings)
+            if (right >= buildingX0(b) && left < buildingX0(b) + b.w &&
+                y >= buildingY0(b) - 1 && y <= b.ty) return;
+        if (villageDecoSolid(kind))
+            for (int tx = left; tx <= right; ++tx)
+                if (std::find(v.paths.begin(), v.paths.end(), std::make_pair(tx, y)) != v.paths.end()) return;
         v.decos.push_back({ kind, (float)x, (float)y, variant });
     };
 
@@ -1142,6 +1217,12 @@ void buildStartVillage(Village& v, uint32_t seed) {
     deco(VD_STATUE,  16, 7);
     deco(VD_FLOWERBED, 16, 10);
     deco(VD_TORCH,   14, 7);
+
+    // Forge working yard: stock and water off the public lane.
+    deco(VD_CRATE, -18, -2);
+    deco(VD_BARREL, -18, -1);
+    deco(VD_BUCKET, -13, -2);
+    deco(VD_SIGN, -13, 0);
 
     // --- Market quarter trestles by the west gate lane
     deco(VD_TABLE,   -11, 1);
@@ -1233,6 +1314,15 @@ void buildStartVillage(Village& v, uint32_t seed) {
         if (!cellReservedInVillage(v, tx, ty, 0)) v.flowers.push_back({ tx, ty });
     }
 
+    auto insideBuilding = [&](const std::pair<int, int>& cell) {
+        for (const auto& b : v.buildings)
+            if (cell.first >= buildingX0(b) && cell.first < buildingX0(b) + b.w &&
+                cell.second >= buildingY0(b) && cell.second <= b.ty) return true;
+        return false;
+    };
+    v.paths.erase(std::remove_if(v.paths.begin(), v.paths.end(), insideBuilding), v.paths.end());
+    v.rocks.erase(std::remove_if(v.rocks.begin(), v.rocks.end(), insideBuilding), v.rocks.end());
+
     dedupCells(v.paths);
     dedupCells(v.plaza);
     dedupCells(v.court);
@@ -1240,6 +1330,54 @@ void buildStartVillage(Village& v, uint32_t seed) {
     dedupCells(v.soil);
     dedupCells(v.flowers);
     dedupCells(v.rocks);
+}
+
+// Route a two-cell-wide lane around architecture. Stamping Ls through whatever
+// happened to occupy a row made generated settlements look like accidental infill.
+static void routeVillageLane(Village& v, int tx, int ty) {
+    constexpr int W = 41;
+    int ox = v.cx - 20, oy = v.cy - 20;
+    auto index = [&](int x, int y) { return (y - oy) * W + x - ox; };
+    auto free = [&](int x, int y) {
+        if (x < ox || y < oy || x >= ox + W - 1 || y >= oy + W - 1) return false;
+        for (const auto& b : v.buildings)
+            if (x + 1 >= buildingX0(b) && x < buildingX0(b) + b.w &&
+                y + 1 >= buildingY0(b) - 1 && y <= b.ty) return false;
+        return true;
+    };
+    int sx = v.cx + 1, sy = v.cy + 1;
+    if (!free(sx, sy) || !free(tx, ty)) return;
+    std::vector<int> cost(W * W, 1000000), prev(W * W, -1);
+    std::vector<uint8_t> road(W * W, 0);
+    for (auto cell : v.paths)
+        if (cell.first >= ox && cell.first < ox + W && cell.second >= oy && cell.second < oy + W)
+            road[index(cell.first, cell.second)] = 1;
+    using Node = std::pair<int, int>;
+    std::priority_queue<Node, std::vector<Node>, std::greater<Node>> queue;
+    int start = index(sx, sy), goal = index(tx, ty);
+    cost[start] = 0; queue.push({0, start});
+    const int dirs[4][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
+    while (!queue.empty()) {
+        auto [distance, current] = queue.top(); queue.pop();
+        if (distance != cost[current]) continue;
+        if (current == goal) break;
+        int x = current % W + ox, y = current / W + oy;
+        for (const auto& dir : dirs) {
+            int nx = x + dir[0], ny = y + dir[1];
+            if (!free(nx, ny)) continue;
+            int next = index(nx, ny), weight = road[next] ? 1 : 4;
+            if (distance + weight >= cost[next]) continue;
+            cost[next] = distance + weight; prev[next] = current;
+            queue.push({cost[next], next});
+        }
+    }
+    if (goal != start && prev[goal] < 0) return;
+    for (int at = goal; ; at = prev[at]) {
+        int x = at % W + ox, y = at / W + oy;
+        for (int dy = 0; dy < 2; ++dy)
+            for (int dx = 0; dx < 2; ++dx) v.paths.emplace_back(x + dx, y + dy);
+        if (at == start) break;
+    }
 }
 
 // Generated villages --------------------------------------------------------
@@ -1266,6 +1404,10 @@ static void layoutVillage(Village& v) {
     v.buildings.push_back(inn);
     v.buildings.push_back(temple);
 
+    // A real service quarter gets first claim on space; houses fill around it.
+    Building smithy{10, v.cx - 6 * side, v.cy + 7, 5, 3, 10};
+    v.buildings.push_back(smithy);
+
     const std::pair<int, int> slots[] = {
         { -9 * side, -6 }, { 9 * side, -6 }, { -10 * side, 6 },
         { 8 * side, 7 },   { -4 * side, 8 }, { 4 * side, 9 },
@@ -1273,7 +1415,7 @@ static void layoutVillage(Village& v) {
         { 6 * side, -8 }
     };
     int targetHouses = 4 + (int)(rs % 4);
-    for (int i = 0; i < 10 && (int)v.buildings.size() < 3 + targetHouses; i++) {
+    for (int i = 0; i < 10 && (int)v.buildings.size() < 4 + targetHouses; i++) {
         int jx = (int)(hash2i(i, 17, rs) % 3) - 1;
         int jy = (int)(hash2i(i, 29, rs) % 2);
         Building b;
@@ -1290,15 +1432,6 @@ static void layoutVillage(Village& v) {
         if (!bad) v.buildings.push_back(b);
     }
 
-    // The village smithy: every settlement that ships weapons has a forge.
-    if ((rs % 4u) != 3u) {
-        Building smithy{ 10, v.cx - 6 * side, v.cy + 6, 5, 3, 10 };
-        bool bad = (abs(smithy.tx - v.cx) <= 5 && abs(smithy.ty - v.cy) <= 4);
-        for (const auto& ex : v.buildings) {
-            if (buildingsOverlap(smithy, ex, 2)) { bad = true; break; }
-        }
-        if (!bad) v.buildings.push_back(smithy);
-    }
 
     // Temple forecourt flagstones
     for (int y = temple.ty + 1; y <= temple.ty + 2; y++)
@@ -1315,17 +1448,13 @@ static void layoutVillage(Village& v) {
         }
     }
 
-    // Orthogonal L-shaped lanes to every doorstep + 4 cardinal village entrances
-    for (size_t i = 0; i < v.buildings.size(); i++) {
-        const Building& b = v.buildings[i];
-        int dx = buildingDoorTx(b), dy = buildingDoorTy(b);
-        paveStreetL(v.paths, v.cx, v.cy, dx, dy, (i % 2) == 0);
-        v.paths.push_back({ dx - 1, dy });
-        v.paths.push_back({ dx, dy });
-    }
-    paveStreetL(v.paths, v.cx, v.cy + 3, v.cx, v.cy + 16, false);
-    paveStreetL(v.paths, v.cx - 4, v.cy, v.cx - 16, v.cy, true);
-    paveStreetL(v.paths, v.cx + 4, v.cy, v.cx + 16, v.cy, true);
+    // Shared lanes bend around full roof envelopes and service courtyards.
+    for (const auto& b : v.buildings)
+        routeVillageLane(v, buildingDoorTx(b) - 1, buildingDoorTy(b));
+    routeVillageLane(v, v.cx, v.cy + 16);
+    routeVillageLane(v, v.cx - 16, v.cy);
+    routeVillageLane(v, v.cx + 16, v.cy);
+    routeVillageLane(v, v.cx, v.cy - 16);
 
     auto tryDeco = [&](int kind, int x, int y, int variant = 0) {
         if (cellReservedInVillage(v, x, y, 1)) return;
@@ -1603,7 +1732,7 @@ void npcsLoadFor(float x, float y, bool force) {
             add(NS_VILLAGER3, FACE_VILLAGER3, NPC_VILLAGER, -8.5f, -5.5f, "Wren",            6);
             add(NS_FARMER,    FACE_SMITH,     NPC_QUEST,    -6.5f, 10.5f, "Farmer Hedrick",  0, QUEST_SLIMES);
             // Village 2.0 — the forge quarter and the road wardens
-            add(NS_VILLAGER5, FACE_VILLAGER5, NPC_QUEST,   -11.5f, -3.5f, "Nell the Apprentice", 7, QUEST_DEEP);
+            add(NS_VILLAGER5, FACE_VILLAGER5, NPC_QUEST,   -13.5f, -1.5f, "Nell the Apprentice", 7, QUEST_DEEP);
             add(NS_RANGER,    FACE_RANGER,    NPC_VILLAGER, 15.5f, -1.5f, "Warden Yara",     8);
             add(NS_SOLDIER,   FACE_GUARD,     NPC_VILLAGER,-15.5f,  1.5f, "Corporal Fenn",   9);
             add(NS_VILLAGER6, FACE_VILLAGER6, NPC_VILLAGER, 11.5f,  6.5f, "Maren the Weaver",10);
@@ -1703,6 +1832,7 @@ void chestsLoadFor(float x, float y) {
 }
 
 bool landmarkNear(int tx, int ty, Landmark& out) {
+    if (surveyedCavernNear(tx, ty, 6, out)) return true;
     if (abs(tx - BOSS_CASTLE_TX) <= 10 && abs(ty - BOSS_CASTLE_TY) <= 10) {
         out = { LK_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, 0xca571eu };
         return true;
@@ -1739,6 +1869,14 @@ void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out)
         int cx, cy;
         if (startCavernSite(cx, cy)) maybeAdd(LK_CAVERN, cx, cy, 0x57acu);
     }
+
+    Landmark northCave = northRoadCavern();
+    maybeAdd(northCave.kind, northCave.tx, northCave.ty, northCave.seed);
+    for (int sy = (int)floorf((float)(y0 - 8) / 64); sy <= (int)floorf((float)(y1 + 8) / 64); ++sy)
+        for (int sx = (int)floorf((float)(x0 - 8) / 64); sx <= (int)floorf((float)(x1 + 8) / 64); ++sx) {
+            Landmark cave;
+            if (cavernInSector(sx, sy, cave)) maybeAdd(cave.kind, cave.tx, cave.ty, cave.seed);
+        }
 
     const int SECTOR = 128;
     int sx0 = (int)floorf((float)(x0 - 8) / SECTOR);

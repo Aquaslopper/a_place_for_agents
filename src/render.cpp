@@ -618,6 +618,15 @@ void drawWorld() {
         char qbuf[2] = { qm, 0 };
         drawWorldLabel(qbuf, cx, fy - 42.0f + bob, qc, 8);
     }
+    for (const auto& lm : visibleLandmarks) {
+        if (lm.kind != LK_CAVERN) continue;
+        int sx, sy;
+        bool story = startCavernSite(sx, sy) && lm.tx == sx && lm.ty == sy;
+        float cx = (lm.tx + 0.5f) * TILE - g.camX;
+        float fy = (lm.ty + 1.0f) * TILE - g.camY;
+        drawWorldLabel(story ? "HOLLOW HILL" : "CAVERN", cx, fy - 47,
+                       Color{244, 216, 159, 255}, 8);
+    }
     for (const auto& m : gFieldMonsters) {
         float dx = g.px - m.x, dy = g.py - m.y;
         if (dx * dx + dy * dy < 9.0f && fmodf(g.totalTime * 2.0f, 1.0f) < 0.65f) {
@@ -745,7 +754,7 @@ void drawToast() {
     float x = floorf(g.vw * 0.5f - w * 0.5f);
     bool hasTopRightQuest = (g.mode == MODE_OVERWORLD) &&
                             (g.quests[0].state == QS_ACTIVE || g.quests[1].state == QS_ACTIVE || g.quests[2].state == QS_ACTIVE);
-    float y = hasTopRightQuest ? 52.0f : 30.0f;
+    float y = g.mode == MODE_DUNGEON ? 128.0f : (hasTopRightQuest ? 52.0f : 30.0f);
     DrawRectangle((int)x + 2, (int)y + 2, (int)w, (int)h, Fade(BLACK, 0.4f * a));
     DrawRectangle((int)x, (int)y, (int)w, (int)h, Fade(Color{ 16, 22, 54, 255 }, 0.96f * a));
     DrawRectangleLinesEx({ x, y, w, h }, 1.0f, Fade(Color{ 255, 220, 140, 255 }, a));

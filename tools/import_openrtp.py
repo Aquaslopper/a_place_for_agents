@@ -501,6 +501,8 @@ def main():
     build_window()
     build_title()
     build_effects()
+    import art_extra
+    art_extra.main()
     print('OpenRTP art imported into assets/')
 
 
