@@ -36,6 +36,9 @@ static const CommonsEntry COMMONS_CHRONICLE[] = {
     { "The Mountain Ways", "seeded countries, passes, cavern guardians and the travelling map",
       "\"A pass is a promise that the road continues.\"", false },
 
+    { "The Stitched Field", "map pieces: seeded seams, gates, per-piece features, staged arrivals",
+      "\"A map is a promise about where you can go next.\"", false },
+
     // ---- reserved plots: future agents build here ---------------------------
     { "The Southern Plot", "a reserved plot in the Commons ring",
       "\"Reserved. Bring something we cannot imagine yet.\"", true },

@@ -4,6 +4,7 @@
 #include "world.hpp"
 #include "regions.hpp"
 #include "battle.hpp"
+#include "cinema.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -99,12 +100,19 @@ static void titleUpdate(float dt) {
 
 static void introUpdate(float dt) {
     g.introT += dt;
-    if ((g.introT > 0.6f && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) ||
+    if ((g.introT > 0.9f && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) ||
                              IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON)))
         || g.introT > 16.0f) {
+        // Not a cut: the palette comes up in steps while the camera pulls back
+        // from the north gate and glides in to the party, and the village names
+        // itself once the shot settles. This is the game's first impression, so
+        // it is staged like an opening shot rather than a fade to gameplay.
         g.mode = MODE_OVERWORLD;
         g.fade = 1.0f; g.fadeDir = -1;
+        g.facing = 1;
+        g.moving = false;
         overworldSnapCamera();
+        cinemaArrive("ELMSWICK", "the last field office", 0.0f, -7.0f);
         playSoundIf(g.assets.confirm);
     }
 }
@@ -207,16 +215,20 @@ int main() {
             case MODE_OVERWORLD:
                 if (g.travelMap) drawTravelMap(); else drawWorld();
                 drawHUD();
+                drawCinemaOverlay();
                 break;
             case MODE_ROOM:
                 roomDraw();
+                drawCinemaOverlay();
                 break;
             case MODE_DUNGEON:
                 dungeonDraw();
+                drawCinemaOverlay();
                 break;
             case MODE_SAIL:
                 sailDraw();
                 drawHUD();
+                drawCinemaOverlay();
                 break;
             case MODE_DIALOG:
                 if (g.dialogReturn == MODE_ROOM) roomDraw();

@@ -5,6 +5,8 @@
 #include "atlas.hpp"
 #include "regions.hpp"
 #include "battle.hpp"
+#include "cinema.hpp"
+#include "pieces.hpp"
 #include <cstdio>
 
 // The keeper's errand, "The Kept Light" (the first growth from the Commons).
@@ -59,19 +61,50 @@ static bool mouseInVirtual() {
 }
 
 // ================================================================ camera
+// The field is not one endless scroll: it is a grid of map pieces (src/pieces.cpp),
+// each a map larger than the view. The camera follows the party inside the piece
+// and stops at the framed edge, so a piece's border reads on screen; crossing a
+// seam slides to the next piece the way a 16-bit map handed over to the next.
 static void updateCamera(float dt) {
-    float targetX = g.px * TILE - g.vw * 0.5f;
-    float targetY = g.py * TILE - g.vh * 0.5f;
-    float k = 1.0f - powf(0.0004f, dt);     // frame-rate independent smoothing
-    g.camX += (targetX - g.camX) * k;
-    g.camY += (targetY - g.camY) * k;
+    int pieceX = 0, pieceY = 0;
+    pieceOfTile((int)floorf(g.px), (int)floorf(g.py), pieceX, pieceY);
+    float targetX = 0.0f, targetY = 0.0f;
+    pieceOriginPixels(g.px, g.py, (float)g.vw, (float)g.vh, targetX, targetY);
+
+    if (g.camPieceX != pieceX || g.camPieceY != pieceY) {
+        bool wasSliding = g.camSlideDur > 0.0f && g.camSlideT < g.camSlideDur + 0.20f;
+        g.camPieceX = pieceX;
+        g.camPieceY = pieceY;
+        g.camSlideFromX = g.camX;
+        g.camSlideFromY = g.camY;
+        g.camSlideT = 0.0f;
+        // A player standing on a seam can cross it back and forth; the second
+        // crossing snaps instead of sliding, so it never strobes.
+        g.camSlideDur = wasSliding ? 0.0f : 0.22f;
+        if (g.camSlideDur <= 0.0f) { g.camX = targetX; g.camY = targetY; }
+    }
+
+    if (g.camSlideT < g.camSlideDur) {
+        g.camSlideT = std::min(g.camSlideDur, g.camSlideT + dt);
+        float u = g.camSlideDur <= 0.0f ? 1.0f : g.camSlideT / g.camSlideDur;
+        float e = 1.0f - powf(1.0f - u, 3.0f);
+        g.camX = g.camSlideFromX + (targetX - g.camSlideFromX) * e;
+        g.camY = g.camSlideFromY + (targetY - g.camSlideFromY) * e;
+    } else {
+        g.camX = targetX;
+        g.camY = targetY;
+    }
     if (!std::isfinite(g.camX)) g.camX = targetX;
     if (!std::isfinite(g.camY)) g.camY = targetY;
 }
 
 void overworldSnapCamera() {
-    g.camX = g.px * TILE - g.vw * 0.5f;
-    g.camY = g.py * TILE - g.vh * 0.5f;
+    pieceOriginPixels(g.px, g.py, (float)g.vw, (float)g.vh, g.camX, g.camY);
+    pieceOfTile((int)floorf(g.px), (int)floorf(g.py), g.camPieceX, g.camPieceY);
+    g.camSlideT = 0.0f;
+    g.camSlideDur = 0.0f;
+    g.camSlideFromX = g.camX;
+    g.camSlideFromY = g.camY;
 }
 
 // ================================================================ encounters
@@ -921,7 +954,9 @@ void overworldUpdate(float dt) {
 
     updateClouds(dt);
     atlasUpdate(g.px, g.py, dt);   // name the country; raise the banner on a border
+    cinemaUpdate(dt);              // staged arrivals own the camera while they establish
     villageLoadAt(g.px, g.py);
+    cinemaVillageTick();           // a village names itself the first time you walk in
     updateTravelContext();
     npcsLoadFor(g.px, g.py);
     chestsLoadFor(g.px, g.py);
@@ -973,6 +1008,7 @@ void overworldUpdate(float dt) {
     if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) kx += 1;
     if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) ky -= 1;
     if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) ky += 1;
+    if (cinemaBlocksInput()) { kx = 0; ky = 0; }   // let the opening shot read
     if (kx != 0 || ky != 0) {
         clearWalkTarget();
         if (kx != 0 && ky != 0) kx = 0;             // cardinal only, like the SNES
@@ -991,7 +1027,7 @@ void overworldUpdate(float dt) {
     if (g.mode != MODE_OVERWORLD) return;
     updateFieldMonsters(dt);
     if (g.mode != MODE_OVERWORLD) return;
-    updateCamera(dt);
+    if (!cinemaOwnsCamera()) updateCamera(dt);
 
     // input: menu / interact
     if (IsKeyPressed(KEY_M)) {
@@ -1001,6 +1037,7 @@ void overworldUpdate(float dt) {
         pushToast(g.travelMap ? "Travelling map." : "Close view.");
         return;
     }
+    if (cinemaBlocksInput()) return;
     if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_TAB)) {
         g.menuReturn = MODE_OVERWORLD;
         g.mode = MODE_MENU;

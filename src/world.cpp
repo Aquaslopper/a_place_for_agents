@@ -1,5 +1,6 @@
 // world.cpp — noise, biomes, villages, props, npcs, chests, landmarks, A*
 #include "world.hpp"
+#include "pieces.hpp"
 #include "atlas.hpp"
 #include "commons.hpp"
 #include "regions.hpp"
@@ -812,8 +813,11 @@ GroundTile sampleGround(int tx, int ty) {
     static Entry cache[8192];
     Entry& c = cache[((uint32_t)ty * 131u + (uint32_t)tx) & 8191];
     int access = (regionPassOpen(1) ? 1 : 0) | (regionPassOpen(2) ? 2 : 0);
-    if (!c.valid || c.x != tx || c.y != ty || c.seed != g.worldSeed || c.epoch != gWayEpoch || c.access != access)
-        c = { tx, ty, g.worldSeed, gWayEpoch, access, true, generateGround(tx, ty) };
+    if (!c.valid || c.x != tx || c.y != ty || c.seed != g.worldSeed || c.epoch != gWayEpoch || c.access != access) {
+        GroundTile t = generateGround(tx, ty);
+        pieceDressGround(tx, ty, t);     // the map-piece seam frames the wilds
+        c = { tx, ty, g.worldSeed, gWayEpoch, access, true, t };
+    }
     return c.tile;
 }
 
@@ -1497,6 +1501,11 @@ bool positionBlocked(float x, float y, float r) {
     return false;
 }
 
+// The map-piece layer (src/pieces.cpp) has to know which ground the older
+// systems already claimed, without re-deriving trails and sites itself.
+bool worldNearSpecialSite(int tx, int ty) { return nearSpecialSite(tx, ty); }
+int worldTrailAt(int tx, int ty) { return trailAt(tx, ty); }
+
 bool inVillage(float x, float y) {
     if (!g.villageLoaded) return false;
     float dx = x - g.village.cx, dy = y - g.village.cy;
@@ -1550,6 +1559,14 @@ PropKind propAt(int tx, int ty) {
 static PropKind propAtUncached(int tx, int ty) {
     if (g.villageLoaded && (inVillage((float)tx + 0.5f, (float)ty + 0.5f) || inCommons((float)tx + 0.5f, (float)ty + 0.5f)))
         return P_NONE;
+    // A map-piece seam's treeline stands on its own band, and its gate stays
+    // open. Anything the older generators authored into place outranks it.
+    {
+        PropKind seamProp = pieceBorderProp(tx, ty);
+        if (seamProp != P_NONE) return seamProp;
+        PropKind featureProp = pieceFeatureProp(tx, ty);
+        if (featureProp != P_NONE) return featureProp;
+    }
     // Passes and their approaches must stay clear even after a seal opens.
     if (regionCellAt(tx, ty).terrain == REGION_PASS || frontierRoadAt(tx, ty)) return P_NONE;
 
