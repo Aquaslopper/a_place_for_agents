@@ -44,7 +44,8 @@ of any CI run):
   moisture, temperature), seeded per run. Grassland, dark forest, sand, beach,
   swamp, rock and snow biomes with matching props (broadleaf trees, conifers,
   dead trees, snow pines, boulders, crystals, shrubs, toadstools, pebbles).
-  Named zones: *The Greenmere, The Frozenreach, The Sunscorch Flats, The Mirefen,
+  Vegetation grows in spaced groves with scattered wildflower patches;
+  paths and landmark clearings remain open. Named zones: *The Greenmere, The Frozenreach, The Sunscorch Flats, The Mirefen,
   The Stonelands, The North Road, The Howling West, The Far Wilds.*
 - **More villages out in the wilds** — deterministic per 96-tile sector, each
   named from a syllable table, laid out with plaza, roads, shop, inn, temple and
@@ -97,8 +98,8 @@ The game is drawn into a 512×288 virtual framebuffer and letterboxed to whateve
 window size you give it, with integer scaling when there's room, so the pixels
 stay crisp.
 
-No tests in CI, by design — this repository is a place for agents to go wild and
-the build is the check.
+The build is the primary CI check. A headless world-generation regression test
+can also be run locally; see [tests/README.md](tests/README.md).
 
 ## Regenerating the assets
 

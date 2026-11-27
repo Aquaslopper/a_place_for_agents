@@ -13,7 +13,7 @@ uint32_t hash2i(int x, int y, uint32_t seed) {
     uint32_t h = seed
         ^ (uint32_t)x * 2654435761u
         ^ (uint32_t)y * 2246822519u
-        ^ (uint32_t)(x * 374761393 + y * 668265263) * 3266489917u;
+        ^ ((uint32_t)x * 374761393u + (uint32_t)y * 668265263u) * 3266489917u;
     h ^= h >> 16; h *= 0x7feb352dU; h ^= h >> 15; h *= 0x846ca68bU; h ^= h >> 16;
     return h;
 }
@@ -114,7 +114,9 @@ GroundTile sampleGround(int tx, int ty) {
     flattenSpecialSites(x, y, e, t, m);
 
     uint32_t h = hash2i(tx, ty, seed ^ 0x9a11u);
-    out.variant = (uint8_t)(h % 4);
+    // Neighbouring tiles share a palette instead of a noisy checkerboard.
+    float patches = smoothNoise(x * 0.09f, y * 0.09f, seed ^ 0x4921u);
+    out.variant = (uint8_t)(patches > 0.58f ? 1 : 0);
 
     // Northern Castle stone courtyard floor
     int cdx = tx - BOSS_CASTLE_TX, cdy = ty - BOSS_CASTLE_TY;
@@ -144,13 +146,18 @@ GroundTile sampleGround(int tx, int ty) {
     else if (m > 0.62f && t > 0.30f) { out.kind = (e < 0.44f) ? G_SWAMP : G_GRASS_DARK; }
     else out.kind = G_GRASS;
 
-    // sparse ground decoration
+    // Wildflower and grass patches: small clearings between groups, rather than
+    // the same density everywhere. These are non-blocking ground overlays.
     float d = hashf(tx, ty, seed ^ 0xc0ffeeu);
+    float cover = smoothNoise(x * 0.13f, y * 0.13f, seed ^ 0x8ba1u);
     if (out.kind == G_GRASS || out.kind == G_GRASS_DARK) {
-        if (d < 0.022f) { out.deco = 1; out.decoVariant = (uint8_t)(h % 3); }
-        else if (d < 0.038f) { out.deco = 2; out.decoVariant = (uint8_t)((h >> 5) % 2); }
-    } else if (out.kind == G_ROCK) {
-        if (d < 0.12f) { out.deco = 3; }
+        if (d < 0.06f + cover * 0.10f) {
+            out.deco = 1; out.decoVariant = (uint8_t)(h % 3);
+        } else if (cover > 0.52f && d < 0.075f + cover * 0.12f) {
+            out.deco = 2; out.decoVariant = (uint8_t)((h >> 5) % 2);
+        }
+    } else if (out.kind == G_ROCK && d < 0.06f) {
+        out.deco = 3;
     }
     return out;
 }
@@ -183,6 +190,42 @@ bool villageDecoSolid(int kind) {
     }
 }
 
+// Resolve a procedural landmark identically for rendering, collision and props.
+// Sector candidates are intentionally independent of visit order.
+static bool proceduralLandmark(int sx, int sy, Landmark& out) {
+    const int sector = 128;
+    uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
+    if ((h % 100) >= 55) return false;
+    int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
+    int ly = sy * sector + sector / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
+    if ((float)lx * lx + (float)ly * ly < 42.0f * 42.0f) return false;
+    // Leave room for the full story-site clearings, not just their centres.
+    if ((abs(lx - BOSS_CASTLE_TX) < 20 && abs(ly - BOSS_CASTLE_TY) < 20) ||
+        (abs(lx - LOCKET_SITE_TX) < 16 && abs(ly - LOCKET_SITE_TY) < 16) ||
+        (abs(lx - TOWER_SITE_TX) < 15 && abs(ly - TOWER_SITE_TY) < 15)) return false;
+    if (g.villageLoaded) {
+        float dx = (float)lx - g.village.cx, dy = (float)ly - g.village.cy;
+        if (dx * dx + dy * dy < 24.0f * 24.0f) return false;
+    }
+    GroundKind ground = sampleGround(lx, ly).kind;
+    if (!groundWalkable(ground) || ground == G_ICE) return false;
+    out = { (LandmarkKind)(1 + (h >> 6) % 5), lx, ly, h };
+    return true;
+}
+
+static bool proceduralLandmarkNear(int tx, int ty, int radius, Landmark& out) {
+    const int sector = 128;
+    int sx = (int)floorf((float)tx / sector), sy = (int)floorf((float)ty / sector);
+    // Candidates are at least 44 tiles from a sector edge; a single sector
+    // suffices for the small footprint/clearing radii used here.
+    uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
+    if ((h % 100) >= 55) return false;
+    int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
+    int ly = sy * sector + sector / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
+    if (abs(tx - lx) > radius || abs(ty - ly) > radius) return false;
+    return proceduralLandmark(sx, sy, out);
+}
+
 static bool landmarkCellBlocked(int tx, int ty) {
     // Northern Castle keep (anchored at BOSS_CASTLE_TX, BOSS_CASTLE_TY)
     if (tx >= BOSS_CASTLE_TX - 2 && tx <= BOSS_CASTLE_TX + 2 &&
@@ -194,6 +237,18 @@ static bool landmarkCellBlocked(int tx, int ty) {
     if (tx >= TOWER_SITE_TX - 1 && tx <= TOWER_SITE_TX + 1 &&
         ty >= TOWER_SITE_TY - 1 && ty <= TOWER_SITE_TY)
         return true;
+    Landmark lm;
+    if (proceduralLandmarkNear(tx, ty, 4, lm)) {
+        int dx = tx - lm.tx, dy = ty - lm.ty;
+        switch (lm.kind) {
+            case LK_TOWER: return abs(dx) <= 1 && dy >= -1 && dy <= 0;
+            case LK_CASTLE: return abs(dx) <= 2 && dy >= -3 && dy <= 0;
+            case LK_STONES: return dy == 0 && (dx == 0 || abs(dx) == 2);
+            case LK_CAMP: return dy == 0 && abs(dx) <= 1;
+            case LK_RUINS: return dy == 0 && abs(dx) <= 2;
+            default: break;
+        }
+    }
     return false;
 }
 
@@ -246,10 +301,26 @@ bool nearStartVillage(float x, float y) {
 }
 
 // ================================================================ props
+// A local priority test keeps tree trunks apart without depending on generation
+// order or chunk boundaries. Other, smaller plants may grow between them.
+static bool treeCandidate(int tx, int ty) {
+    uint32_t priority = hash2i(tx, ty, g.worldSeed ^ 0x4f3e57u);
+    if (priority > 0x70000000u) return false;
+    for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+        if (!dx && !dy) continue;
+        uint32_t other = hash2i(tx + dx, ty + dy, g.worldSeed ^ 0x4f3e57u);
+        if (other < priority || (other == priority && (dy < 0 || (dy == 0 && dx < 0))))
+            return false;
+    }
+    return true;
+}
+
 PropKind propAt(int tx, int ty) {
     if (g.villageLoaded && inVillage((float)tx + 0.5f, (float)ty + 0.5f)) return P_NONE;
     if (nearSpecialSite(tx, ty)) return P_NONE;
-    // Keep the North Road clear of trees/rocks
+    Landmark lm;
+    if (proceduralLandmarkNear(tx, ty, 4, lm)) return P_NONE;
+    // Keep the North Road and its shoulders clear.
     if (ty <= -12 && ty >= BOSS_CASTLE_TY && tx >= -1 && tx <= 2) return P_NONE;
 
     GroundTile gt = sampleGround(tx, ty);
@@ -259,33 +330,40 @@ PropKind propAt(int tx, int ty) {
 
     uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0x77ee5u);
     float hf = (float)h / 4294967295.0f;
-    float m = moistureAt((float)tx, (float)ty);
-    bool meadow = (tx * tx + ty * ty) < 24 * 24;
+    float grove = smoothNoise(tx * 0.065f, ty * 0.065f, g.worldSeed ^ 0x61a4u);
+    bool meadow = (float)tx * tx + (float)ty * ty < 24.0f * 24.0f;
     switch (gt.kind) {
         case G_GRASS:
         case G_GRASS_DARK:
-            if (!meadow && m > 0.50f && hf < 0.20f)
-                return (hf < 0.04f) ? P_PINE0 : (hf < 0.11f ? P_TREE0 : (hf < 0.16f ? P_TREE1 : P_TREE2));
-            if (hf > 0.985f) return P_ROCK0;
-            if (hf > 0.960f) return P_BUSH;
-            if (hf < 0.018f) return P_BUSH_PLAIN;
-            if (hf > 0.946f && hf <= 0.960f) return P_MUSHROOM;
-            if (!meadow && hf > 0.938f && hf <= 0.946f) return P_STUMP;
+            if (!meadow && grove > (gt.kind == G_GRASS_DARK ? 0.34f : 0.49f) && treeCandidate(tx, ty)) {
+                switch ((h >> 8) % 5) {
+                    case 0: return P_PINE0;
+                    case 1: return P_TREE2;
+                    case 2: return P_TREE1;
+                    default: return P_TREE0;
+                }
+            }
+            if (hf < 0.012f) return P_ROCK0;
+            if (hf < 0.035f + grove * 0.035f) return P_BUSH_PLAIN;
+            if (hf < 0.045f + grove * 0.035f) return P_BUSH;
+            if (!meadow && grove > 0.55f && hf > 0.985f) return P_MUSHROOM;
+            if (!meadow && grove > 0.5f && hf > 0.980f && hf <= 0.985f) return P_STUMP;
             return P_NONE;
         case G_SNOW:
-            if (hf < 0.16f) return (hf < 0.06f) ? P_PINE2 : P_TREE_SNOW;
-            if (hf > 0.975f) return P_ROCK2;
+            if (grove > 0.45f && treeCandidate(tx, ty)) return P_TREE_SNOW;
+            if (hf > 0.985f) return P_ROCK2;
             return P_NONE;
         case G_ROCK:
-            if (hf < 0.14f) return P_BOULDER;
+            if (hf < 0.045f) return P_BOULDER;
+            if (hf > 0.992f) return P_CRYSTAL;
             return P_NONE;
         case G_SAND:
-            if (hf < 0.03f) return P_ROCK1;
-            if (hf > 0.99f) return P_CRYSTAL;
+            if (hf < 0.018f) return P_ROCK1;
             return P_NONE;
         case G_SWAMP:
-            if (hf < 0.12f) return P_MUSHROOM;
-            if (hf < 0.16f) return P_DEADTREE;
+            if (grove > 0.48f && treeCandidate(tx, ty)) return P_DEADTREE;
+            if (hf < 0.035f) return P_MUSHROOM;
+            if (hf < 0.06f) return P_BUSH_PLAIN;
             return P_NONE;
         default:
             return P_NONE;
@@ -851,17 +929,7 @@ bool landmarkNear(int tx, int ty, Landmark& out) {
         out = { LK_TOWER, TOWER_SITE_TX, TOWER_SITE_TY, 0x703e2u };
         return true;
     }
-    const int SECTOR = 128;
-    int sx = (int)floorf((float)tx / SECTOR), sy = (int)floorf((float)ty / SECTOR);
-    uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
-    if ((h % 100) >= 55) return false;
-    int lx = sx * SECTOR + SECTOR / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
-    int ly = sy * SECTOR + SECTOR / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
-    if (lx * lx + ly * ly < 42 * 42) return false;
-    if (abs(lx - tx) > 8 || abs(ly - ty) > 8) return false;
-    out.kind = (LandmarkKind)(1 + (h >> 6) % 5);
-    out.tx = lx; out.ty = ly;
-    out.seed = h;
+    if (!proceduralLandmarkNear(tx, ty, 8, out)) return false;
     return true;
 }
 
@@ -884,17 +952,9 @@ void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out)
     int sy1 = (int)floorf((float)(y1 + 8) / SECTOR);
     for (int sy = sy0; sy <= sy1; sy++) {
         for (int sx = sx0; sx <= sx1; sx++) {
-            uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
-            if ((h % 100) >= 55) continue;
-            int lx = sx * SECTOR + SECTOR / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
-            int ly = sy * SECTOR + SECTOR / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
-            if (lx * lx + ly * ly < 42 * 42) continue;
-            if (nearSpecialSite(lx, ly)) continue;
-            if (g.villageLoaded && inVillage((float)lx, (float)ly)) continue;
-            GroundTile gt = sampleGround(lx, ly);
-            if (gt.kind == G_WATER || gt.kind == G_DEEP) continue;
-            LandmarkKind kind = (LandmarkKind)(1 + (h >> 6) % 5);
-            maybeAdd(kind, lx, ly, h);
+            Landmark lm;
+            if (proceduralLandmark(sx, sy, lm))
+                maybeAdd(lm.kind, lm.tx, lm.ty, lm.seed);
         }
     }
 }

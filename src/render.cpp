@@ -50,7 +50,7 @@ static Texture2D* groundTexture(const GroundTile& gt, int waterAnim) {
         case G_GRASS:      return &g.assets.grass[gt.variant & 3];
         case G_GRASS_DARK: return (g.assets.grassTall.id ? &g.assets.grassTall : &g.assets.grass[2]);
         case G_DIRT:       return &g.assets.dirt;
-        case G_SAND:       return (gt.variant & 1) ? &g.assets.sand : &g.assets.beach;
+        case G_SAND:       return &g.assets.beach;
         case G_WATER:      return &g.assets.water[waterAnim & 1];
         case G_DEEP:       return &g.assets.deepWater;
         case G_ROCK:       return &g.assets.rockHill[gt.variant & 1];
@@ -94,7 +94,8 @@ static void drawGround(int x0, int y0, int x1, int y1) {
     for (int ty = y0; ty <= y1; ty++) {
         for (int tx = x0; tx <= x1; tx++) {
             GroundTile gt = sampleGround(tx, ty);
-            if (gt.deco == 0) continue;
+            // Authored paving and gardens take precedence over wild ground cover.
+            if (gt.deco == 0 || (g.villageLoaded && inVillage(tx + 0.5f, ty + 0.5f))) continue;
             Texture2D* t = nullptr;
             if (gt.deco == 1) t = &g.assets.tuft[gt.decoVariant % 3];
             else if (gt.deco == 2) t = &g.assets.flowers[gt.decoVariant % 2];
@@ -321,7 +322,8 @@ void drawWorld() {
                 if (!t || t->id == 0) break;
                 float fx = (it.b + 0.5f) * TILE - g.camX;
                 float fy = (it.c + 1.0f) * TILE - g.camY;
-                DrawEllipse((int)fx, (int)fy - 2, w * 0.28f, 3.0f, Fade(BLACK, 0.18f));
+                if (it.a != P_BUSH && it.a != P_BUSH_PLAIN && it.a != P_MUSHROOM)
+                    DrawEllipse((int)fx, (int)fy - 2, w * 0.28f, 3.0f, Fade(BLACK, 0.18f));
                 texFoot(*t, fx, fy);
                 break;
             }

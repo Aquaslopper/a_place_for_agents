@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """import_openrtp.py — adapt the vendored OpenRTP sheets to this game's layout.
 
-Every pixel the game draws — terrain, buildings, trees, props, heroes, villagers,
-monsters, item icons, the window skin, battle effects and title art — comes from
-the OpenRTP package vendored under ``assets/source/openrtp/`` (see CREDITS.md for
-authors and licences).  This script only *adapts* those pixels:
+This script adapts the OpenRTP package vendored under
+``assets/source/openrtp/`` (see CREDITS.md for authors and licences). A few
+small overlays and fallback objects are generated in-repository instead:
 
   * it crops chipset tiles (16x16 cells),
   * cuts sprites out of their magenta / cyan colour key,
@@ -19,6 +18,7 @@ Two colour keys are in play: ``(0,147,146)`` on the charset sheets and
 """
 from pathlib import Path
 from PIL import Image, ImageDraw
+import art_objects
 
 ROOT = Path(__file__).resolve().parent.parent / 'assets'
 SRC = ROOT / 'source' / 'openrtp'
@@ -137,11 +137,11 @@ def build_tiles():
     save(tile(EXT, 7, 8), 'tiles', 'grass_1.png')
     save(tile(WLD, 2, 9), 'tiles', 'grass_2.png')
     save(tile(WLD, 4, 10), 'tiles', 'grass_3.png')
-    save(tile(EXT, 7, 9), 'tiles', 'grass_dark.png')
+    save(tint(tile(EXT, 5, 8), (180, 205, 170)), 'tiles', 'grass_dark.png')
 
     # --- paths, fields, sand
     save(tile(WLD, 22, 3), 'tiles', 'dirt.png')          # packed earth road
-    save(tile(EXT, 6, 8), 'tiles', 'soil.png')           # tilled field
+    save(tile(EXT, 7, 5), 'tiles', 'soil.png')           # tilled field
     save(tile(EXT, 3, 12), 'tiles', 'sand.png')          # loose yellow sand
     save(tile(EXT, 4, 14), 'tiles', 'beach.png')         # pale shoreline sand
     save(tile(EXT, 10, 4), 'tiles', 'arcane.png')        # crystal ground
@@ -149,24 +149,28 @@ def build_tiles():
     # --- stone
     save(tile(EXT, 9, 4), 'tiles', 'cobble.png')         # village plaza (setts)
     save(tile(EXT, 9, 4), 'tiles', 'flagstone.png')
-    save(tile(EXT, 10, 6), 'tiles', 'rock_hill.png')     # lichen stone
-    save(tile(EXT, 10, 6), 'tiles', 'rock_hill2.png')
+    # Recolour the seamless earth fill as weathered ground. The dungeon's
+    # masonry and the mountain autotile pieces are not seamless outdoor floors.
+    rocky = tile(WLD, 7, 2).convert('L').convert('RGBA')
+    rocky = tint(rocky, (180, 190, 175))
+    save(rocky, 'tiles', 'rock_hill.png')
+    save(rocky, 'tiles', 'rock_hill2.png')
     save(tile(EXT, 12, 11), 'tiles', 'brick.png')        # pale brick
     save(tile(EXT, 12, 11), 'tiles', 'brick_dark.png')
     save(tile(WLD, 12, 8), 'tiles', 'dungeon_floor.png')
 
     # --- cold
     save(tile(EXT, 6, 0), 'tiles', 'snow.png')
-    save(tile(INT, 11, 4), 'tiles', 'snow_drift.png')
+    save(tile(EXT, 7, 2), 'tiles', 'snow_drift.png')
     save(tile(WLD, 7, 6), 'tiles', 'tundra.png')
-    save(tile(DUN, 8, 2), 'tiles', 'ice.png')
+    save(tile(DUN, 10, 2), 'tiles', 'ice.png')
     save(tile(DUN, 10, 2), 'tiles', 'ice_crack.png')
 
     # --- water
-    save(tile(EXT, 1, 2), 'tiles', 'water_0.png')
-    save(tile(EXT, 2, 2), 'tiles', 'water_1.png')
-    save(tile(DUN, 1, 3), 'tiles', 'deep_water.png')
-    save(tile(EXT, 13, 8), 'tiles', 'swamp.png')
+    save(tile(EXT, 0, 5), 'tiles', 'water_0.png')
+    save(tile(EXT, 1, 5), 'tiles', 'water_1.png')
+    save(tint(tile(EXT, 0, 5), (155, 180, 210)), 'tiles', 'deep_water.png')
+    save(tint(tile(EXT, 5, 8), (145, 170, 135)), 'tiles', 'swamp.png')
 
     # --- interior flooring (shop / inn / temple interiors)
     save(tile(INT, 18, 4), 'tiles', 'plank_floor.png')
@@ -174,14 +178,23 @@ def build_tiles():
     save(tile(INT, 15, 4), 'tiles', 'stone_floor.png')
     save(tile(INT, 16, 4), 'tiles', 'carpet.png')
 
-    # --- ground overlays: flowers, grass tufts, fallen petals, pebbles
-    save(trim(tcell(EXT, 18, 11, 1, 1, KEY_PINK)), 'tiles', 'flower_0.png')   # scattered blossoms
-    save(trim(tcell(EXT, 18, 9, 1, 1, KEY_PINK)), 'tiles', 'flower_1.png')    # flowering bush
-    save(trim(tcell(EXT, 21, 13, 1, 1, KEY_PINK)), 'tiles', 'tuft_0.png')     # autumn leaves / petals
-    save(trim(tcell(EXT, 18, 11, 1, 1, KEY_PINK)), 'tiles', 'tuft_1.png')     # meadow blossoms
-    save(trim(tcell(EXT, 19, 9, 1, 1, KEY_PINK)), 'tiles', 'tuft_2.png')      # small leafy shrub
-    save(trim(tcell(INT, 24, 13, 1, 1, KEY_PINK)), 'tiles', 'pebble.png')     # pebbles / stones
-
+    # Small, transparent ground cover, not full shrubs or indoor furniture.
+    for v in range(3):
+        img = canvas(16, 16)
+        d = ImageDraw.Draw(img)
+        for x, y in [(3 + v, 12), (8, 10 + v), (12 - v, 13)]:
+            d.line((x, y, x - 1, y - 3), fill=(49, 103, 43, 255))
+            d.line((x, y, x + 1, y - 4), fill=(135, 181, 71, 255))
+        save(img, 'tiles', f'tuft_{v}.png')
+    save(trim(tcell(EXT, 18, 11, 1, 1, KEY_PINK)), 'tiles', 'flower_0.png')
+    # Reuse scattered blossoms, not the large flowering bush, as a ground overlay.
+    save(trim(tcell(EXT, 18, 11, 1, 1, KEY_PINK)).transpose(Image.Transpose.FLIP_LEFT_RIGHT),
+         'tiles', 'flower_1.png')
+    pebble = canvas(16, 16)
+    d = ImageDraw.Draw(pebble)
+    d.ellipse((4, 10, 7, 12), fill=(100, 107, 96, 255))
+    d.ellipse((10, 12, 12, 13), fill=(155, 157, 139, 255))
+    save(pebble, 'tiles', 'pebble.png')
 
 # ================================================================= 2. objects
 def build_objects():
@@ -202,25 +215,31 @@ def build_objects():
          'sprites', 'pine_2.png')
     dead = trim(tcell(EXT, 21, 8, 1, 2, k))             # bare / dead tree
     save(centered(dead, (24, 38)), 'sprites', 'dead_tree.png')
-    snowy = trim(tcell(WLD, 19, 8, 1, 2, k))            # snow-capped tree
+    # Recolour the actual conifer, rather than cropping two unrelated overworld objects.
+    snowy = conifer.copy()
+    pixels = snowy.load()
+    for y in range(snowy.height):
+        for x in range(snowy.width):
+            r, g, b, a = pixels[x, y]
+            if a and g > r * 1.2 and g > 100 and (x + y) % 3 != 0:
+                pixels[x, y] = (205, 225, 222, a)
     save(centered(snowy, (26, 40)), 'sprites', 'tree_snow.png')
 
     # ---- rocks -----------------------------------------------------------
-    lump = trim(tcell(DUN, 21, 9, 1, 1, k))             # mossy grey boulder
+    lump = trim(tcell(DUN, 20, 9, 1, 1, k))             # complete rounded stone
     save(centered(lump, (20, 18)), 'sprites', 'rock_0.png')
     save(centered(lump.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (20, 18)),
          'sprites', 'rock_1.png')
-    save(centered(trim(tcell(DUN, 22, 10, 1, 1, k)), (22, 18)), 'sprites', 'rock_2.png')
-    save(centered(trim(tcell(DUN, 22, 10, 1, 1, k)), (28, 26)), 'sprites', 'boulder.png')
-    save(centered(trim(rect(DUN, 19 * 16, 9 * 16, 16, 32, k)), (22, 30)), 'sprites', 'crystal.png')
+    save(centered(trim(tcell(WLD, 27, 1, 1, 1, k)), (22, 18)), 'sprites', 'rock_2.png')
+    save(centered(trim(tcell(WLD, 27, 1, 1, 1, k)), (28, 26)), 'sprites', 'boulder.png')
+    save(centered(trim(tcell(WLD, 28, 1, 1, 1, k)), (22, 30)), 'sprites', 'crystal.png')
 
     # ---- plants ----------------------------------------------------------
     save(trim(tcell(EXT, 19, 8, 1, 1, k)), 'sprites', 'stump.png')             # real tree stump
     save(centered(trim(tcell(EXT, 18, 9, 1, 1, k)), (18, 18)), 'sprites', 'bush.png')
     save(centered(trim(tcell(EXT, 19, 9, 1, 1, k)), (16, 16)), 'sprites', 'bush_plain.png')
-    # toadstool cluster from Dungeon (22, 13)
-    mush = trim(tcell(DUN, 22, 13, 1, 1, k))
-    save(centered(mush, (16, 16)), 'sprites', 'mushroom.png')
+    # The dungeon crop was a pile of stones, not a mushroom.
+    save(centered(art_objects.mushroom(), (16, 16)), 'sprites', 'mushroom.png')
     save(trim(tcell(EXT, 21, 11, 1, 1, k)), 'sprites', 'potted_plant.png')
     save(trim(tcell(EXT, 22, 11, 1, 1, k)), 'sprites', 'urn.png')
 

@@ -52,3 +52,15 @@ above; this CC0 statement does not apply to them.
 ## Font
 - **Press Start 2P** by CodeMan38 — SIL Open Font License 1.1.
   Bundled at `assets/fonts/PressStart2P-Regular.ttf`; see `assets/fonts/OFL.txt`.
+
+### World-generation references
+
+The [Open RPG Fantasy Tilesets page](https://finalbossblues.itch.io/openrtp-tiles)
+identifies the Exterior and World sheets as RPG Maker 2000/2003 chipsets with a
+16×16 tilebase. The [chipset template guide](https://www.deviantart.com/jojogape/art/RPG-Maker-2000-and-2003-Tileset-Template-v2-327699881)
+describes which regions contain animated water and grouped terrain, rather than
+independent repeatable tiles. The importer uses interior fills for repeating
+surfaces and whole upper-layer objects for props; it does not implement the
+original engine's full autotile system. Vegetation distribution uses clustered
+noise and local spacing, following the general biome-aware placement principles
+in [AutoBiomes](https://link.springer.com/article/10.1007/s00371-020-01920-7).
