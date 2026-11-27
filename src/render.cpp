@@ -40,78 +40,104 @@ static Texture2D* buildingTexture(const Building& b) {
 }
 
 static Texture2D* charsetFor(int sprite) {
-    if (sprite < 0 || sprite >= 16) return &g.assets.npc[0];
+    if (sprite < 0 || sprite >= NS_KIND_COUNT) return &g.assets.npc[0];
     return &g.assets.npc[sprite];
 }
 
 // ================================================================ ground
-static Texture2D* groundTexture(const GroundTile& gt, int waterAnim) {
-    switch (gt.kind) {
-        case G_GRASS:      return &g.assets.grass[gt.variant & 3];
-        case G_GRASS_DARK: return (g.assets.grassTall.id ? &g.assets.grassTall : &g.assets.grass[2]);
-        case G_DIRT:       return &g.assets.dirt;
-        case G_SAND:       return &g.assets.beach;
-        case G_WATER:      return &g.assets.water[waterAnim & 1];
-        case G_DEEP:       return &g.assets.deepWater;
-        case G_ROCK:       return &g.assets.rockHill[gt.variant & 1];
-        case G_SNOW:       return &g.assets.snow[gt.variant & 1];
-        case G_ICE:        return &g.assets.ice[gt.variant & 1];
-        case G_SWAMP:      return &g.assets.swamp;
-        case G_COBBLE:     return &g.assets.cobble;
-        case G_FLOOR:      return &g.assets.flagstone;
-        default:           return &g.assets.grass[0];
+// The terrain atlas is on a dual grid: its corners are the centres of four
+// collision cells. A full fill costs one quad. A mixed cell paints the lower
+// material first, then just the masks above it. Three-way junctions have no
+// transparent holes, and the marching corners continue across the viewport.
+enum Surface { S_DEEP, S_WATER, S_BEACH, S_MEADOW, S_WOOD, S_AMBER, S_HEATH, S_FEN,
+               S_DUNES, S_SNOW, S_ICE, S_CRAG, S_PATH, S_SOIL, S_COBBLE, S_COURT, S_LEAVES, S_RIPPLES, S_MESA, S_FROST_TRACK, S_SNOW_CRAG, S_COUNT };
+static Surface surface(GroundTile t) {
+    switch (t.kind) {
+        case G_DEEP: return S_DEEP;
+        case G_WATER: case G_BRIDGE_NS: case G_BRIDGE_EW: return S_WATER;
+        case G_BEACH: return S_BEACH;
+        case G_GRASS_DARK: return S_WOOD;
+        case G_AMBER: return S_AMBER;
+        case G_HEATH: return S_HEATH;
+        case G_SWAMP: return S_FEN;
+        case G_SAND: return S_DUNES;
+        case G_SNOW: return S_SNOW;
+        case G_ICE: return S_ICE;
+        case G_ROCK: return t.biome==BI_DUNES ? S_MESA : t.biome==BI_FROST ? S_SNOW_CRAG : S_CRAG;
+        case G_DIRT: return t.biome==BI_FROST ? S_FROST_TRACK : S_PATH;
+        case G_LEAVES: return S_LEAVES;
+        case G_RIPPLES: return S_RIPPLES;
+        case G_SOIL: return S_SOIL;
+        case G_COBBLE: return S_COBBLE;
+        case G_FLOOR: return S_COURT;
+        default: return S_MEADOW;
     }
+}
+static void stamp(Texture2D atlas, int mask, int row, int x, int y) {
+    DrawTextureRec(atlas, {(float)(mask*TILE),(float)(row*TILE),TILE,TILE}, {(float)x,(float)y}, WHITE);
 }
 
 static void drawGround(int x0, int y0, int x1, int y1) {
-    int anim = (int)(g.totalTime * 3.0f) & 1;
-    for (int ty = y0; ty <= y1; ty++) {
-        for (int tx = x0; tx <= x1; tx++) {
-            GroundTile gt = sampleGround(tx, ty);
-            Texture2D* t = groundTexture(gt, anim);
-            if (!t || t->id == 0) continue;
-            DrawTexturePro(*t, { 0, 0, (float)t->width, (float)t->height },
-                           { tx * TILE - g.camX, ty * TILE - g.camY, (float)TILE, (float)TILE },
-                           { 0, 0 }, 0.0f, WHITE);
-        }
+    int w=x1-x0+3, h=y1-y0+3;
+    static std::vector<GroundTile> view;
+    static int lastX, lastY, lastW, lastH;
+    static uint32_t seed;
+    static uint64_t village;
+    uint64_t key=g.villageLoaded ? g.villageKey : ~0ull;
+    auto at = [&](int x,int y) -> GroundTile& { return view[(y-y0+1)*w+x-x0+1]; };
+    if (lastW!=w || lastH!=h || lastX!=x0 || lastY!=y0 || seed!=g.worldSeed || key!=village) {
+        view.resize(w*h); lastW=w; lastH=h; lastX=x0; lastY=y0; seed=g.worldSeed; village=key;
+        for (int y=y0-1;y<=y1+1;++y) for (int x=x0-1;x<=x1+1;++x) at(x,y)=sampleGround(x,y);
+        auto pave = [&](const std::vector<std::pair<int,int>>& cells, GroundKind mat) {
+            for (auto [x,y]:cells) if (x>=x0-1 && y>=y0-1 && x<=x1+1 && y<=y1+1) {
+                auto& t=at(x,y);
+                if (surface(t)<=S_WATER) continue; // never bury a stream or its decking
+                t.kind=mat; t.deco=0;
+            }
+        };
+        if (g.villageLoaded) { pave(g.village.paths,G_DIRT); pave(g.village.plaza,G_COBBLE); }
     }
-    if (g.villageLoaded) {
-        for (const auto& p : g.village.paths) {
-            if (p.first < x0 - 2 || p.first > x1 + 2 || p.second < y0 - 2 || p.second > y1 + 2) continue;
-            Texture2D& d = g.assets.dirt;
-            DrawTexturePro(d, { 0, 0, (float)d.width, (float)d.height },
-                           { p.first * TILE - g.camX, p.second * TILE - g.camY, (float)TILE, (float)TILE },
-                           { 0, 0 }, 0.0f, WHITE);
+    int anim=(int)(g.totalTime*2.5f)%3;
+    int camX=(int)roundf(g.camX), camY=(int)roundf(g.camY);
+    for (int y=y0;y<=y1;++y) for (int x=x0;x<=x1;++x) {
+        Surface corners[]={surface(at(x,y)),surface(at(x+1,y)),
+                           surface(at(x,y+1)),surface(at(x+1,y+1))};
+        int sx=x*TILE+TILE/2-camX, sy=y*TILE+TILE/2-camY;
+        int phase=at(x,y).variant%3;
+        auto paint=[&](int s,int mask) { stamp(g.assets.landscape,mask,s*3+(s<=S_WATER ? anim:phase),sx,sy); };
+        if (corners[0]==corners[1] && corners[0]==corners[2] && corners[0]==corners[3]) {
+            paint(corners[0],15); continue;
         }
-        for (const auto& p : g.village.plaza) {
-            if (p.first < x0 - 2 || p.first > x1 + 2 || p.second < y0 - 2 || p.second > y1 + 2) continue;
-            Texture2D& c = g.assets.cobble;
-            DrawTexturePro(c, { 0, 0, (float)c.width, (float)c.height },
-                           { p.first * TILE - g.camX, p.second * TILE - g.camY, (float)TILE, (float)TILE },
-                           { 0, 0 }, 0.0f, WHITE);
-        }
+        int masks[S_COUNT]={};
+        for (int i=0;i<4;++i) masks[corners[i]] |= 1<<i;
+        int left=15;
+        for (int s=0;s<S_COUNT;++s) if (masks[s]) { paint(s,left); left &= ~masks[s]; }
+        int dry=15^(masks[S_WATER]|masks[S_DEEP]);
+        if (dry && dry!=15) stamp(g.assets.relief,dry,(masks[S_SNOW]|masks[S_ICE]) ? 1:0,sx,sy);
+        int ledge=masks[S_CRAG]|masks[S_MESA]|masks[S_SNOW_CRAG];
+        if (ledge) stamp(g.assets.relief,ledge,masks[S_MESA]?3:masks[S_SNOW_CRAG]?4:2,sx,sy);
     }
-    for (int ty = y0; ty <= y1; ty++) {
-        for (int tx = x0; tx <= x1; tx++) {
-            GroundTile gt = sampleGround(tx, ty);
-            // Authored paving and gardens take precedence over wild ground cover.
-            if (gt.deco == 0 || (g.villageLoaded && inVillage(tx + 0.5f, ty + 0.5f))) continue;
-            Texture2D* t = nullptr;
-            if (gt.deco == 1) t = &g.assets.tuft[gt.decoVariant % 3];
-            else if (gt.deco == 2) t = &g.assets.flowers[gt.decoVariant % 2];
-            else t = &g.assets.pebble;
-            if (!t || t->id == 0) continue;
-            float w = t->width > TILE ? (float)TILE : (float)t->width;
-            float h = t->height > TILE ? (float)TILE : (float)t->height;
-            DrawTexturePro(*t, { 0, 0, (float)t->width, (float)t->height },
-                           { tx * TILE - g.camX + (TILE - w) * 0.5f,
-                             ty * TILE - g.camY + (TILE - h),
-                             w, h },
-                           { 0, 0 }, 0.0f, WHITE);
+    for (int y=y0;y<=y1;++y) for (int x=x0;x<=x1;++x) {
+        auto t=at(x,y);
+        int sx=x*TILE-camX, sy=y*TILE-camY;
+        bool ns=t.kind==G_BRIDGE_NS;
+        if (ns || t.kind==G_BRIDGE_EW) {
+            DrawTextureEx(g.assets.bridge,{(float)(sx+(ns?0:TILE)),(float)sy},ns?0.f:90.f,1.f,WHITE);
+            for (int s:{-1,1}) {
+                if (at(x+(ns?s:0),y+(ns?0:s)).kind==t.kind) continue;
+                int rx=sx+(ns && s==1 ? TILE-3:0), ry=sy+(!ns && s==1 ? TILE-3:0);
+                DrawRectangle(rx,ry,ns?3:16,ns?16:3,Color{89,65,51,255});
+                DrawRectangle(rx+1,ry+1,ns?1:14,ns?14:1,Color{197,164,111,255});
+                DrawRectangle(rx,ry-2,4,5,Color{111,78,52,255});
+                DrawRectangle(rx,ry-2,3,2,Color{224,192,137,255});
+            }
+        } else if (t.deco) {
+            Texture2D tex=t.deco==1 ? g.assets.tuft[t.decoVariant%3] : t.deco==2 ? g.assets.flowers[t.decoVariant%2]
+                        : t.deco==3 ? g.assets.pebble : t.deco==4 ? g.assets.lilies : g.assets.turnips;
+            DrawTexture(tex,sx+(TILE-tex.width)/2,sy+TILE-tex.height,WHITE);
         }
     }
 }
-
 // ================================================================ clouds
 void updateClouds(float dt) {
     for (int i = 0; i < 6; i++) {
@@ -124,7 +150,7 @@ void updateClouds(float dt) {
         if (g.cloudX[i] > VRES_W + 140) g.cloudX[i] = -140;
     }
 }
-static void drawClouds() {
+static void drawClouds(bool shadows=false) {
     Texture2D& c = g.assets.cloud;
     if (c.id == 0) return;
     for (int i = 0; i < 6; i++) {
@@ -132,7 +158,7 @@ static void drawClouds() {
         float s = g.cloudScale[i] * 0.55f;
         DrawTexturePro(c, { 0, 0, (float)c.width, (float)c.height },
                        { g.cloudX[i], g.cloudY[i], c.width * s, c.height * s }, { 0, 0 }, 0.0f,
-                       Fade(WHITE, 0.45f));
+                       shadows ? Color{39,54,75,20} : Fade(WHITE, 0.45f));
     }
 }
 
@@ -210,7 +236,7 @@ static void drawLandmarkAt(const Landmark& lm) {
             break;
         case LK_CAMP:
             texFoot(g.assets.campfire, cx, fy);
-            texFoot(g.assets.bench, cx - 24, fy);
+            texFoot(g.assets.tent, cx - 28, fy);
             texFoot(g.assets.cauldron, cx + 24, fy);
             break;
         default: break;
@@ -224,7 +250,7 @@ void drawWorld() {
         shakeY = cosf(g.totalTime * 47.0f) * g.shakeMag;
     }
     float saveCamX = g.camX, saveCamY = g.camY;
-    g.camX -= shakeX; g.camY -= shakeY;
+    g.camX = roundf(g.camX-shakeX); g.camY = roundf(g.camY-shakeY);
 
     int x0 = (int)floorf(g.camX / TILE) - 1;
     int y0 = (int)floorf(g.camY / TILE) - 1;
@@ -466,7 +492,21 @@ void drawWorld() {
         DrawRing({ cx, cy }, 10, 12, 0, 360, 16, Fade(Color{ 255, 120, 120, 255 }, g.blockedFx * 0.5f));
     }
 
-    drawClouds();
+    drawClouds(true);
+    // Local weather is world-anchored; tiny flakes, falling leaves and fen
+    // lights move behind the HUD rather than obscuring actors with a full wash.
+    Biome biome=sampleGround((int)floorf(g.px),(int)floorf(g.py)).biome;
+    if (biome==BI_FROST || biome==BI_AMBER || biome==BI_FEN) {
+        int n=biome==BI_FROST?32:12;
+        for (int i=0;i<n;++i) {
+            float phase=hashf(i,3,g.worldSeed)*6.28f;
+            float px=hashf(i,7,g.worldSeed)*VRES_W-g.camX+8*sinf(g.totalTime*0.7f+phase);
+            float py=hashf(i,9,g.worldSeed)*VRES_H-g.camY+g.totalTime*(biome==BI_FROST?16.f:biome==BI_AMBER?9.f:-3.f);
+            int dx=(int)(px-floorf(px/VRES_W)*VRES_W), dy=(int)(py-floorf(py/VRES_H)*VRES_H);
+            Color c=biome==BI_FROST?Color{232,247,255,185}:biome==BI_AMBER?Color{238,185,94,200}:Color{220,242,162,175};
+            DrawRectangle(dx,dy,1+(i%2),1,c);
+        }
+    }
 
     if (nightAmt > 0.001f) {
         DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{ 20, 26, 60, 255 }, nightAmt * 0.40f));
@@ -476,42 +516,43 @@ void drawWorld() {
 }
 
 // ================================================================ HUD
+// Quiet travel HUD: a stepped one-pixel frame instead of three large opaque
+// menu boxes. The full stat sheet is still in the pause menu.
+static void travelPlate(int x,int y,int w,int h) {
+    DrawRectangle(x+2,y+2,w,h,Color{26,31,40,100});
+    DrawRectangle(x,y+1,w,h-2,Color{30,41,51,241});
+    DrawRectangle(x+1,y,w-2,h,Color{30,41,51,241});
+    DrawRectangle(x+2,y,w-4,1,Color{180,165,126,255});
+    DrawRectangle(x+2,y+h-1,w-4,1,Color{92,101,93,255});
+}
 void drawHUD() {
-    // place label (dynamically sized to fit any zone name)
-    const char* zone = zoneNameAt(g.px, g.py);
-    Vector2 zsz = measureText(zone, 8);
-    float zw = std::max(120.0f, zsz.x + 18.0f);
-    drawWindow({ 4, 4, zw, 22 });
-    drawText(zone, 12, 11, Color{ 236, 240, 255, 255 }, 8);
+    const char* zone=zoneNameAt(g.px,g.py);
+    travelPlate(5,5,(int)measureText(zone,8).x+29,19);
+    // Tiny two-colour compass needle.
+    DrawTriangle({12,16},{16,14},{16,7},Color{250,218,149,255});
+    DrawTriangle({20,12},{16,14},{16,21},Color{134,173,169,255});
+    drawText(zone,27,11,Color{246,238,212,255},8);
+    char buf[64]; snprintf(buf,sizeof(buf),"%d",g.gil);
+    int gw=(int)measureText(buf,8).x+27, gx=VRES_W-5-gw;
+    travelPlate(gx,5,gw,19);
+    DrawTexture(g.assets.icon[ICON_COIN],gx+3,6,WHITE);
+    drawText(buf,(float)gx+21,11,Color{247,211,135,255},8);
 
-    // party vitals, bottom-left (wider so names never overlap bars)
-    float y = VRES_H - 60;
-    drawWindow({ 4, y - 4, 198, 60 });
-    for (int i = 0; i < 3; i++) {
-        const Hero& h = g.party[i];
-        float hy = y + 2 + i * 18;
-        Texture2D& f = g.assets.face[i == 0 ? FACE_KNIGHT : (i == 1 ? FACE_MAGE : FACE_CLERIC)];
-        if (f.id) DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height }, { 9, hy - 1, 15, 15 },
-                                 { 0, 0 }, 0.0f, h.ko ? Color{ 130, 130, 160, 255 } : WHITE);
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%-6s L%d", heroName(h.klass), h.level);
-        Color nc = h.ko ? Color{ 220, 120, 120, 255 }
-                 : (h.poisoned ? Color{ 195, 145, 255, 255 } : Color{ 236, 240, 255, 255 });
-        drawText(buf, 27, hy + 2, nc, 8);
-        drawBar(116, hy + 3, 48, 5, (float)h.hp / std::max(1, h.maxHp),
-                h.ko ? Color{ 120, 60, 60, 255 } : Color{ 96, 220, 120, 255 }, Color{ 30, 40, 80, 255 });
-        drawBar(168, hy + 3, 28, 5, (float)h.mp / std::max(1, h.maxMp),
-                Color{ 96, 160, 255, 255 }, Color{ 30, 40, 80, 255 });
+    constexpr int partyW=239, by=VRES_H-31;
+    travelPlate(5,by,partyW,26);
+    for (int i=0;i<3;++i) {
+        const Hero& h=g.party[i]; int x=9+78*i;
+        Texture2D f=g.assets.face[h.klass==KLASS_KNIGHT ? FACE_KNIGHT : h.klass==KLASS_MAGE ? FACE_MAGE : FACE_CLERIC];
+        DrawTexturePro(f,{0,0,(float)f.width,(float)f.height},{(float)x,(float)by+4,17,18},{0,0},0,
+                       h.ko ? Color{135,135,154,255} : WHITE);
+        drawText(heroName(h.klass),x+20.f,by+4.f,h.ko ? Color{226,141,139,255} : WHITE,8);
+        // Two slim gauge tracks leave the party readable without hiding the path.
+        int hp=(int)roundf(49.f*h.hp/std::max(1,h.maxHp)), mp=(int)roundf(49.f*h.mp/std::max(1,h.maxMp));
+        DrawRectangle(x+20,by+15,49,3,Color{69,78,81,255}); DrawRectangle(x+20,by+20,49,2,Color{62,72,85,255});
+        DrawRectangle(x+20,by+15,hp,3,h.poisoned ? Color{187,138,192,255} : Color{140,194,137,255});
+        DrawRectangle(x+20,by+20,mp,2,Color{126,179,207,255});
+        if(i<2) DrawRectangle(x+73,by+5,1,16,Color{71,85,87,255});
     }
-
-    // gil, top-right
-    drawWindow({ VRES_W - 104, 4, 100, 22 });
-    Texture2D& coin = g.assets.icon[ICON_COIN];
-    if (coin.id) DrawTexturePro(coin, { 0, 0, (float)coin.width, (float)coin.height },
-                               { VRES_W - 97.0f, 8, 13, 13 }, { 0, 0 }, 0.0f, WHITE);
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%d", g.gil);
-    drawText(buf, VRES_W - 80.0f, 11, Color{ 255, 232, 150, 255 }, 8);
 
     // active quest tracker with progress / compass hint
     for (int q = 0; q < QUEST_COUNT; q++) {
@@ -538,10 +579,10 @@ void drawHUD() {
     if (prompt) {
         Vector2 sz = measureText(prompt, 8);
         float pw = sz.x + 16;
-        float px = std::max(208.0f, VRES_W * 0.5f - pw * 0.5f);
-        if (px + pw > VRES_W - 4) px = VRES_W - 4 - pw;
-        drawWindow({ px, VRES_H - 26, pw, 20 });
-        drawTextCentered(prompt, px + pw * 0.5f, VRES_H - 20, Color{ 236, 240, 255, 255 }, 8);
+        float px=VRES_W-pw-5;
+        int py=px>partyW+8 ? VRES_H-28 : VRES_H-53;
+        travelPlate((int)px,py,(int)pw,20);
+        drawTextCentered(prompt,px+pw*.5f,(float)py+6,Color{246,238,212,255},8);
     }
     drawToast();
 }

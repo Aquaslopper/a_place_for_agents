@@ -16,167 +16,27 @@ small overlays and fallback objects are generated in-repository instead:
 Two colour keys are in play: ``(0,147,146)`` on the charset sheets and
 ``(255,103,139)`` on the chipsets.
 """
-from pathlib import Path
 from PIL import Image, ImageDraw
 import art_objects
-
-ROOT = Path(__file__).resolve().parent.parent / 'assets'
-SRC = ROOT / 'source' / 'openrtp'
-
-KEY_CYAN = (0, 147, 146)      # RPG Maker 2000 charset key
-KEY_PINK = (255, 103, 139)    # OpenRTP chipset key
-KEY_PINK2 = (254, 103, 138)   # object charsets one-off pink
-
-EXT = 'ChipSet/Exterior.png'
-WLD = 'ChipSet/World.png'
-INT = 'ChipSet/Interior.png'
-DUN = 'ChipSet/Dungeon.png'
-
-
-# ------------------------------------------------------------------ utilities
-def load(sheet):
-    return Image.open(SRC / sheet).convert('RGBA')
-
-
-def keyed(img, key):
-    """Remove an exact colour key."""
-    p = img.load()
-    for y in range(img.height):
-        for x in range(img.width):
-            if p[x, y][:3] == key:
-                p[x, y] = (0, 0, 0, 0)
-    return img
-
-
-def tile(sheet, tx, ty, key=None, scale=1):
-    out = load(sheet).crop((tx * 16, ty * 16, tx * 16 + 16, ty * 16 + 16))
-    if key:
-        keyed(out, key)
-    if scale != 1:
-        out = out.resize((16 * scale, 16 * scale), Image.Resampling.NEAREST)
-    return out
-
-
-def rect(sheet, x, y, w, h, key=None):
-    out = load(sheet).crop((x, y, x + w, y + h))
-    if key:
-        keyed(out, key)
-    return out
-
-
-def tcell(sheet, tx, ty, tw=1, th=1, key=None):
-    return rect(sheet, tx * 16, ty * 16, tw * 16, th * 16, key)
-
-
-def save(img, *parts):
-    path = ROOT.joinpath(*parts)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    img.save(path)
-
-
-def trim(img, pad=0):
-    bb = img.getbbox()
-    if not bb:
-        return img
-    x0, y0, x1, y1 = bb
-    return img.crop((max(0, x0 - pad), max(0, y0 - pad),
-                     min(img.width, x1 + pad), min(img.height, y1 + pad)))
-
-
-def canvas(w, h):
-    return Image.new('RGBA', (w, h))
-
-
-def centered(img, size, upscale=True):
-    """Integer-scale a sprite to fill ``size`` and bottom-centre it."""
-    cw, ch = size
-    sc = min(cw / img.width, ch / img.height)
-    if not upscale:
-        sc = min(1.0, sc)
-    if sc > 1.0:
-        sc = max(1.0, float(int(sc)))
-    nw, nh = max(1, int(img.width * sc)), max(1, int(img.height * sc))
-    out = canvas(cw, ch)
-    out.alpha_composite(img.resize((nw, nh), Image.Resampling.NEAREST),
-                        ((cw - nw) // 2, ch - nh))
-    return out
-
-
-def centered_mid(img, size, upscale=True):
-    """Scale and center an icon cleanly in ``size``."""
-    cw, ch = size
-    sc = min(cw / max(1, img.width), ch / max(1, img.height))
-    if not upscale:
-        sc = min(1.0, sc)
-    nw, nh = max(1, int(round(img.width * sc))), max(1, int(round(img.height * sc)))
-    out = canvas(cw, ch)
-    out.alpha_composite(img.resize((nw, nh), Image.Resampling.NEAREST),
-                        ((cw - nw) // 2, (ch - nh) // 2))
-    return out
-
-
-def tint(img, rgb):
-    """Multiply a texture by a colour while keeping its shading."""
-    if not rgb:
-        return img
-    out = img.copy()
-    p = out.load()
-    for y in range(out.height):
-        for x in range(out.width):
-            r, g, b, a = p[x, y]
-            if a:
-                p[x, y] = (r * rgb[0] // 255, g * rgb[1] // 255, b * rgb[2] // 255, a)
-    return out
-
+import art_misc
+from rtp_sheet import (EXT, WLD, INT, DUN, KEY_CYAN, KEY_PINK, KEY_PINK2, load, keyed,
+                       tile, rect, tcell, save, trim, canvas, centered, centered_mid, tint)
+from landscape_art import make_landscape, ramp
+from village_art import build_buildings
+from battle_scenery import build_backdrops
 
 # =================================================================== 1. tiles
 def build_tiles():
     """Ground textures, used as seamless 16x16 fills by the world renderer."""
-    # --- meadow grass: four shades so the plains never look flat
-    save(tile(EXT, 5, 8), 'tiles', 'grass_0.png')
-    save(tile(EXT, 7, 8), 'tiles', 'grass_1.png')
-    save(tile(WLD, 2, 9), 'tiles', 'grass_2.png')
-    save(tile(WLD, 4, 10), 'tiles', 'grass_3.png')
-    save(tint(tile(EXT, 5, 8), (180, 205, 170)), 'tiles', 'grass_dark.png')
-
-    # --- paths, fields, sand
-    save(tile(WLD, 22, 3), 'tiles', 'dirt.png')          # packed earth road
-    save(tile(EXT, 7, 5), 'tiles', 'soil.png')           # tilled field
-    save(tile(EXT, 3, 12), 'tiles', 'sand.png')          # loose yellow sand
-    save(tile(EXT, 4, 14), 'tiles', 'beach.png')         # pale shoreline sand
-    save(tile(EXT, 10, 4), 'tiles', 'arcane.png')        # crystal ground
-
-    # --- stone
-    save(tile(EXT, 9, 4), 'tiles', 'cobble.png')         # village plaza (setts)
-    save(tile(EXT, 9, 4), 'tiles', 'flagstone.png')
-    # Recolour the seamless earth fill as weathered ground. The dungeon's
-    # masonry and the mountain autotile pieces are not seamless outdoor floors.
-    rocky = tile(WLD, 7, 2).convert('L').convert('RGBA')
-    rocky = tint(rocky, (180, 190, 175))
-    save(rocky, 'tiles', 'rock_hill.png')
-    save(rocky, 'tiles', 'rock_hill2.png')
-    save(tile(EXT, 12, 11), 'tiles', 'brick.png')        # pale brick
-    save(tile(EXT, 12, 11), 'tiles', 'brick_dark.png')
-    save(tile(WLD, 12, 8), 'tiles', 'dungeon_floor.png')
-
-    # --- cold
-    save(tile(EXT, 6, 0), 'tiles', 'snow.png')
-    save(tile(EXT, 7, 2), 'tiles', 'snow_drift.png')
-    save(tile(WLD, 7, 6), 'tiles', 'tundra.png')
-    save(tile(DUN, 10, 2), 'tiles', 'ice.png')
-    save(tile(DUN, 10, 2), 'tiles', 'ice_crack.png')
-
-    # --- water
-    save(tile(EXT, 0, 5), 'tiles', 'water_0.png')
-    save(tile(EXT, 1, 5), 'tiles', 'water_1.png')
-    save(tint(tile(EXT, 0, 5), (155, 180, 210)), 'tiles', 'deep_water.png')
-    save(tint(tile(EXT, 5, 8), (145, 170, 135)), 'tiles', 'swamp.png')
-
-    # --- interior flooring (shop / inn / temple interiors)
-    save(tile(INT, 18, 4), 'tiles', 'plank_floor.png')
-    save(tile(INT, 14, 4), 'tiles', 'tile_floor.png')
-    save(tile(INT, 15, 4), 'tiles', 'stone_floor.png')
-    save(tile(INT, 16, 4), 'tiles', 'carpet.png')
+    make_landscape()
+    # Keep masonry on walls, boards underfoot and woven fabric on the rug.
+    save(tile(INT, 15, 0), 'tiles', 'brick.png')
+    save(tile(INT, 16, 5), 'tiles', 'brick_dark.png')
+    save(tile(DUN, 13, 6), 'tiles', 'dungeon_floor.png')
+    save(tile(INT, 13, 3), 'tiles', 'plank_floor.png')
+    save(ramp(tile(EXT,7,10),'99988c a8a69a b6b4a6 c5c0aa'), 'tiles', 'tile_floor.png')
+    save(ramp(tile(EXT,12,11),'8b8d89 a1a49c b0b0a2 c1beac d0cab3'), 'tiles', 'stone_floor.png')
+    save(tile(INT, 16, 13), 'tiles', 'carpet.png')
 
     # Small, transparent ground cover, not full shrubs or indoor furniture.
     for v in range(3):
@@ -201,29 +61,7 @@ def build_objects():
     """Trees, rocks, bushes, fences, street furniture and landmarks."""
     k = KEY_PINK
 
-    # ---- trees -----------------------------------------------------------
-    broad = trim(tcell(EXT, 22, 8, 2, 2, k))            # broad-leaf shade tree
-    save(centered(broad, (40, 42)), 'sprites', 'tree_0.png')
-    save(centered(broad.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (40, 42)),
-         'sprites', 'tree_1.png')
-    broad2 = trim(tcell(WLD, 18, 10, 2, 2, k))          # deep-forest crown
-    save(centered(broad2, (46, 48)), 'sprites', 'tree_2.png')
-    conifer = trim(tcell(EXT, 20, 8, 1, 2, k))          # conifer, one tile wide
-    save(centered(conifer, (28, 46)), 'sprites', 'pine_0.png')
-    save(centered(conifer, (24, 40)), 'sprites', 'pine_1.png')
-    save(centered(conifer.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (28, 46)),
-         'sprites', 'pine_2.png')
-    dead = trim(tcell(EXT, 21, 8, 1, 2, k))             # bare / dead tree
-    save(centered(dead, (24, 38)), 'sprites', 'dead_tree.png')
-    # Recolour the actual conifer, rather than cropping two unrelated overworld objects.
-    snowy = conifer.copy()
-    pixels = snowy.load()
-    for y in range(snowy.height):
-        for x in range(snowy.width):
-            r, g, b, a = pixels[x, y]
-            if a and g > r * 1.2 and g > 100 and (x + y) % 3 != 0:
-                pixels[x, y] = (205, 225, 222, a)
-    save(centered(snowy, (26, 40)), 'sprites', 'tree_snow.png')
+    save(trim(tcell(EXT, 21, 8, 1, 2, k)), 'sprites', 'dead_tree.png')
 
     # ---- rocks -----------------------------------------------------------
     lump = trim(tcell(DUN, 20, 9, 1, 1, k))             # complete rounded stone
@@ -231,9 +69,6 @@ def build_objects():
     save(centered(lump.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (20, 18)),
          'sprites', 'rock_1.png')
     save(centered(trim(tcell(WLD, 27, 1, 1, 1, k)), (22, 18)), 'sprites', 'rock_2.png')
-    save(centered(trim(tcell(WLD, 27, 1, 1, 1, k)), (28, 26)), 'sprites', 'boulder.png')
-    save(centered(trim(tcell(WLD, 28, 1, 1, 1, k)), (22, 30)), 'sprites', 'crystal.png')
-
     # ---- plants ----------------------------------------------------------
     save(trim(tcell(EXT, 19, 8, 1, 1, k)), 'sprites', 'stump.png')             # real tree stump
     save(centered(trim(tcell(EXT, 18, 9, 1, 1, k)), (18, 18)), 'sprites', 'bush.png')
@@ -251,25 +86,38 @@ def build_objects():
     save(trim(tcell(EXT, 21, 12, 1, 1, k)), 'sprites', 'campfire.png')
     save(trim(tcell(INT, 23, 10, 1, 1, k)), 'sprites', 'cauldron.png')        # real iron cauldron
     save(trim(tcell(INT, 25, 8, 1, 1, k)), 'sprites', 'basin.png')            # real wooden bucket
-    save(trim(tcell(EXT, 22, 6, 2, 1, k)), 'sprites', 'flowerbed.png')        # real wooden flowerbeds
+    bed = canvas(28, 12)
+    d = ImageDraw.Draw(bed)
+    d.rectangle((1,6,26,11),fill='#986644',outline='#614c36'); d.line((2,7,25,7),fill='#d19d64')
+    bush = trim(tcell(EXT,18,9,1,1,k)).resize((13,8),Image.Resampling.NEAREST)
+    bed.alpha_composite(bush,(1,0)); bed.alpha_composite(bush,(14,0))
+    save(bed, 'sprites', 'flowerbed.png')
     save(trim(tcell(EXT, 20, 11, 1, 1, k)), 'sprites', 'mailbox.png')
 
     # ---- fences ----------------------------------------------------------
     save(trim(rect(EXT, 19 * 16, 12 * 16, 16, 16, k)), 'sprites', 'fence.png')
     save(trim(rect(EXT, 18 * 16, 12 * 16, 16, 16, k)), 'sprites', 'fence_post.png')
-    save(trim(rect(EXT, 21 * 16, 14 * 16, 16, 16, k)), 'sprites', 'fence_gate.png')
-    save(trim(rect(EXT, 22 * 16, 10 * 16, 16, 16, k)), 'sprites', 'ladder.png')
+    save(trim(tcell(EXT, 18, 12, 3, 1, k)), 'sprites', 'fence_gate.png')
+    save(trim(tcell(EXT,22,10,1,1,k)), 'sprites', 'ladder.png')
 
     # ---- landmarks -------------------------------------------------------
     save(centered(trim(tcell(EXT, 26, 8, 1, 2, k)), (24, 40)), 'sprites', 'statue.png')
     save(centered(trim(tcell(EXT, 27, 8, 1, 2, k)), (22, 40)), 'sprites', 'pillar.png')
     save(trim(tcell(EXT, 24, 13, 3, 3, k)), 'sprites', 'monument.png')
-    save(trim(tcell(EXT, 27, 13, 3, 3, k)), 'sprites', 'pavilion.png')
+    save(trim(tcell(EXT, 27, 13, 3, 3, k)), 'sprites', 'pavilion.png')  # canvas tent, for camps
+    arch=canvas(36,35); pier=trim(tcell(EXT,27,8,1,2,k)); arch.alpha_composite(pier,(0,4))
+    arch.alpha_composite(pier.crop((0,6,pier.width,pier.height)),(25,10))
+    lintel=ramp(tile(EXT,15,11),'48525b 646d71 818683 a3a395 bfb9a3')
+    arch.alpha_composite(lintel.crop((0,0,16,8)),(1,2));arch.alpha_composite(lintel.crop((0,0,6,5)),(17,2))
+    save(arch,'sprites','ruin_arch.png')
 
     # ---- interior dressing (shops, inns, houses) -------------------------
-    save(trim(tcell(WLD, 25, 10, 1, 1, k)), 'sprites', 'barrel.png')
+    save(trim(tcell(EXT, 27, 5, 1, 1, k)), 'sprites', 'barrel.png')
+    crate = tile(INT,13,3); d=ImageDraw.Draw(crate)
+    d.rectangle((0,0,15,15),outline='#513c30',width=2); d.line((2,2,13,13),fill='#ab8058',width=2)
+    save(crate,'sprites','crate.png')
     save(trim(tcell(INT, 26, 7, 1, 1, k)), 'sprites', 'table.png')            # round wooden table
-    save(trim(tcell(INT, 25, 10, 3, 1, k)), 'sprites', 'counter.png')         # real shop counter
+    save(trim(tcell(INT, 26, 10, 1, 1, k)), 'sprites', 'counter.png')         # real shop counter
     save(trim(tcell(INT, 26, 6, 1, 1, k)), 'sprites', 'lantern.png')
     save(trim(tcell(INT, 24, 6, 1, 1, k)), 'sprites', 'candle.png')
     save(trim(tcell(INT, 27, 6, 1, 1, k)), 'sprites', 'plate.png')
@@ -277,7 +125,7 @@ def build_objects():
     save(trim(tcell(INT, 24, 10, 1, 2, k)), 'sprites', 'bed.png')             # real cosy bed
     save(trim(tcell(INT, 26, 8, 1, 1, k)), 'sprites', 'stool.png')
     save(trim(tcell(EXT, 20, 10, 1, 1, k)), 'sprites', 'noticeboard.png')
-    save(trim(tcell(INT, 27, 4, 2, 2, k)), 'sprites', 'shelf.png')            # real bookcase / shop shelf
+    save(trim(tcell(INT, 18, 1, 3, 2, k)), 'sprites', 'shelf.png')            # real bookcase / shop shelf
     save(trim(tcell(EXT, 24, 7, 3, 1, k)), 'sprites', 'longtable.png')        # real long wooden table
 
     # ---- chests: closed and open, from the object charset -----------------
@@ -286,162 +134,6 @@ def build_objects():
     save(centered(closed, (18, 18)), 'sprites', 'chest_closed.png')
     opened = trim(keyed(rect(obj, 2 * 72, 128 + 96, 24, 32), KEY_PINK2))
     save(centered(opened, (18, 22)), 'sprites', 'chest_open.png')
-
-
-# ================================================================ 3. houses
-WALLS = {
-    'plaster':  (16, 2),
-    'plaster2': (16, 1),
-    'ashlar':   (15, 10),
-    'stone':    (15, 10),
-    'brick':    (13, 2),
-    'brick2':   (13, 1),
-    'brickred': (12, 10),
-    'timber':   (18, 6),
-    'timber2':  (18, 5),
-    'log':      (18, 4),
-}
-
-ROOFS = {
-    'thatch':  (13, 5, None),
-    'slate':   (13, 4, (150, 162, 196)),
-    'plank':   (14, 4, (188, 226, 168)),
-    'brick':   (13, 5, (238, 132, 120)),
-    'dark':    (14, 3, (126, 136, 172)),
-}
-
-
-def _fill(sheet, tx, ty, w, h):
-    out = canvas(w, h)
-    t = tile(sheet, tx, ty)
-    for y in range(0, h, 16):
-        for x in range(0, w, 16):
-            out.alpha_composite(t, (x, y))
-    return out
-
-
-def _roof(w, h, style):
-    """A shingle band with a lit ridge and a dark eave."""
-    tx, ty, col = ROOFS[style]
-    out = tint(_fill(EXT, tx, ty, w, h), col)
-    d = ImageDraw.Draw(out)
-    d.rectangle((0, 0, w - 1, 1), fill=(252, 234, 202, 80))
-    d.rectangle((0, 1, w - 1, 2), fill=(110, 66, 34, 90))
-    d.rectangle((0, h - 4, w - 1, h - 3), fill=(64, 38, 20, 255))
-    d.rectangle((0, h - 2, w - 1, h - 1), fill=(34, 20, 12, 255))
-    return out
-
-
-def _window_small():
-    return trim(tcell(EXT, 25, 2, 1, 1, KEY_PINK)).resize((14, 14), Image.Resampling.NEAREST)
-
-
-def _window_arch():
-    """The tall cream arch window object (3x3 tiles)."""
-    return tcell(EXT, 15, 0, 3, 3, KEY_PINK)
-
-
-def _door():
-    """A plank door built from the chipset's own timber, framed in oak."""
-    planks = tile(EXT, 18, 6)
-    out = canvas(18, 26)
-    out.alpha_composite(planks.crop((1, 2, 15, 16)).resize((14, 24), Image.Resampling.NEAREST),
-                        (2, 2))
-    d = ImageDraw.Draw(out)
-    d.rectangle((0, 0, 17, 1), fill=(112, 70, 36, 255))
-    d.rectangle((0, 0, 1, 25), fill=(112, 70, 36, 255))
-    d.rectangle((16, 0, 17, 25), fill=(112, 70, 36, 255))
-    d.rectangle((2, 24, 15, 25), fill=(48, 30, 16, 255))
-    d.rectangle((12, 13, 13, 14), fill=(252, 214, 92, 255))
-    return out
-
-
-def build_house(roof, wall, w=64, h=58, sign=False, chimney=False, awning=False,
-                banner=False, storeys=1, arch_window=False):
-    out = canvas(w, h)
-    roof_h = 20 if storeys == 1 else 24
-    out.alpha_composite(_roof(w, roof_h, roof), (0, 0))
-    out.alpha_composite(_fill(EXT, *WALLS[wall], w - 6, h - roof_h), (3, roof_h))
-
-    d = ImageDraw.Draw(out)
-    d.rectangle((2, roof_h, 3, h - 1), fill=(60, 38, 22, 255))
-    d.rectangle((w - 4, roof_h, w - 3, h - 1), fill=(60, 38, 22, 255))
-    d.rectangle((2, h - 3, w - 3, h - 1), fill=(44, 28, 16, 255))
-
-    door = _door()
-    dx = (w - door.width) // 2
-    win = _window_small()
-    for wx in (7, w - 7 - win.width):
-        out.alpha_composite(win, (wx, roof_h + 8))
-        if storeys > 1:
-            out.alpha_composite(win, (wx, roof_h - 13))
-
-    if arch_window:
-        aw = _window_arch().resize((32, 32), Image.Resampling.NEAREST)
-        out.alpha_composite(aw, ((w - 32) // 2, roof_h + 1))
-        out.alpha_composite(door.resize((14, 20), Image.Resampling.NEAREST),
-                            ((w - 14) // 2, h - 22))
-    else:
-        out.alpha_composite(door, (dx, h - door.height - 2))
-
-    if sign:
-        board = trim(tcell(EXT, 22, 14, 1, 1, KEY_PINK)).resize((12, 12), Image.Resampling.NEAREST)
-        out.alpha_composite(board, (dx + door.width + 1, h - 22))
-    if chimney:
-        chim = tile(EXT, 28, 8, key=KEY_PINK).crop((2, 0, 14, 16))
-        out.alpha_composite(chim, (w - 20, 0))
-    if awning:
-        for i, x in enumerate(range(3, w - 3, 16)):
-            c = 16 if i % 2 == 0 else 17
-            out.alpha_composite(tile(EXT, c, 12).crop((0, 6, 16, 16)), (x, roof_h - 2))
-    if banner:
-        cloth = tile(EXT, 18, 1).crop((3, 4, 13, 16))
-        out.alpha_composite(cloth, (dx + 4, h - 42))
-    return out
-
-
-def build_buildings():
-    save(build_house('thatch', 'plaster'), 'sprites', 'house_0.png')
-    save(build_house('slate', 'timber', chimney=True, storeys=2), 'sprites', 'house_1.png')
-    save(build_house('brick', 'brick', w=66, h=60, chimney=True), 'sprites', 'house_2.png')
-    save(build_house('plank', 'timber2', w=66, h=60, storeys=2), 'sprites', 'house_3.png')
-    save(build_house('dark', 'ashlar', w=68, h=62, storeys=2, chimney=True),
-         'sprites', 'house_4.png')
-
-    save(build_house('slate', 'plaster', w=72, h=62, sign=True, awning=True),
-         'sprites', 'shop.png')
-    save(build_house('thatch', 'brick2', w=74, h=68, sign=True, banner=True,
-                     chimney=True, storeys=2), 'sprites', 'inn.png')
-    save(build_house('dark', 'ashlar', w=76, h=72, sign=True, storeys=2,
-                     arch_window=True), 'sprites', 'temple.png')
-    save(build_house('brick', 'plaster', w=78, h=70, storeys=2, chimney=True,
-                     arch_window=True), 'sprites', 'manor.png')
-    save(_castle(), 'sprites', 'castle.png')
-    save(_tower(), 'sprites', 'tower.png')
-    save(_gate(), 'sprites', 'gate.png')
-
-
-def _castle():
-    out = canvas(96, 86)
-    wall = trim(tcell(WLD, 20, 10, 2, 2, KEY_PINK)).resize((56, 56), Image.Resampling.NEAREST)
-    out.alpha_composite(wall, (2, 28))
-    out.alpha_composite(wall.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (38, 28))
-    keep = trim(tcell(WLD, 22, 10, 2, 2, KEY_PINK)).resize((56, 56), Image.Resampling.NEAREST)
-    out.alpha_composite(keep, (20, 10))
-    return out
-
-
-def _tower():
-    low = trim(tcell(DUN, 20, 12, 1, 1, KEY_PINK)).resize((26, 26), Image.Resampling.NEAREST)
-    top = trim(tcell(DUN, 22, 12, 1, 1, KEY_PINK)).resize((26, 26), Image.Resampling.NEAREST)
-    out = canvas(28, 54)
-    out.alpha_composite(low, (1, 28))
-    out.alpha_composite(top, (1, 2))
-    return out
-
-
-def _gate():
-    return trim(tcell(WLD, 23, 12, 1, 2, KEY_PINK)).resize((28, 44), Image.Resampling.NEAREST)
 
 
 # ================================================================= 4. heroes
@@ -509,13 +201,13 @@ def build_heroes():
     save(portrait(P, 2, 1), 'sprites', 'face_elder.png')      # grey-bearded elder
     save(portrait(P, 0, 1), 'sprites', 'face_mayor.png')
     save(portrait(P, 1, 1), 'sprites', 'face_woman.png')
-    save(portrait(P, 3, 1), 'sprites', 'face_child.png')
+    save(portrait(P, 1, 0), 'sprites', 'face_child.png')
     P2 = 'FaceSet/People2.png'
     save(portrait(P2, 0, 0), 'sprites', 'face_smith.png')
     save(portrait(P2, 3, 2), 'sprites', 'face_bard.png')
     A2 = 'FaceSet/Actor2.png'
-    save(portrait(A2, 1, 1), 'sprites', 'face_shopkeeper.png')
-    save(portrait(A2, 2, 2), 'sprites', 'face_innkeeper.png')
+    save(portrait(P, 3, 0), 'sprites', 'face_shopkeeper.png')
+    save(portrait(P, 0, 1), 'sprites', 'face_innkeeper.png')
     save(portrait(A2, 3, 0), 'sprites', 'face_guard.png')
     save(portrait(A2, 0, 1), 'sprites', 'face_ranger.png')
 
@@ -530,17 +222,25 @@ def build_villagers():
         ('npc_elder',     'CharSet/People1.png', 2, 1),
         ('npc_mayor',     'CharSet/People1.png', 0, 1),
         ('npc_woman',     'CharSet/People1.png', 1, 1),
-        ('npc_child',     'CharSet/People1.png', 3, 1),
+        ('npc_child',     'CharSet/People1.png', 1, 0),
         ('npc_guard',     'CharSet/People3.png', 3, 1),
         ('npc_soldier',   'CharSet/People3.png', 2, 1),
         ('npc_knight',    'CharSet/People3.png', 0, 1),
-        ('npc_merchant',  'CharSet/People2.png', 0, 0),
+        ('npc_merchant',  'CharSet/People1.png', 3, 0),
         ('npc_smith',     'CharSet/People2.png', 3, 0),
         ('npc_priest',    'CharSet/People4.png', 0, 0),
         ('npc_farmer',    'CharSet/People5.png', 0, 1),   # straw-hat farmer
     ]
     for name, sheet, col, row in npcs:
-        save(walk_sheet(sheet, col, row), 'sprites', name + '.png')
+        frames=walk_sheet(sheet,col,row)
+        if name=='npc_child':
+            small=canvas(72,96)
+            for y in range(3):
+                for x in range(3):
+                    cell=frames.crop((24*x,32*y,24*x+24,32*y+32))
+                    small.alpha_composite(cell.resize((19,25),Image.Resampling.NEAREST),(x*24+2,y*32+7))
+            frames=small
+        save(frames,'sprites',name+'.png')
     # animals: (0,0)=dog, (1,0)=cat, (2,0)=chicken, (3,0)=sheep
     for name, col, row in (('npc_dog', 0, 0), ('npc_chicken', 2, 0),
                            ('npc_sheep', 3, 0), ('npc_cat', 1, 0)):
@@ -552,14 +252,10 @@ def build_villagers():
 MONSTERS = {
     'slime':       ('CharSet/Monster1.png', 0, 0, (36, 28), None),
     'imp':         ('CharSet/Monster1.png', 1, 0, (34, 40), None),
-    'bat':         ('CharSet/Monster2.png', 1, 0, (40, 34), (170, 150, 220)),  # dark winged fiend
     'hornet':      ('Monster/Hornet.png',   0, 0, (38, 34), None),
-    'wisp':        ('CharSet/Monster1.png', 2, 1, (34, 40), (160, 220, 255)),  # phantom wisp
-    'wolf':        ('CharSet/Animal.png',   2, 1, (40, 32), (145, 165, 195)),  # silver-grey dire wolf
     'skeleton':    ('CharSet/Monster1.png', 0, 1, (32, 42), None),
     'ghost':       ('CharSet/Monster1.png', 3, 0, (34, 40), None),
     'orc':         ('CharSet/Monster1.png', 3, 1, (38, 42), None),             # horned warrior orc
-    'serpent':     ('CharSet/Monster3.png', 1, 0, (44, 42), None),
     'golem':       ('CharSet/Monster2.png', 0, 1, (40, 44), None),             # stone golem
     'night_rider': ('CharSet/Monster3.png', 3, 0, (42, 46), None),
 }
@@ -577,8 +273,8 @@ def monster_sprite(entry, battle=False):
                     p[x, y] = (0, 0, 0, 0)
         out = trim(im)
     else:
-        # field faces forward (row 2), battle faces left toward the heroes (row 3)
-        dir_row = 3 if battle else 2
+        # Field faces forward; the party stands to the right in battle.
+        dir_row = 1 if battle else 2
         out = charset_cell(sheet, col, row, dir_row=dir_row, key=KEY_CYAN)
     return tint(out, rgb) if rgb else out
 
@@ -628,6 +324,20 @@ def build_monsters():
         battle_sp = monster_sprite(entry, battle=True)
         save(centered(field_sp, (w, h)), 'sprites', name + '.png')
         save(centered(battle_sp, (w * 2, h * 2)), 'sprites', name + '_battle.png')
+    # No standalone wolf, bat, wisp or snake on these character sheets:
+    # the old selections were a tiger, armoured fiend, hooded man and scorpion.
+    serpent=canvas(36,31); d=ImageDraw.Draw(serpent)
+    d.ellipse((6,19,33,29),fill='#456457',outline='#344946');d.ellipse((10,20,26,26),fill='#87a469',outline='#587958')
+    d.line([(26,22),(23,15),(17,12),(16,7)],fill='#344946',width=7)
+    d.line([(25,22),(22,16),(16,12),(15,7)],fill='#82965e',width=5)
+    d.polygon([(6,5),(14,3),(19,7),(16,11),(7,10),(4,8)],fill='#9bac70',outline='#405b4e')
+    d.point((9,6),fill='#f3d380');d.line((5,9,1,11),fill='#aa6564');d.line((28,25,35,19),fill='#55775c',width=2)
+    for name, im, dims in [('wolf',art_misc.wolf(),(40,32)),('wisp',art_misc.wisp(),(34,40)),
+                           ('bat',art_misc.bat(),(40,34)),('serpent',serpent,(44,42))]:
+        body=trim(im); w,h=dims
+        field=centered_mid(body,(max(1,w*2//3),max(1,h*2//3)))
+        f=canvas(w,h); f.alpha_composite(field,((w-field.width)//2,h-field.height)); save(f,'sprites',name+'.png')
+        save(centered(body,(2*w,2*h)), 'sprites',name+'_battle.png')
     build_slime_king()
 
     # FaceSet/Monster.png is 4x4 portraits (cols 0..3, rows 0..3)
@@ -636,7 +346,8 @@ def build_monsters():
     save(portrait(M, 3, 0), 'sprites', 'face_ghost.png')
     save(portrait(M, 0, 1), 'sprites', 'face_skeleton.png')
     save(portrait(M, 1, 0), 'sprites', 'face_demon.png')
-    save(portrait(M, 3, 1), 'sprites', 'face_wolf.png')
+    dog = centered_mid(charset_cell('CharSet/Animal.png',0,0), (40,40))
+    panel=Image.new('RGBA',(48,48),'#334956'); panel.alpha_composite(dog,(4,4)); save(panel,'sprites','face_dog.png')
 
 
 # ================================================================== 6. items
@@ -655,18 +366,27 @@ def build_coin_icon():
 def build_items():
     """Item and equipment icons lifted from the chipset prop banks."""
     k = KEY_PINK
-    save(centered_mid(trim(tcell(INT, 20, 10, 1, 1, k)), (16, 16)), 'icons', 'potion.png')
-    save(centered_mid(trim(tcell(INT, 25, 0, 1, 1, k)), (16, 16)), 'icons', 'hi_potion.png')
-    save(centered_mid(trim(tcell(INT, 26, 6, 1, 1, k)), (16, 16)), 'icons', 'ether.png')
-    save(centered_mid(trim(tcell(INT, 23, 8, 1, 1, k)), (16, 16)), 'icons', 'elixir.png')
+    # Shop shelf goods are not standalone inventory flasks.
+    save(art_misc.icon_potion(), 'icons', 'potion.png')
+    save(art_misc.icon_hipotion(), 'icons', 'hi_potion.png')
+    save(art_misc.icon_ether(), 'icons', 'ether.png')
+    save(art_misc.icon_elixir(), 'icons', 'elixir.png')
     save(centered_mid(trim(tcell(INT, 25, 4, 1, 1, k)), (16, 16)), 'icons', 'book.png')
     save(centered_mid(trim(tcell(INT, 24, 6, 1, 1, k)), (16, 16)), 'icons', 'candle.png')
     save(centered_mid(trim(tcell(INT, 28, 6, 1, 1, k)), (16, 16)), 'icons', 'food.png')        # herbs / antidote
     save(centered_mid(trim(tcell(INT, 22, 11, 1, 1, k)), (16, 16)), 'icons', 'feather.png')    # phoenix feather
-    save(centered_mid(trim(tcell(DUN, 28, 2, 1, 1, k)), (16, 16)), 'icons', 'gem.png')         # blue gem / key
+    save(centered_mid(trim(tcell(DUN, 28, 3, 1, 1, k)), (16, 16)), 'icons', 'gem.png')         # blue gem / key
     save(centered_mid(trim(tcell(INT, 22, 8, 1, 1, k)), (16, 16)), 'icons', 'shield.png')      # real heater shield
     save(centered_mid(trim(tcell(INT, 21, 10, 1, 1, k)), (16, 16)), 'icons', 'ring.png')       # pendant / ring / locket
     save(build_coin_icon(), 'icons', 'coin.png')
+    key = canvas(16,16); d=ImageDraw.Draw(key)
+    d.ellipse((1,1,8,8),outline='#674d43',width=3);d.ellipse((2,2,7,7),outline='#c39155',width=2)
+    d.line((7,7,14,14),fill='#705042',width=3);d.line((7,6,14,13),fill='#cea264',width=2)
+    d.line((10,10,12,8),fill='#ad7949',width=2);d.line((13,12,15,10),fill='#ad7949',width=2)
+    save(key,'icons','key.png')
+    crown=canvas(16,16);d=ImageDraw.Draw(crown)
+    d.polygon([(1,4),(5,7),(8,2),(11,7),(14,4),(13,12),(3,12)],fill='#e3ad48',outline='#885641')
+    d.line((3,10,13,10),fill='#ffe690');d.rectangle((7,8,8,9),fill='#aa4b53');save(crown,'icons','crown.png')
 
     # weapons: crisp sword blades tinted by metal tier
     sword_base = trim(tcell(INT, 20, 8, 1, 1, k))
@@ -676,9 +396,9 @@ def build_items():
 
     # armour: real interior armour sprites
     save(centered_mid(trim(tcell(INT, 22, 9, 1, 1, k)), (16, 16)), 'icons', 'armor_0.png')     # leather vest
-    save(centered_mid(trim(tcell(INT, 21, 9, 1, 1, k)), (16, 16)), 'icons', 'armor_1.png')     # chain/helm
+    save(ramp(art_misc.icon_armor(1),'363c49 505e6c 77868a a5b3af d8d8c5'), 'icons', 'armor_1.png')     # chain/helm
     save(centered_mid(trim(tcell(INT, 20, 9, 1, 1, k)), (16, 16)), 'icons', 'armor_2.png')     # mythril mail
-    save(centered_mid(trim(tcell(INT, 27, 2, 1, 2, k)), (16, 16)), 'icons', 'armor_3.png')     # dragon scale stand
+    save(ramp(art_misc.icon_armor(2),'47394e 594760 80667d a08088 d1a18d'), 'icons', 'armor_3.png')     # dragon scale stand
 
 
 # =================================================================== 7. UI
@@ -715,28 +435,28 @@ def build_title():
 # =============================================================== 9. effects
 def build_effects():
     def frames(sheet, fw, fh, cols, rows):
-        im = load(sheet)
+        im = keyed(load(sheet), (24, 117, 24))  # Battle sheets use green, NOT chipset pink
         out = []
         for r in range(rows):
             for c in range(cols):
-                cell = trim(im.crop((c * fw, r * fh, c * fw + fw, r * fh + fh)))
-                if cell.width > 2 and cell.height > 2:
-                    out.append(cell)
+                cell = im.crop((c * fw, r * fh, c * fw + fw, r * fh + fh))
+                if cell.getbbox():
+                    out.append(trim(cell))
         return out
 
     sword = frames('Battle/Sword1.png', 96, 96, 5, 3)
     if sword:
         save(centered(sword[2], (30, 30)), 'fx', 'slash.png')
-        save(centered(sword[1], (20, 20)), 'fx', 'spark.png')
-        save(centered(sword[0], (24, 24)), 'fx', 'sparkle.png')
+        save(art_misc.fx_spark(), 'fx', 'spark.png')
+        save(art_misc.fx_sparkle(), 'fx', 'sparkle.png')
     blow = frames('Battle/Blow.png', 96, 96, 5, 3)
     if blow:
         save(centered(blow[0], (22, 22)), 'fx', 'impact.png')
         save(centered(blow[len(blow) // 2], (26, 22)), 'fx', 'poof.png')
-        save(centered(blow[-1], (20, 20)), 'fx', 'fireball.png')
+        save(art_misc.fx_fireball(), 'fx', 'fireball.png')
     arrow = frames('Battle/Arrow.png', 96, 48, 5, 2)
     if arrow:
-        save(centered(arrow[0], (20, 20), upscale=False), 'fx', 'arrow.png')
+        save(centered(max(arrow, key=lambda im: im.width), (20, 20), upscale=False), 'fx', 'arrow.png')
 
 
 # =====================================================================
@@ -744,6 +464,7 @@ def main():
     build_tiles()
     build_objects()
     build_buildings()
+    build_backdrops()
     build_heroes()
     build_villagers()
     build_monsters()

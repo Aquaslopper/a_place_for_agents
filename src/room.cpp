@@ -47,11 +47,11 @@ void roomBuild(Room& room, const Building& b, const Village& v) {
     if (b.kind == 5) {
         room.kind = ROOM_SHOP;
         room.title = v.startVillage ? "Mira's Sundries" : (vname + " Sundries");
-        g.roomNpcSprite = 11; // merchant
+        g.roomNpcSprite = NS_MERCHANT; // merchant
         g.roomNpcFace = FACE_SHOPKEEPER;
         g.roomNpcName = v.startVillage ? "Mira the Trader" : "Village Trader";
         for (int x = 4; x <= room.w - 5; x++) addP(RP_COUNTER, x + 0.5f, 4.0f, true, 1.0f, 0.75f);
-        for (int x = 2; x <= room.w - 3; x += 3) addP(RP_SHELF, x + 0.5f, 1.8f, true, 0.9f, 0.8f);
+        for (int x = 3; x <= room.w - 3; x += 4) addP(RP_SHELF, x + 0.5f, 1.8f, true, 0.9f, 0.8f);
         addP(RP_BARREL, 2.0f, room.h - 2.6f);
         addP(RP_BARREL, 3.0f, room.h - 2.6f);
         addP(RP_KEG,    room.w - 2.2f, room.h - 2.6f);
@@ -60,7 +60,7 @@ void roomBuild(Room& room, const Building& b, const Village& v) {
     } else if (b.kind == 6) {
         room.kind = ROOM_INN;
         room.title = v.startVillage ? "The Sleeping Stag Inn" : (vname + " Inn");
-        g.roomNpcSprite = 6; // woman / innkeeper
+        g.roomNpcSprite = NS_MAYOR; // apron-clad innkeeper
         g.roomNpcFace = FACE_INNKEEPER;
         g.roomNpcName = v.startVillage ? "Bren the Innkeep" : "Innkeeper";
         room.npcX = 4.5f; room.npcY = 2.6f;
@@ -76,7 +76,7 @@ void roomBuild(Room& room, const Building& b, const Village& v) {
     } else if (b.kind == 7) {
         room.kind = ROOM_TEMPLE;
         room.title = v.startVillage ? "Chapel of the Meadow" : (vname + " Chapel");
-        g.roomNpcSprite = 13; // priest
+        g.roomNpcSprite = NS_PRIEST; // priest
         g.roomNpcFace = FACE_ELDER;
         g.roomNpcName = v.startVillage ? "Father Osric" : "Shrine Keeper";
         addP(RP_STATUE, room.w * 0.5f, 2.0f, true, 1.0f, 1.0f);
@@ -371,7 +371,7 @@ void roomDraw() {
 
     Texture2D& floorTex = (r.kind == ROOM_TEMPLE) ? g.assets.stoneFloor
                         : (r.kind == ROOM_SHOP ? g.assets.tileFloor : g.assets.plankFloor);
-    Texture2D& wallTex = g.assets.rockHill[0];
+    Texture2D& wallTex = g.assets.brickFloor[r.kind == ROOM_TEMPLE ? 1 : 0];
 
     for (int y = 0; y < r.h; y++) {
         for (int x = 0; x < r.w; x++) {
@@ -428,7 +428,7 @@ void roomDraw() {
                            { cx - t->width * 0.5f, fy - t->height, (float)t->width, (float)t->height },
                            { 0, 0 }, 0.0f, WHITE);
         } else if (it.type == 1) {
-            Texture2D& s = g.assets.npc[std::max(0, std::min(15, g.roomNpcSprite))];
+            Texture2D& s = g.assets.npc[std::max(0, std::min(NS_KIND_COUNT-1, g.roomNpcSprite))];
             if (s.id == 0) continue;
             float cx = ox + r.npcX * TILE;
             float fy = oy + (r.npcY + 0.35f) * TILE;

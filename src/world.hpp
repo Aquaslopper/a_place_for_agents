@@ -28,7 +28,7 @@ Texture2D* propTexture(PropKind kind, int* outW = nullptr, int* outH = nullptr);
 enum VillageDeco {
     VD_WELL = 0, VD_SIGN, VD_BENCH, VD_TORCH, VD_CAMPFIRE, VD_BARREL, VD_PLANT,
     VD_FLOWERBED, VD_LADDER, VD_STATUE, VD_CAULDRON, VD_URN, VD_FENCE_H, VD_FENCE_V,
-    VD_GATE, VD_TEMPLE_PILLAR, VD_HOUSE, VD_CRATE, VD_TABLE, VD_BUCKET, VD_KIND_COUNT
+    VD_GATE, VD_TEMPLE_PILLAR, VD_HOUSE, VD_CRATE, VD_TABLE, VD_BUCKET, VD_SHADE_TREE, VD_KIND_COUNT
 };
 void villageDecoTexture(int kind, int variant, Texture2D*& tex, int& w, int& h);
 bool villageDecoSolid(int kind);

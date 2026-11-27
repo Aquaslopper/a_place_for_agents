@@ -10,3 +10,5 @@ void battleUpdate(float dt);
 void battleDraw();       // draw inside the virtual RT
 
 bool battleIsActive();
+
+MusicCue battleMusicCue();

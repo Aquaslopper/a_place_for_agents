@@ -104,34 +104,42 @@ enum IconId {
     ICON_BOOK, ICON_CANDLE, ICON_GEM, ICON_COIN,
     ICON_SWORD0, ICON_SWORD1, ICON_SWORD2,
     ICON_ARMOR0, ICON_ARMOR1, ICON_ARMOR2, ICON_ARMOR3,
-    ICON_SHIELD, ICON_RING,
+    ICON_SHIELD, ICON_RING, ICON_KEY, ICON_CROWN,
     ICON_COUNT
 };
 
+enum Biome : uint8_t { BI_MEADOW, BI_FOREST, BI_AMBER, BI_FEN, BI_HEATH, BI_FROST, BI_DUNES, BI_COUNT };
+enum MusicCue { MUS_NONE = -1, MUS_TITLE, MUS_VILLAGE, MUS_FIELD, MUS_WOOD, MUS_FEN,
+    MUS_PASS, MUS_DUNES, MUS_HEARTH, MUS_CHAPEL, MUS_BATTLE, MUS_BOSS, MUS_VICTORY,
+    MUS_GAMEOVER, MUS_COUNT };
+
+enum NpcSprite { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_ELDER, NS_MAYOR,
+    NS_WOMAN, NS_CHILD, NS_GUARD, NS_SOLDIER, NS_KNIGHT, NS_MERCHANT, NS_SMITH,
+    NS_PRIEST, NS_FARMER, NS_DOG, NS_CAT, NS_CHICKEN, NS_KIND_COUNT };
+
 struct Assets {
+    Texture2D landscape{}, relief{}, bridge{}, lilies{}, turnips{};
     // terrain
-    Texture2D grass[4]{}, grassTall{}, dirt{}, soil{}, sand{}, beach{}, cobble{}, flagstone{},
-              rockHill[2]{}, brickFloor[2]{}, snow[2]{}, tundra{}, ice[2]{}, water[2]{},
-              deepWater{}, swamp{}, dungeonFloor{};
+    Texture2D brickFloor[2]{};
     Texture2D plankFloor{}, tileFloor{}, stoneFloor{}, carpet{}, stoolTex{};
     Texture2D tuft[3]{}, flowers[2]{}, pebble{};
     // objects
-    Texture2D tree[3]{}, treeSnow{}, pine[3]{}, deadTree{};
+    Texture2D tree[3]{}, treeSnow{}, pine[3]{}, deadTree{}, amberOak{}, copperOak{}, willow{}, reeds{}, yucca{}, crate{};
     Texture2D rock[3]{}, boulder{}, crystal{};
     Texture2D bush[2]{}, mushroom{}, plant{}, urn{};
     Texture2D well{}, sign{}, bench{}, torch{}, campfire{}, cauldron{}, bucket{}, flowerbed{};
     Texture2D fence{}, fencePost{}, fenceGate{}, ladder{};
-    Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{};
+    Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{}, tent{};
     Texture2D barrel{}, table{}, counter{}, lantern{}, candle{}, keg{}, plate{}, shelf{};
-    Texture2D chestClosed{}, chestOpen{}, jar{}, stump{}, bed{};
+    Texture2D chestClosed{}, chestOpen{}, stump{}, bed{};
     Texture2D cloud{};
     // buildings
     Texture2D house[5]{}, shop{}, inn{}, temple{}, manor{}, castle{}, tower{}, gate{};
     // characters
     Texture2D heroWalk[3]{};
-    Texture2D heroExtra[6]{};
-    Texture2D npc[16]{};
+    Texture2D npc[NS_KIND_COUNT]{};
     Texture2D face[32]{};          // portraits addressed by index
+    Texture2D battlefield[BI_COUNT]{}, castleBattlefield{};
     Texture2D enemy[EN_COUNT]{}, enemyBig[EN_COUNT]{};
     Texture2D icon[ICON_COUNT]{};
     // ui
@@ -142,7 +150,7 @@ struct Assets {
     Font font8{}, font16{}, font24{}, font32{};
     Sound cursor{}, confirm{}, cancel{}, sword{}, hit{}, spell{}, heal{}, coin{},
           potion{}, door{}, encounter{}, levelup{}, flee{}, chime{}, treasure{};
-    Music title{}, field{}, battle{}, victory{}, gameover{}, village{};
+    Music score[MUS_COUNT]{};
     bool ok = false;
 };
 bool loadAllAssets();
@@ -153,19 +161,21 @@ enum FaceId {
     FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3,
     FACE_ELDER, FACE_MAYOR, FACE_WOMAN, FACE_CHILD,
     FACE_SMITH, FACE_BARD, FACE_SHOPKEEPER, FACE_INNKEEPER, FACE_GUARD, FACE_RANGER,
-    FACE_SLIME, FACE_GHOST, FACE_SKELETON, FACE_DEMON, FACE_WOLF,
+    FACE_SLIME, FACE_GHOST, FACE_SKELETON, FACE_DEMON, FACE_DOG,
     FACE_COUNT
 };
 
 // ============================================================== world
 enum GroundKind : uint8_t {
     G_GRASS = 0, G_GRASS_DARK, G_DIRT, G_SAND, G_WATER, G_DEEP, G_ROCK, G_SNOW,
-    G_ICE, G_SWAMP, G_COBBLE, G_FLOOR, G_COUNT
+    G_ICE, G_SWAMP, G_COBBLE, G_FLOOR, G_AMBER, G_HEATH, G_BEACH, G_SOIL,
+    G_BRIDGE_NS, G_BRIDGE_EW, G_LEAVES, G_RIPPLES, G_COUNT
 };
 struct GroundTile {
+    Biome biome = BI_MEADOW;
     GroundKind kind = G_GRASS;
     uint8_t variant = 0;
-    uint8_t deco = 0;      // 0 none, 1 tuft, 2 flowers, 3 pebble
+    uint8_t deco = 0;      // 0 none, 1 tuft, 2 flowers, 3 pebbles, 4 lilies, 5 crops
     uint8_t decoVariant = 0;
 };
 GroundTile sampleGround(int tx, int ty);
@@ -174,7 +184,7 @@ GroundTile sampleGround(int tx, int ty);
 enum PropKind : uint8_t {
     P_NONE = 0, P_TREE0, P_TREE1, P_TREE2, P_PINE0, P_PINE1, P_PINE2, P_DEADTREE,
     P_TREE_SNOW, P_ROCK0, P_ROCK1, P_ROCK2, P_BOULDER, P_CRYSTAL, P_BUSH, P_BUSH_PLAIN,
-    P_MUSHROOM, P_PLANT, P_URN, P_STUMP, P_COUNT
+    P_MUSHROOM, P_PLANT, P_URN, P_STUMP, P_AMBER_OAK, P_COPPER_OAK, P_REEDS, P_YUCCA, P_WILLOW, P_COUNT
 };
 struct WorldProp { PropKind kind = P_NONE; uint8_t variant = 0; };
 
@@ -416,6 +426,7 @@ struct Game {
     int menuUseHero = 0;
     int equipHero = 0, equipSlot = 0, equipIndex = 0;
     int optionsIndex = 0;
+    MusicCue audition = MUS_VILLAGE;  // sound room only; never part of a save
     bool waitBattle = true;        // true = ATB pauses in menus (WAIT), false = ACTIVE
     bool musicOn = true;
 
@@ -452,8 +463,11 @@ Vector2 getVirtualMouse();
 void pushToast(const std::string& msg);
 void shakeScreen(float mag, float t);
 void returnToTitle();
-void stopAllMusic();
-void syncModeMusic();
+void loadScore(const std::string& dir);
+void updateScore(float dt);
+MusicCue playingCue();
+const char* cueTitle(MusicCue cue);
+void unloadScore();
 
 // ============================================================== ui helpers
 void drawWindow(Rectangle r, bool dimInside = true);
