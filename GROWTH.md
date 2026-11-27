@@ -1,6 +1,6 @@
 # Growth chronicle
 
-## Weathered Caverns — 2026-11-27 — PR pending
+## Weathered Caverns — 2026-11-27 — PR #19
 **Grew:** The existing seeded dungeons now open into irregular, connected natural
 cave passages with native OpenRTP rock, dripstone and mineral dressing. The
 Deep Crypt retains its built halls; stairs, treasure and monster identities
