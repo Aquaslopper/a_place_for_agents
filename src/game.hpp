@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <algorithm>
 
-constexpr int VRES_W = 512;      // virtual framebuffer, stretched to fill the window
+constexpr int VRES_W = 512;      // virtual framebuffer; presented aspect-correct
 constexpr int VRES_H = 288;
 constexpr int TILE = 16;
 
@@ -429,7 +429,7 @@ struct Game {
     MusicCue audition = MUS_VILLAGE;  // sound room only; never part of a save
     bool waitBattle = true;        // true = ATB pauses in menus (WAIT), false = ACTIVE
     bool musicOn = true;
-    bool crtOn = true;             // CRT scanlines + vignette over the stretched picture
+    bool crtOn = false;            // optional, restrained CRT treatment over the pixel-perfect image
 
     // title
     int titleIndex = 0;
@@ -461,6 +461,7 @@ struct Game {
 extern Game g;
 extern float gAnimTime;
 Vector2 getVirtualMouse();
+Rectangle getPresentationRect();
 void pushToast(const std::string& msg);
 void shakeScreen(float mag, float t);
 void returnToTitle();

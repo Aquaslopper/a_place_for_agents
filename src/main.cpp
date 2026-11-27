@@ -1,4 +1,4 @@
-// main.cpp — window, virtual 512x288 canvas stretched to fill the window,
+// main.cpp — window, virtual 512x288 canvas, pixel-perfect presentation,
 // main loop, audio streams & transitions
 #include "game.hpp"
 #include "world.hpp"
@@ -81,9 +81,21 @@ static void gameOverUpdate() {
     }
 }
 
+Rectangle getPresentationRect() {
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    if (sw < 1) sw = VRES_W;
+    if (sh < 1) sh = VRES_H;
+    float scale = std::min((float)sw / VRES_W, (float)sh / VRES_H);
+    // Keep every source pixel an even-sized block on normal/large displays.
+    // Below 2x, fractional scaling is preferable to leaving a tiny 1x picture.
+    if (scale >= 2.0f) scale = floorf(scale);
+    float w = VRES_W * scale, h = VRES_H * scale;
+    return { floorf((sw - w) * 0.5f), floorf((sh - h) * 0.5f), w, h };
+}
+
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
-    InitWindow(1280, 720, "A Place for Agents — an endless SNES-style JRPG");
+    InitWindow(1024, 576, "A Place for Agents — an endless field assignment");
     SetExitKey(0); // ESC opens pause menu / backs out instead of abruptly quitting
     SetTargetFPS(60);
 
@@ -169,31 +181,35 @@ int main() {
         drawTransitionFx();
         EndTextureMode();
 
-        // ---- present: stretch the 512x288 canvas to fill the whole window.
-        // No letterbox bars — the picture always reaches the window edges,
-        // whatever size or aspect the window is. Mouse mapping in
-        // getVirtualMouse() uses the same independent X/Y scales.
+        // ---- present without stretching the art or changing its aspect.
+        // Integer enlargement keeps chunky pixels even; narrow windows fall
+        // back to a smooth fractional scale rather than shrinking to 1x.
         BeginDrawing();
         ClearBackground(Color{ 6, 8, 16, 255 });
-        int sw = GetScreenWidth(), sh = GetScreenHeight();
-        if (sw < 1) sw = VRES_W;
-        if (sh < 1) sh = VRES_H;
+        Rectangle dst = getPresentationRect();
         DrawTexturePro(g.rt.texture,
                        { 0, 0, (float)VRES_W, -(float)VRES_H },
-                       { 0, 0, (float)sw, (float)sh }, { 0, 0 }, 0.0f, WHITE);
-        // Optional CRT dressing (Options -> CRT Filter): faint scanlines and
-        // a soft vignette, the way the SNES picture sat on a tube TV.
-        if (g.crtOn) {
-            float lineH = (float)sh / VRES_H; // one virtual scanline in window px
-            for (int y = 0; y < VRES_H; y += 2) {
-                DrawRectangle(0, (int)(y * lineH), sw, std::max(1, (int)(lineH * 0.45f)),
-                              Color{ 0, 0, 0, 26 });
+                       dst, { 0, 0 }, 0.0f, WHITE);
+
+        // The CRT option is deliberately restrained: one very faint beam
+        // shadow per source row, plus a soft edge falloff. It is aligned to
+        // the scaled image (not the desktop), so resize/fullscreen cannot
+        // turn it into thick, uneven bars. Clean pixel art is the default.
+        float pixelScale = dst.height / VRES_H;
+        if (g.crtOn && pixelScale >= 1.25f) {
+            float bandH = std::max(1.0f, pixelScale * 0.26f);
+            for (int y = 0; y < VRES_H; ++y) {
+                float bandY = dst.y + (y + 0.72f) * pixelScale;
+                DrawRectangleRec({ dst.x, bandY, dst.width, bandH }, Color{ 0, 0, 0, 15 });
             }
-            int vw = std::max(24, sw / 10), vh = std::max(18, sh / 10);
-            DrawRectangleGradientV(0, 0, sw, vh, Color{ 0, 0, 0, 52 }, BLANK);
-            DrawRectangleGradientV(0, sh - vh, sw, vh, BLANK, Color{ 0, 0, 0, 52 });
-            DrawRectangleGradientH(0, 0, vw, sh, Color{ 0, 0, 0, 40 }, BLANK);
-            DrawRectangleGradientH(sw - vw, 0, vw, sh, BLANK, Color{ 0, 0, 0, 40 });
+            float vw = std::max(12.0f, dst.width * 0.055f);
+            float vh = std::max(10.0f, dst.height * 0.055f);
+            int x = (int)dst.x, y = (int)dst.y;
+            int w = (int)dst.width, h = (int)dst.height;
+            DrawRectangleGradientV(x, y, w, (int)vh, Color{ 0, 0, 0, 20 }, BLANK);
+            DrawRectangleGradientV(x, y + h - (int)vh, w, (int)vh, BLANK, Color{ 0, 0, 0, 20 });
+            DrawRectangleGradientH(x, y, (int)vw, h, Color{ 0, 0, 0, 16 }, BLANK);
+            DrawRectangleGradientH(x + w - (int)vw, y, (int)vw, h, BLANK, Color{ 0, 0, 0, 16 });
         }
         EndDrawing();
     }

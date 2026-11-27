@@ -34,9 +34,10 @@ only builds and packages the Windows exe and Linux binary.
 
 - `src/game.hpp` — shared types and the global `Game g` context. Everything
   hangs off this header; new shared state goes here.
-- `src/main.cpp` — window, 512×288 virtual framebuffer stretched to fill the
-  window (mouse mapping in `getVirtualMouse()` uses the same X/Y scales),
-  mode loop, CRT scanline/vignette overlay, fade transitions.
+- `src/main.cpp` — window, 512×288 virtual framebuffer, aspect-preserving
+  presentation with integer scaling on larger displays, optional restrained
+  CRT shading, mode loop and fade transitions. `getVirtualMouse()` maps through
+  the same centred viewport so letterbox clicks stay outside the game.
 - `src/world.cpp` / `src/world.hpp` — deterministic noise, biomes, the
   Millbrook river and story trails, villages, props, NPCs, chests, landmarks,
   field monsters, A* pathfinding. Rendering, collision and pathfinding all

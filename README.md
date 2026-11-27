@@ -1,180 +1,189 @@
 # A Place for Agents
 
-**An endless SNES-style JRPG through a world that grows as you explore it.**
+**An endless, 16-bit-inspired JRPG about the people you send beyond the map.**
 
-You wake in **Elmswick**, a hand-authored little town with a cobbled plaza, a
-well, shops, a temple and neighbours who know your name. Walk out of the south
-gate and the world keeps generating — meadows, forests, rivers, lakes, frozen
-reaches, deserts, mires, lonely hills — and here and there another village with
-an inn to warm your bones and a shop that sells honest steel.
-
-Built with [raylib](https://github.com/raysan5/raylib), adapted **OpenRTP** pixel art
-and a **13-cue score**. See [credits](CREDITS.md) and the [soundtrack cue sheet](assets/audio/SCORE.txt).
-Working on the game as an AI agent? Start with [AGENTS.md](AGENTS.md).
+Elmswick is the last field office on a charted road. When the maps end, its
+agents begin: Aldric keeps the way open, Iris reads what the old maps leave
+out, and Pip makes sure everyone gets home. Follow their assignment through a
+hand-built village and into a world that grows as you explore it: quiet meadows,
+old forests, river crossings, remote settlements, forgotten landmarks, and a
+king who has made off with the village crown.
 
 ![Elmswick, the village the game opens in](docs/screenshots/village.png)
 
+Built in C++17 with [raylib 5.5](https://github.com/raysan5/raylib), adapted
+OpenRTP pixel art and a streamed 13-cue score. See [credits and licenses](CREDITS.md)
+and the [soundtrack cue sheet](assets/audio/SCORE.txt). If you are working on
+the game as an agent, the repository guide is [AGENTS.md](AGENTS.md).
+
 ## Play
 
-Download the latest build from the **Releases** page (or from the artifacts
-of any CI run):
+Download a build from the **Releases** page or the artifacts of a CI run:
 
-- `APlaceForAgents-Windows.zip` — run `APlaceForAgents.exe` (a windowed game,
-  no console window pops up beside it)
-- `APlaceForAgents-Linux.zip` — run `./APlaceForAgents`
+- **Windows:** `APlaceForAgents-Windows.zip` — run `APlaceForAgents.exe`.
+  It opens as a normal window, without a console window beside it.
+- **Linux:** `APlaceForAgents-Linux.zip` — run `./APlaceForAgents`.
 
-The picture is drawn into a 512×288 virtual framebuffer and **stretched to fill
-the whole window** — no letterbox bars, whatever size or shape the window is.
-Resize freely, or press `F11` for fullscreen. An optional **CRT filter**
-(scanlines + vignette, on by default) dresses the stretched picture the way an
-SNES sat on a tube TV; turn it off in **Esc → Options → CRT Filter** for clean
-pixels.
+The game draws to a 512×288 pixel-art canvas. It preserves the canvas aspect
+ratio when resized, uses whole-number pixel scaling on larger displays, and
+centres the picture rather than stretching it to fit unusual window shapes.
+The optional **Soft CRT** treatment is off by default; enable it in
+**Esc → Options** for faint, image-aligned scanline shading. Clean pixels are
+always available.
 
 ### Controls
 
 | Input | Action |
 |---|---|
-| `WASD` / arrow keys | Walk (hold `Shift` to run) |
-| Left mouse button | Walk anywhere — pathfinds around trees, water and buildings |
-| Click a building | Walk to its door and go inside |
-| `Space` / `E` / `Enter` | Talk, open a chest, enter a door, advance dialog |
-| `Esc` / `Tab` | Pause menu (party, items, equip, quests, options/save) |
-| Mouse | Menus, shops, battles — everything is clickable too |
+| `WASD` / arrow keys | Walk (cardinal movement; hold `Shift` to run) |
+| Left mouse button | Click to walk; the party routes around obstacles |
+| Click a building | Walk to its door and enter |
+| `Space` / `E` / `Enter` | Talk, open a chest, enter a door, or advance dialogue |
+| `Esc` / `Tab` | Open or close the pause menu |
+| Mouse | Use menus, shops and battle commands |
 | `F11` | Toggle fullscreen |
 
-### First walks out of Elmswick
+### First routes from the Elmswick well
 
-| From the well | What to look for |
+| Direction | Route |
 |---|---|
-| South between the kitchen gardens | Millbrook's two-lane plank bridge. On the far bank, follow the ochre woods east to the Standing Stones, or take the southwest trail to the wind-rippled Sunscorch Flats. |
-| West past the shop | Reed beds, willow pools and a causeway through the Mirefen to the Old Watchtower. |
-| North around the chapel | The road bends through Briarwood's conifers, crosses the heath and becomes a snow track on the approach to the Castle of Elm. |
+| South | Cross Millbrook's plank bridge. Follow the ochre woods east to the Standing Stones, or take the southwest trail to the Sunscorch Flats. |
+| West | Find reed beds, willow pools and a causeway through Mirefen to the Old Watchtower. |
+| North | Circle the chapel, follow the road through Briarwood and the heath, then climb the snow track to the Castle of Elm. |
 
-These routes exist on every seed. Outside the story sites, terrain, groves,
-settlements and landmarks follow the seed. For the music without the journey,
-open **Esc / Tab → Options → Sound Room** and choose a cue with the arrows or mouse.
+These story routes are fixed; beyond them, the seed shapes the terrain,
+settlements, landmarks and treasure. Use the **Sound Room** in **Esc → Options**
+to listen to the score without roaming the wilds.
 
-## What's in it
+## In the field
 
-- **A village to start in.** Elmswick is hand-placed at the origin: a cobbled
-  plaza with a working well, a shop and an inn either side of the road, a
-  temple of the Light, six cottages with fences, gardens, torches and a campfire,
-  plus ten-odd villagers, a farmer with a quest, a town dog and a signpost.
-- **Seven regional landscapes**: meadow, evergreen forest, autumn wood, fen,
-  heath, frozen highlands and dunes. A corner-mask atlas joins ground types,
-  layers cliff lips and riverbanks, and keeps animated water visible under bridges.
-  Regional plants and encounter pools carry through to the route's battle backdrop.
-- **A living world.** Canopies sway, water twinkles, butterflies drift over
-  meadows by day and fireflies rise in the fen at night, snow falls on the
-  Frozenreach, leaves drift through Amberwood, footstep dust puffs as you run,
-  and village windows glow warm after dark. A slow day/night cycle washes
-  dawn gold and dusk amber over the fields.
-- **SNES presentation throughout.** A title screen with a layered gold logo,
-  blinking PRESS START, a walking-party attract row and copyright line; navy
-  menu windows with white double borders and a blinking cursor triangle;
-  dialogue boxes with gold-framed portraits, name plates and a down-arrow
-  "more" marker; and an optional CRT scanline + vignette filter over the
-  full-window picture.
-- **Thirteen streamed pieces, about 20 minutes 31 seconds per pass.** Villages
-  have a theme distinct from the field; woods, marsh, pass and desert have travel
-  music. Homes and chapels have their own cues, as do ordinary and boss battles.
-  Menus and conversation keep the underlying music; after a fight the location
-  theme resumes instead of starting its first bar again.
-- **More villages out in the wilds** — deterministic per 96-tile sector, each
-  named from a syllable table, laid out with plaza, roads, shop, inn, temple and
-  wandering townsfolk. Interior scenes for shops, inns, temples and houses.
-- **SNES-style ATB battles** — Active-Time gauges per combatant, three party
-  members (Aldric the knight, Iris the mage, Pip the cleric), attack / spells /
-  items / defend / flee, crits, elemental weaknesses, a shared ATB, spell
-  schools (fire, storm, holy, physical) and per-class spell lists that unlock
-  with levels. WAIT pauses the gauges while any command menu is open; ACTIVE
-  never pauses.
-- **Thirteen monsters** drawn from OpenRTP and original pixel art: slime, imp, bat,
-  hornet, wisp, wolf, skeleton, ghost, orc, serpent, golem, night rider — and the
-  Slime King, who holds the Crown of Elm. They appear both as wandering field
-  monsters (walk into one to fight it) and in random encounters.
-- **22 items** — potions, ethers, elixirs, phoenix downs, three tiers of sword,
-  armour and shield, a power ring, a mana amulet, quest keys. Shops buy and sell;
-  equipment is slot-based per hero.
-- **Three quests** with a quest log: slay six slimes for Farmer Hedrick, track
-  down a traveller's lost locket in the wilds, and take the Crown of Elm back
-  from the Slime King in the northern castle.
-- **Chests, landmarks, day/night and weather-feel** — procedural treasure
-  chests across the world, ruin / stone-circle / camp / tower / castle landmarks,
-  drifting clouds, a slow day/night wash, screen shake, floating damage numbers.
-- **Save & load** — checksummed binary save (`aplaceforagents_save.sav` next to
-  the binary), title-screen *Continue*, autosave slot in the options page.
-- **Dialog and portraits** — illustrated conversations, typewriter text, and
-  shop / inn / temple interactions inside the buildings.
+- **A place to start.** Elmswick has a cobbled plaza, well, shop, inn, temple,
+cottages, gardens, fences, torches, a campfire, neighbours, a farmer with a
+request, a dog and a signpost.
+- **Seven regions.** Meadows, evergreen woods, autumn forests, fen, heath,
+frozen highlands and dunes have different ground, plants, encounter pools and
+battle horizons. Corner-masked ground transitions, banks, cliffs and river
+crossings are composed from tiles rather than one stretched map image.
+- **A world with a little weather in it.** Tree canopies sway, water glints,
+butterflies cross meadows, fireflies drift through the fen, snow falls in the
+Frozenreach and leaves move through Amberwood. A slow day/night wash, warm
+village windows and footstep dust give places a changing mood.
+- **Places worth finding.** Deterministic villages, inns, shops, temples,
+houses, camps, ruins, stone circles, towers, castles and chests appear across
+the generated world. Interiors have their own small scenes.
+- **Three quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
+locket, and recover the Crown of Elm from the Slime King. The quest log tracks
+progress and points toward story destinations.
+- **Field encounters and a party.** Aldric (Knight), Iris (Mage) and Pip
+(Cleric) have distinct strengths. Thirteen monsters roam the world and join
+random encounters; walking into a visible field monster starts that fight.
+- **22 items and equipment slots.** Potions, ethers, revival items, weapons,
+armour, shields, accessories and quest items. Shops buy and sell; equip weapons,
+armour and accessories per hero.
 
-### A look at it
+### Battles and progression
+
+Battles use an Active-Time system with **WAIT** (gauges pause while a command
+menu is open) and **ACTIVE** (gauges keep moving). Attack, spells, items, defend
+or flee; use physical and elemental skills, exploit weaknesses, change party
+rows, and unlock class-specific abilities as the party levels up. Spells include
+fire, storm, holy and physical schools. Ordinary fights and the Slime King have
+their own music and battle presentation.
+
+### A SNES-inspired picture, not an emulator filter
+
+The look comes first from the art and composition: chunky 16-pixel ground
+cells, reusable tile patterns, palette-conscious warm terrain and cool shadows,
+layered scenery, readable sprites, and navy-and-gold windows. The framebuffer
+is intentionally larger and wider than an SNES's common 256×224 display mode;
+this is a modern, widescreen-friendly homage, not a claim of hardware-accurate
+rendering.
+
+The **Soft CRT** option is intentionally restrained: it adds a very low-contrast
+beam shadow aligned to each source row and a slight edge falloff. It is off by
+default so it cannot obscure fine details. The original SNES used tile-based
+background layers and palette groups (with color depth varying by graphics
+mode); the [SNESdev background guide](https://snes.nesdev.org/wiki/Backgrounds)
+and [tile formats reference](https://snes.nesdev.org/wiki/Tiles) are useful
+technical introductions. The game borrows the readable layering and tile
+craft, not the hardware limits. For more about screen scaling and the difference
+between pixel art and display simulation, see Unity's
+[2D Pixel Perfect guide](https://unity.com/blog/games/2d-pixel-perfect-how-to-set-up-your-unity-project-for-retro-16-bit-games).
+
+### Music, menus and saves
+
+- **Thirteen streamed cues**, around 20 minutes 31 seconds per pass. Each
+  location has a musical identity; dialogue and menus leave the current cue
+  playing, and returning from a battle resumes the location theme.
+- **Menus throughout:** party, items, equipment, quests, save/options and a
+  Sound Room. Keyboard and mouse work in menus and combat.
+- **Save and continue:** checksummed save file `aplaceforagents_save.sav` next
+  to the executable. Save from **Esc → Options** or continue from the title
+  screen. Set `APFA_SAVE` to choose a different save path.
+- **Transitions and feedback:** fades, screen shake, floating damage, quest
+markers, interaction prompts and typewriter dialogue with portraits.
+
+### Screenshots
 
 | | |
 |---|---|
 | ![Millbrook bridge and kitchen gardens](docs/screenshots/millbrook.png) | ![The Amberwood trail](docs/screenshots/wilds.png) |
 | ![Wolf and wisp on the Frozenreach battlefield](docs/screenshots/battle.png) | ![Mira's Sundries interior](docs/screenshots/sundries.png) |
-| ![Title screen with logo and menu](docs/screenshots/title.png) | ![Conversation with a portrait](docs/screenshots/dialog.png) |
+| ![Title screen](docs/screenshots/title.png) | ![Conversation with a portrait](docs/screenshots/dialog.png) |
 
 ## Build from source
 
 ```bash
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
-./build/bin/APlaceForAgents              # Linux
-build\bin\Release\APlaceForAgents.exe    # Windows
+./build/bin/APlaceForAgents               # Linux
+build\bin\Release\APlaceForAgents.exe     # Windows
 ```
 
-Linux needs the usual X11/GL dev packages
-(`libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libasound2-dev`).
-raylib 5.5 is fetched automatically via CMake `FetchContent`.
+Linux needs X11/OpenGL and audio development packages, including
+`libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev
+libxi-dev libasound2-dev`. CMake fetches raylib 5.5 via `FetchContent`.
+Runtime assets are checked in and copied beside the executable at build time;
+playing does not require Python, a MIDI synthesizer or an instrument bank.
 
-The Windows build is a GUI-subsystem executable (`WIN32` in CMake), so no
-console window opens next to the game. The game is drawn into a 512×288
-virtual framebuffer and stretched to fill the window at any size; the CRT
-filter (scanlines + vignette) can be toggled in Options.
+The Windows executable uses the GUI subsystem. CI builds and packages Windows
+and Linux binaries. **Project policy: no tests.**
 
-**Project policy: no tests.** Do not add or run tests. CI builds and packages the game without a test step.
+## Regenerating assets
 
-## Regenerating the assets
-
-All runtime assets are checked in. Playing or building the game needs no Python,
-MIDI synthesizer, instrument bank or asset download.
+All runtime assets are committed. These optional tools regenerate art and sound
+effects; Python dependencies are only needed if you are editing the source art.
 
 ```bash
 python3 tools/build_art.py     # art only: Pillow, NumPy
-python3 tools/gen_assets.py    # art + short sound effects: also needs soundfile
+python3 tools/gen_assets.py    # art + short SFX: also needs soundfile
 ```
 
-Neither command touches the score. To render the music explicitly, install
-`mido`, `numpy`, `soundfile` and `tinysoundfont`, then run:
+To render the score explicitly, install `mido`, `numpy`, `soundfile` and
+`tinysoundfont`, then run:
 
 ```bash
 python3 tools/render_score.py /path/to/GeneralUser.sf2          # whole score
 python3 tools/render_score.py /path/to/GeneralUser.sf2 village  # one cue
 ```
 
-See [SCORE.txt](assets/audio/SCORE.txt) for the instrument-bank version and
-composition credits. `assets/source/openrtp/` holds the source sheets and MIDIs.
-The importer builds the walking-scale terrain atlas, objects, facades and
-battle horizons; it does not enlarge continent-map town icons into houses.
-For the reference maps and the decisions they informed, see [Visual references](CREDITS.md#visual-references-not-game-assets).
+See [SCORE.txt](assets/audio/SCORE.txt) for the cue list and composition
+credits. The instrument bank is not redistributed. See
+[Visual references](CREDITS.md#visual-references-not-game-assets) for the
+references used while designing the terrain and walking-scale world.
 
-## Layout
+## Repository map
 
-```
-src/game.hpp      shared types & the global context
-src/world.cpp     noise, biomes, villages, props, npcs, chests, landmarks,
-                  field monsters, A* pathfinding
-src/core.cpp      item/hero/spell/enemy tables, asset loading, UI primitives,
-                  save & load
-src/overworld.cpp field movement, camera, interactions, encounters
-src/render.cpp    the field renderer, HUD, title, intro, game-over
-src/dialog.cpp    dialog boxes, shop, inn, pause menu
-src/room.cpp      interior scenes
-src/battle.cpp    ATB battle (update + draw)
-src/music.cpp     scene selection, streaming, crossfades and resume
-src/main.cpp      window, virtual framebuffer, mode loop
-tools/            asset generation + the OpenRTP importer
-assets/           runtime art & audio (committed)
-.github/workflows/build.yml   builds the Windows exe and Linux binary on every push
+```text
+src/game.hpp      shared types and game state
+src/world.cpp     seeded terrain, villages, props, NPCs, landmarks, pathfinding
+src/overworld.cpp field movement, camera, interactions and encounters
+src/render.cpp    field renderer, HUD, title, intro and game-over screens
+src/dialog.cpp    dialogue, shops, pause menu and options
+src/room.cpp      building interiors
+src/battle.cpp    battle update, commands, effects and presentation
+src/core.cpp      asset loading, UI primitives, saves and game tables
+src/main.cpp      window, pixel-perfect presentation, mode loop
+assets/           runtime pixel art, font and audio
+tools/            art generation, importers and score rendering
 ```
