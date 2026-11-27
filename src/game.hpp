@@ -1,7 +1,7 @@
 // game.hpp — shared state and types for "A Place for Agents"
 //
 // An endless SNES-style JRPG.  The hero starts in a village, the world keeps
-// generating around them, and everything is drawn with adapted OpenRTP art.
+// generating around them, and everything is drawn with 16-bit SNES pixel art.
 #pragma once
 
 #include "raylib.h"
@@ -110,7 +110,7 @@ SpellList spellsFor(int klass, int level);
 enum EnemyKind {
     EN_SLIME = 0, EN_IMP, EN_BAT, EN_HORNET, EN_WISP, EN_WOLF, EN_SKELETON,
     EN_GHOST, EN_ORC, EN_SERPENT, EN_GOLEM, EN_NIGHT_RIDER, EN_SLIME_KING,
-    // Additional OpenRTP field and battle sprites; keep the original IDs stable.
+    // Additional field and battle enemies; keep the original IDs stable.
     EN_BANDIT, EN_GOBLIN, EN_REAPER, EN_FAERIE, EN_DRAKE, EN_NAGA, EN_SHADE,
     EN_DREAD_KNIGHT, EN_ARCHFIEND, EN_TIGER, EN_PORCUPINE,
     EN_COUNT
@@ -181,11 +181,11 @@ struct Assets {
     Texture2D enemy[EN_COUNT]{}, enemyBig[EN_COUNT]{};
     Texture2D icon[ICON_COUNT]{};
     // ui
-    Texture2D window{}, windowBody{};
-    Texture2D titleBg{}, titleAtlas{}, gameoverPlate{}, dawn{}, night{};
+    Texture2D window{};
+    Texture2D titleBg{}, gameoverPlate{}, dawn{};
     // fx
     Texture2D fxSlash{}, fxSpark{}, fxSparkle{}, fxImpact{}, fxPoof{}, fxFireball{}, fxArrow{};
-    Font font8{}, font16{}, font24{}, font32{};
+    Font font8{}, font16{}, font24{};
     Sound cursor{}, confirm{}, cancel{}, sword{}, hit{}, spell{}, heal{}, coin{},
           potion{}, door{}, encounter{}, levelup{}, flee{}, chime{}, treasure{};
     Music score[MUS_COUNT]{};
@@ -195,7 +195,7 @@ bool loadAllAssets();
 
 // face indices
 enum FaceId {
-    FACE_KNIGHT = 0, FACE_MAGE, FACE_CLERIC, FACE_KNIGHT_BIG,
+    FACE_KNIGHT = 0, FACE_MAGE, FACE_CLERIC,
     FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3,
     FACE_ELDER, FACE_MAYOR, FACE_WOMAN, FACE_CHILD,
     FACE_SMITH, FACE_BARD, FACE_SHOPKEEPER, FACE_INNKEEPER, FACE_GUARD, FACE_RANGER,
@@ -534,6 +534,12 @@ void unloadScore();
 // ============================================================== ui helpers
 void drawWindow(Rectangle r, bool dimInside = true);
 void drawWindowBlue(Rectangle r);
+void drawPixelPanel(Rectangle r, bool selected = false, bool disabled = false,
+                    Color fill = Color{ 24, 34, 72, 232 },
+                    Color border = Color{ 96, 118, 184, 235 });
+void drawCharFrame(const Texture2D& sheet, int facing, bool sideFlip, bool moving,
+                   float animT, float cx, float footY, Color tint = WHITE,
+                   int overrideCol = -1, float rotationDeg = 0.0f);
 void drawText(const char* text, float x, float y, Color c, int size = 8);
 void drawTextCentered(const char* text, float cx, float y, Color c, int size = 8);
 void drawTextWrapped(const char* text, float x, float y, float maxW, float lineH, Color c, int size = 8);

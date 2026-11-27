@@ -769,7 +769,12 @@ void battleUpdate(float dt) {
         if (clicked) {
             for (int i = 0; i < (int)B.foes.size(); i++) {
                 if (!B.foes[i].alive) continue;
-                if (CheckCollisionPointRec(m, { foeScreenX(B.foes[i]) - 28, foeScreenY(B.foes[i]) - 48, 56, 54 })) {
+                Texture2D& t = (g.assets.enemyBig[B.foes[i].kind].id ? g.assets.enemyBig[B.foes[i].kind] : g.assets.enemy[B.foes[i].kind]);
+                float ex = foeScreenX(B.foes[i]);
+                float ey = foeScreenY(B.foes[i]);
+                float hw = std::max(28.0f, t.width * 0.5f + 6.0f);
+                float hh = std::max(36.0f, (float)t.height + 8.0f);
+                if (CheckCollisionPointRec(m, { ex - hw, ey - hh, hw * 2.0f, hh + 6.0f })) {
                     commitFoe(i);
                     return;
                 }
@@ -828,20 +833,21 @@ static Texture2D* fxTex(FxKind k) {
 }
 
 static void drawBattleBackdrop(float sx, float sy) {
+    ClearBackground(Color{ 14, 18, 34, 255 });
     GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
     Texture2D tex = B.isBoss ? g.assets.castleBattlefield : g.assets.battlefield[gt.biome];
-    if (!tex.id) { ClearBackground(Color{ 30, 40, 70, 255 }); return; }
+    if (!tex.id) return;
     float stageH = btTrayY() + 6.0f;
-    // Scale proportionally to cover width and stage height while keeping sky/castle towers framed
-    float scale = std::max(((float)g.vw + 12.0f) / (float)tex.width,
-                           (stageH + 10.0f) / 196.0f);
+    float scale = ((float)g.vw <= (float)tex.width && stageH <= 198.0f)
+        ? 1.0f
+        : std::max(((float)g.vw + 12.0f) / (float)tex.width, (stageH + 10.0f) / 196.0f);
     float dw = roundf((float)tex.width * scale);
     float dh = roundf((float)tex.height * scale);
     float dx = floorf(((float)g.vw - dw) * 0.5f + sx);
     float visibleBattleH = 196.0f * scale;
     float dy = floorf((stageH - visibleBattleH) * 0.32f + sy);
-    if (dy > -2.0f) dy = -2.0f;
-    if (dy + dh < stageH + 4.0f) dy = stageH + 4.0f - dh;
+    if (dy > 0.0f && g.vw > tex.width) dy = 0.0f;
+    if (dy + dh < stageH + 2.0f) dy = stageH + 2.0f - dh;
     DrawTexturePro(tex, { 0, 0, (float)tex.width, (float)tex.height },
                    { dx, dy, dw, dh }, { 0, 0 }, 0.0f, WHITE);
 }
@@ -854,30 +860,27 @@ void battleDraw() {
 
     drawBattleBackdrop(sx, sy);
 
-    // 1. Enemies (left side)
+    // 1. Enemies (left side, authored natively facing right at 1x crisp resolution)
     for (int i = 0; i < (int)B.foes.size(); i++) {
         const BattleEnemy& f = B.foes[i];
         if (!f.alive) continue;
         Texture2D& t = (g.assets.enemyBig[f.kind].id ? g.assets.enemyBig[f.kind] : g.assets.enemy[f.kind]);
         float lunge = (f.lungeT > 0) ? sinf(f.lungeT / 0.24f * 3.14159f) * 14.0f : 0.0f;
         float bob = sinf(g.totalTime * 3.2f + i * 1.3f) * 1.8f;
-        float scale = f.boss ? 0.68f : 0.56f;
         float ex = foeScreenX(f) + lunge + sx;
         float ey = foeScreenY(f) + sy;
-        DrawEllipse((int)ex, (int)ey - 2, t.width * scale * 0.34f, 4.0f, Fade(BLACK, 0.30f));
+        DrawEllipse((int)ex, (int)ey - 2, t.width * 0.34f, 4.0f, Fade(BLACK, 0.30f));
         Color tint = (f.hitT > 0 && ((int)(f.hitT * 30) & 1)) ? Color{ 255, 130, 130, 255 } : WHITE;
-        float srcW = (f.kind == EN_SLIME || f.kind == EN_GHOST || f.kind == EN_SLIME_KING)
-            ? (float)t.width : -(float)t.width;
-        DrawTexturePro(t, { 0, 0, srcW, (float)t.height },
-                       { floorf(ex - t.width * scale * 0.5f), floorf(ey - t.height * scale + bob),
-                         t.width * scale, t.height * scale },
+        DrawTexturePro(t, { 0, 0, (float)t.width, (float)t.height },
+                       { floorf(ex - t.width * 0.5f), floorf(ey - (float)t.height + bob),
+                         (float)t.width, (float)t.height },
                        { 0, 0 }, 0.0f, tint);
         float bw = f.boss ? 56.0f : 34.0f;
         drawBar(floorf(ex - bw * 0.5f), floorf(ey + 3.0f), bw, 4, (float)f.hp / std::max(1, f.maxHp),
                 f.boss ? Color{ 255, 190, 70, 255 } : Color{ 235, 95, 95, 255 }, Color{ 26, 20, 32, 220 });
     }
 
-    // 2. Heroes (right side, facing left)
+    // 2. Heroes (right side, using Row 2 Left-facing UL-lit sprites at 1x)
     for (int i = 0; i < 3; i++) {
         const Hero& h = g.party[i];
         float lunge = (B.heroLungeT[i] > 0) ? -sinf(B.heroLungeT[i] / 0.22f * 3.14159f) * 16.0f : 0.0f;
@@ -886,35 +889,26 @@ void battleDraw() {
         DrawEllipse((int)hx, (int)hy - 1, 7.0f, 3.0f, Fade(BLACK, 0.30f));
 
         Texture2D& sheet = g.assets.heroWalk[std::max(0, std::min(2, h.klass))];
-        int frame = (B.activeHero == i) ? (1 + ((int)(g.totalTime * 5.0f) & 1)) : 0;
         Color tint = WHITE;
         if (h.ko) tint = Color{ 130, 120, 150, 210 };
         else if (B.heroHitT[i] > 0 && ((int)(B.heroHitT[i] * 30) & 1)) tint = Color{ 255, 130, 130, 255 };
         else if (h.poisoned) tint = Color{ 215, 175, 255, 255 };
 
-        Rectangle src{ (float)(frame * 24), 64.0f, -24.0f, 32.0f };
-        if (h.ko) {
-            DrawTexturePro(sheet, src, { floorf(hx), floorf(hy - 6.0f), 24, 32 },
-                           { 12, 16 }, 90.0f, tint);
-        } else {
-            DrawTexturePro(sheet, src, { floorf(hx - 12.0f), floorf(hy - 30.0f), 24, 32 },
-                           { 0, 0 }, 0.0f, tint);
-        }
+        int col = (B.heroLungeT[i] > 0 && !h.ko) ? 7 : -1;
+        drawCharFrame(sheet, 2, true, B.activeHero == i && !h.ko, g.totalTime, hx, hy,
+                      tint, col, h.ko ? 90.0f : 0.0f);
 
         if (B.defending[i] && !h.ko)
             DrawRing({ hx, hy - 14 }, 13, 15, 0, 360, 18, Fade(Color{ 130, 200, 255, 255 }, 0.55f));
     }
 
-    // 3. FX sprites
+    // 3. FX sprites (native 1x crisp resolution)
     for (const auto& e : B.fx) {
         Texture2D* t = fxTex(e.kind);
         if (!t || t->id == 0) continue;
         float a = std::max(0.0f, e.life / std::max(0.01f, e.maxLife));
-        float sc = 1.0f + (1.0f - a) * 0.45f;
-        DrawTexturePro(*t, { 0, 0, (float)t->width, (float)t->height },
-                       { e.x - t->width * sc * 0.5f, e.y - t->height * sc * 0.5f,
-                         t->width * sc, t->height * sc },
-                       { 0, 0 }, 0.0f, Fade(WHITE, a));
+        DrawTexture(*t, (int)floorf(e.x - t->width * 0.5f), (int)floorf(e.y - t->height * 0.5f),
+                    Fade(WHITE, a));
     }
 
     // 4. Top action banner & targeting hint
@@ -941,11 +935,10 @@ void battleDraw() {
         const BattleEnemy& f = B.foes[B.targetCursor];
         if (f.alive) {
             Texture2D& t = (g.assets.enemyBig[f.kind].id ? g.assets.enemyBig[f.kind] : g.assets.enemy[f.kind]);
-            float scale = f.boss ? 0.68f : 0.56f;
             float ex = foeScreenX(f) + sx;
             float ey = foeScreenY(f) + sy;
             float ptrBob = sinf(g.totalTime * 8.0f) * 2.0f;
-            float labelY = std::max(minMarkerY + 2.0f, ey - t.height * scale - 24.0f + ptrBob);
+            float labelY = std::max(minMarkerY + 2.0f, ey - (float)t.height - 24.0f + ptrBob);
             drawWorldLabel(enemyDef(f.kind).name, ex, labelY, Color{ 255, 240, 180, 255 }, 8);
             float ax = floorf(ex);
             float ay = labelY + 13.0f;
@@ -962,7 +955,7 @@ void battleDraw() {
         }
         if (B.phase == BP_TARGET_ALLY && B.targetCursor == i) {
             float ptrBob = sinf(g.totalTime * 8.0f) * 2.0f;
-            float labelY = std::max(minMarkerY + 2.0f, hy - 46.0f + ptrBob);
+            float labelY = std::max(minMarkerY + 2.0f, hy - 42.0f + ptrBob);
             drawWorldLabel(heroName(h.klass), hx, labelY, Color{ 150, 255, 180, 255 }, 8);
             float ax = floorf(hx);
             float ay = labelY + 13.0f;
@@ -985,10 +978,7 @@ void battleDraw() {
         Rectangle r = cmdRect(i);
         bool sel = (B.phase == BP_COMMAND && B.cmdCursor == i);
         bool dis = (i == 4 && B.isBoss);
-        if (sel) {
-            DrawRectangleRounded(r, 0.3f, 4, Color{ 56, 86, 164, 255 });
-            DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f, Color{ 255, 232, 150, 255 });
-        }
+        if (sel) drawPixelPanel(r, true, false);
         Color c = dis ? Color{ 130, 130, 155, 220 }
                 : (B.phase == BP_COMMAND ? (sel ? Color{ 255, 236, 176, 255 } : WHITE)
                                          : Color{ 165, 175, 210, 220 });
@@ -1061,8 +1051,8 @@ void battleDraw() {
         bool act = (B.activeHero == i);
         bool allySel = (B.phase == BP_TARGET_ALLY && B.targetCursor == i);
         if (act || allySel) {
-            DrawRectangleRounded({ ox + 268, y - 2, 234, 25 }, 0.25f, 4,
-                                 allySel ? Color{ 44, 92, 118, 230 } : Color{ 44, 68, 138, 220 });
+            drawPixelPanel({ ox + 268, y - 2, 234, 25 }, true, false,
+                           allySel ? Color{ 44, 92, 118, 230 } : Color{ 44, 68, 138, 220 });
         }
         Color nc = h.ko ? Color{ 225, 110, 110, 255 }
                  : (h.poisoned ? Color{ 210, 155, 255, 255 }

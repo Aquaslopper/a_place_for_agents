@@ -556,7 +556,7 @@ static void clickToMove() {
         const Npc& n = g.npcs[i];
         float cx = n.x * TILE - g.camX;
         float fy = (n.y + 0.35f) * TILE - g.camY;
-        if (CheckCollisionPointRec(m, { cx - 12, fy - 32, 24, 34 })) {
+        if (CheckCollisionPointRec(m, { cx - 8, fy - 24, 16, 26 })) {
             float ddx = n.x - g.px, ddy = n.y - g.py;
             if (ddx * ddx + ddy * ddy < 1.55f * 1.55f) {
                 talkToNpc((int)i);
