@@ -162,6 +162,7 @@ struct Assets {
     Texture2D plankFloor{}, tileFloor{}, stoneFloor{}, carpet{}, stoolTex{};
     Texture2D tuft[3]{}, flowers[2]{}, pebble{};
     // dungeon floors — one per theme plus shared overlays (tiles/ 16×16, validator-legal)
+    Texture2D caveFloor[4]{}, caveRock[4]{}, caveFormation[6]{};
     Texture2D dunFloor[TH_COUNT]{};
     Texture2D dunWall[TH_COUNT]{};
     Texture2D dungeonFloor{}, flagstoneFloor{}, cobbleFloor{}, sandFloor{}, tundraFloor{}, iceFloor{}, snowFloor{}, swampFloor{}, arcaneFloor{}, dirtFloor{};
