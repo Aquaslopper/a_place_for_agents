@@ -11,13 +11,14 @@ static const float WALK_SPEED = 4.4f;     // tiles / second
 static const float RUN_SPEED  = 7.2f;
 
 Vector2 getVirtualMouse() {
-    // The 512x288 canvas is stretched to fill the whole window (see main.cpp),
-    // so X and Y scale independently and there is no letterbox offset.
+    // Convert through the exact same aspect-preserving viewport used to draw
+    // the framebuffer. A pointer in the letterbox remains outside the canvas,
+    // so clicks there cannot trigger world movement or invisible UI buttons.
     Vector2 m = GetMousePosition();
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
-    if (sw < 1) sw = VRES_W;
-    if (sh < 1) sh = VRES_H;
-    return { m.x * (float)VRES_W / (float)sw, m.y * (float)VRES_H / (float)sh };
+    Rectangle dst = getPresentationRect();
+    if (dst.width <= 0.0f || dst.height <= 0.0f) return { -1.0f, -1.0f };
+    return { (m.x - dst.x) * VRES_W / dst.width,
+             (m.y - dst.y) * VRES_H / dst.height };
 }
 
 static bool mouseInVirtual() {
@@ -194,11 +195,11 @@ static void updateFieldMonsters(float dt) {
             clearWalkTarget();
             std::vector<DialogLine> lines;
             lines.push_back({ FACE_SLIME, "Slime King",
-                              "BWAHAHA! So Elmswick sent three tin cans to fetch its shiny hat?" });
+                              "Field agents? I'll file your reports under 'lost in a puddle!'" });
             lines.push_back({ FACE_KNIGHT, "Aldric",
-                              "That crown belongs to the village, you overgrown puddle. Give it back!" });
+                              "The crown belongs to Elmswick. We came to bring it home." });
             lines.push_back({ FACE_SLIME, "Slime King",
-                              "Come and peel it off my royal wobble, then! Guards — squish them!" });
+                              "Then come and take it! Guards — squish the paperwork!" });
             startDialog(lines, DLG_BOSS_SLIME_KING);
             g.encounterGrace = 3.5f;
         }

@@ -991,7 +991,7 @@ void drawMenuScreen() {
             g.musicOn ? "Music: ON" : "Music: OFF",
             g.waitBattle ? "Battle Mode: WAIT (pauses on menus)" : "Battle Mode: ACTIVE (real-time ATB)",
             "Toggle Fullscreen (F11)",
-            g.crtOn ? "CRT Filter: ON (scanlines + vignette)" : "CRT Filter: OFF (clean pixels)",
+            g.crtOn ? "Soft CRT: ON (subtle beam + edge shade)" : "Soft CRT: OFF (clean pixels)",
             "Controls & Tips",
             "Sound Room",
             "Return to Title Screen",

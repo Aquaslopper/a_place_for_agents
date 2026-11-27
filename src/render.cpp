@@ -741,8 +741,8 @@ void drawTitleScreen() {
     drawTextCentered(title, VRES_W * 0.5f + 3, 55 + bob, Color{ 12, 16, 30, 255 }, 24);
     drawTextCentered(title, VRES_W * 0.5f + 1, 53 + bob, Color{ 70, 90, 160, 255 }, 24);
     drawTextCentered(title, VRES_W * 0.5f,     52 + bob, Color{ 255, 236, 176, 255 }, 24);
-    drawTextCentered("an endless SNES-style JRPG", VRES_W * 0.5f + 1, 85 + bob, Color{ 12, 16, 30, 200 }, 8);
-    drawTextCentered("an endless SNES-style JRPG", VRES_W * 0.5f,     84 + bob, Color{ 230, 238, 255, 230 }, 8);
+    drawTextCentered("a field office at the edge of the map", VRES_W * 0.5f + 1, 85 + bob, Color{ 12, 16, 30, 200 }, 8);
+    drawTextCentered("a field office at the edge of the map", VRES_W * 0.5f,     84 + bob, Color{ 230, 238, 255, 230 }, 8);
 
     const char* opts[3] = { "NEW ADVENTURE", "CONTINUE", "QUIT" };
     for (int i = 0; i < 3; i++) {
@@ -815,13 +815,13 @@ void drawIntroScreen() {
     DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{ 6, 10, 24, 255 }, 0.48f));
 
     const char* lines[] = {
-        "Every map you were given ends here.",
-        "The road does not. Beyond the meadow",
-        "the wilds roll on without a border,",
-        "and the Slime King keeps the crown",
-        "of the first village.",
-        "",
-        "You are three, and you have one sword.",
+        "Every map ends at the edge of Elmswick.",
+        "That's where the field agents begin.",
+        "Aldric keeps the way open.",
+        "Iris looks for what maps leave out.",
+        "Pip gets everyone safely home.",
+        "Now the northern road has gone quiet.",
+        "Three agents. One unfinished map.",
     };
     float drift = std::min(18.0f, g.introT * 4.5f);
     float startY = 74.0f - drift;
