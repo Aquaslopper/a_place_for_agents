@@ -314,6 +314,9 @@ def build_villagers():
         # Keeper of the Commons — OpenRTP People1 slot not used by any other NPC
         # (crowned circlet, long mantle): a silhouette nothing else in the village has.
         ('npc_keeper',    'CharSet/People1.png', 1, 0),
+        # Ferryman Bel — a People4 slot with a broad hat and a caped coat: the
+        # silhouette of a man who has stood on a dock in the rain for years.
+        ('npc_ferryman',  'CharSet/People4.png', 3, 0),
     ]
     for name, sheet, col, row in npcs:
         frames=walk_sheet(sheet,col,row)
@@ -450,6 +453,64 @@ def build_monsters():
 
 
 # ================================================================== 6. items
+# ============================================================ 5b. the open water
+def build_boat():
+    """The ferry's boat, from the OpenRTP Vehicles row (CC BY, VictorSena).
+
+    The top-left block of CharSet/Vehicles.png is the plain rowing boat: its
+    RM2k rows are 0=up, 1=right, 2=down, 3=left. The renderer draws row 0 as
+    "bow up", row 1 as "bow down" and row 2 as "bow right" (mirrored for
+    left), so the same walk_sheet re-order the heroes and villagers use is
+    exactly right here too — the boat becomes a 72x96 character sheet, and
+    it bobs on the same 24x32 cell grid as the party it carries.
+    """
+    save(walk_sheet('CharSet/Vehicles.png', 0, 0), 'sprites', 'boat.png')
+
+
+def build_tidewells():
+    """The Tidemill Isles' Tidewell: a stone basin cut from the OpenRTP well.
+
+    The drum is the same 2x2 well the Exterior chipset gives this game (and
+    that Elmswick's square is built around), cut down to its rim and filled
+    with water. Its two colours are re-mapped onto the Commons' cold-grey
+    stone ramp and a three-step water ramp, so the isles read as places
+    raised by the same hands as the ring. A flat plinth of the Commons'
+    flagstone sits it on the grass.
+
+    Two states are emitted: dry (the Tidewell is asleep) and wet (found and
+    running). The renderer adds the glow; the art only has to read at 1x.
+    """
+    STONE = '4f6276 5b6f83 697d90 7a8ea0 8ea1b1 a7b7c4 c6d2d8'
+    well_src = trim(tcell(EXT, 24, 0, 2, 2, KEY_PINK))
+    w, h = well_src.size
+    # keep only the rim: the bottom third of the drum is the plinth it came with
+    rim = well_src.crop((0, 0, w, max(6, h * 2 // 3)))
+    rim = ramp(rim, STONE)
+    out = canvas(w + 8, rim.height + 10)
+    plinth = ramp(tile(EXT, 12, 11), STONE)
+    out.alpha_composite(plinth.crop((0, 0, w + 4, 7)), (2, out.height - 7))
+    out.alpha_composite(rim, (4, 0))
+    save(out, 'sprites', 'tidewell_dry.png')
+
+    wet = out.copy()
+    wd = ImageDraw.Draw(wet)
+    # the basin mouth: an inset ellipse of still water, brightest at the front
+    cx = 4 + w // 2
+    for i, (col, inset) in enumerate(((tuple(bytes.fromhex('4a7691')) + (255,), 3),
+                                      (tuple(bytes.fromhex('6f9fba')) + (255,), 6),
+                                      (tuple(bytes.fromhex('a8d0e2')) + (255,), 8))):
+        wd.ellipse((cx - w // 2 + 3 + inset // 2, 5 + i,
+                    cx + w // 2 - 3 - inset // 2, 11 + i), fill=col)
+    save(wet, 'sprites', 'tidewell.png')
+
+    # the lone marker stone seen from across the water
+    tall = ramp(trim(tcell(EXT, 27, 8, 1, 2, KEY_PINK)), STONE)
+    stone = canvas(26, 36)
+    stone.alpha_composite(tall.resize((tall.width * 2, tall.height * 2),
+                                      Image.Resampling.NEAREST), (1, 0))
+    save(stone, 'sprites', 'tide_stone.png')
+
+
 def build_coin_icon():
     """Crisp 16x16 golden coin icon matching the OpenRTP pixel palette."""
     im = canvas(16, 16)
@@ -569,6 +630,8 @@ def main():
     build_heroes()
     build_villagers()
     build_monsters()
+    build_boat()
+    build_tidewells()
     build_items()
     build_window()
     build_title()

@@ -267,6 +267,7 @@ static const char* QUEST_TITLES[QUEST_COUNT] = {
     "The Crown of Elm",
     "Ember of the Deep",
     "The Kept Light",
+    "The Tidemill Islands",
 };
 static const char* QUEST_GOALS[QUEST_COUNT] = {
     "Thin out 6 slimes in the meadow for Farmer Hedrick.",
@@ -274,6 +275,7 @@ static const char* QUEST_GOALS[QUEST_COUNT] = {
     "Defeat the Slime King at the Northern Castle and return the Crown.",
     "Recover Star Metal from a cavern's deepest vault.",
     "Tend the Agents' Commons for its keeper: still the Wisp in the hedge, then light the brazier.",
+    "Hire Bel's boat at the millpond, find the three island Tidewells, and sail home.",
 };
 const char* questTitle(int id) {
     if (id < 0 || id >= QUEST_COUNT) return "";
@@ -329,6 +331,38 @@ MusicCue dunThemeMusic(int theme) {
 // ================================================================ audio helpers
 void playSoundIf(Sound& s) {
     if (s.frameCount > 0) PlaySound(s);
+}
+
+// A save made afloat resumes on the bank: the hull is not saved (the sea is
+// the same on every load) and a party that woke up mid-pond with no boat line
+// under it would be a save that cannot be loaded sanely.
+static void parkSavedParty() {
+    if (!g.sailing) return;
+    g.sailing = false;
+    g.mode = MODE_OVERWORLD;
+    int lx = 0, ly = 0;
+    if (tideIslandCount() > 0) {
+        // land at the nearest isle's beach so a save taken over open water
+        // resumes somewhere the party can actually stand
+        float best = 1e9f;
+        for (int i = 0; i < tideIslandCount(); i++) {
+            float dx = tideIslandWellX(i) - gSailX, dy = tideIslandWellY(i) - gSailY;
+            float dd = dx * dx + dy * dy;
+            if (dd < best) { best = dd; lx = (int)floorf(tideIslandWellX(i)); ly = (int)floorf(tideIslandWellY(i)); }
+        }
+    }
+    if (lx == 0 && ly == 0) {
+        // home landing: a few steps north of the millpond's bank
+        lx = (int)floorf(g.px); ly = (int)floorf(g.py);
+    }
+    int wx = 0, wy = 0;
+    for (int r = 0; r <= 6 && !wx; r++) {
+        for (int dy = -r; dy <= r && !wx; dy++) for (int dx = -r; dx <= r; dx++) {
+            if (std::max(abs(dx), abs(dy)) != r) continue;
+            if (cellWalkable(lx + dx, ly + dy)) { wx = lx + dx; wy = ly + dy; break; }
+        }
+    }
+    if (wx) { g.px = wx + 0.5f; g.py = wy + 0.5f; }
 }
 
 void returnToTitle() {
@@ -518,10 +552,14 @@ bool loadAllAssets() {
     a.statusStone[2] = loadTex(d, "sprites/commons_stone_low.png");
     a.stairDown = loadTex(d, "sprites/stair_down.png");
     a.stairUp = loadTex(d, "sprites/stair_up.png");
+    a.tidewell = loadTex(d, "sprites/tidewell.png");
+    a.tidewellDry = loadTex(d, "sprites/tidewell_dry.png");
+    a.tideStone = loadTex(d, "sprites/tide_stone.png");
 
     // --- heroes
     const char* heroes[3] = { "sprites/hero_knight.png", "sprites/hero_mage.png", "sprites/hero_cleric.png" };
     for (int i = 0; i < 3; i++) a.heroWalk[i] = loadTex(d, heroes[i]);
+    a.boat = loadTex(d, "sprites/boat.png");
     const char* npcs[NS_KIND_COUNT] = {
         "sprites/npc_villager0.png", "sprites/npc_villager1.png", "sprites/npc_villager2.png",
         "sprites/npc_villager3.png", "sprites/npc_elder.png", "sprites/npc_mayor.png",
@@ -533,7 +571,7 @@ bool loadAllAssets() {
         "sprites/npc_villager4.png", "sprites/npc_villager5.png", "sprites/npc_villager6.png",
         "sprites/npc_villager7.png", "sprites/npc_villager8.png", "sprites/npc_villager9.png",
         "sprites/npc_ranger.png", "sprites/npc_cow.png", "sprites/npc_horse.png",
-        "sprites/npc_keeper.png",
+        "sprites/npc_keeper.png", "sprites/npc_ferryman.png",
     };
     for (int i = 0; i < NS_KIND_COUNT; i++) a.npc[i] = loadTex(d, npcs[i]);
 
@@ -939,7 +977,8 @@ struct SaveBlob {
     int32_t questState[QUEST_COUNT], questProgress[QUEST_COUNT], questGoal[QUEST_COUNT];
     uint32_t flags;                // bit0 bossDefeated, bit1 locketFound, bit2 towerChestOpened,
                                    // bit3 startVillageSeen, bit4 musicOn, bit5 waitBattle,
-                                   // bit6 crtOn (older saves read as CRT off)
+                                   // bit6 crtOn, bit7 hasBoat (older saves read as no boat),
+                                   // bits 8-9 tideFound (island Tidewells, 0..3)
     int32_t openedChestCount;
     uint64_t openedChests[SAVE_MAX_IDS];
     int32_t defeatedMonsterCount;
@@ -1057,6 +1096,8 @@ bool saveGame() {
     if (g.musicOn)          b.flags |= (1u << 4);
     if (g.waitBattle)       b.flags |= (1u << 5);
     if (g.crtOn)            b.flags |= (1u << 6);
+    if (g.hasBoat)          b.flags |= (1u << 7);
+    b.flags |= ((uint32_t)std::max(0, std::min(TIDE_ISLANDS, g.tideFound))) << 8;
 
     int oc = 0;
     for (uint64_t id : g.openedChests) {
@@ -1201,6 +1242,11 @@ bool loadGame() {
     g.quests[QUEST_CROWN].goal = 1;
     g.quests[QUEST_DEEP].goal = 1;
     g.quests[QUEST_COMMONS].goal = 1;
+    g.quests[QUEST_TIDE].goal = TIDE_ISLANDS;
+    if (g.quests[QUEST_TIDE].state == QS_UNKNOWN) {   // a save older than the water
+        g.quests[QUEST_TIDE].state = QS_OFFERED;
+        g.quests[QUEST_TIDE].progress = std::min(g.tideFound, TIDE_ISLANDS);
+    }
 
     g.bossDefeated     = (b.flags & (1u << 0)) != 0;
     g.locketFound      = (b.flags & (1u << 1)) != 0;
@@ -1209,6 +1255,9 @@ bool loadGame() {
     g.musicOn          = (b.flags & (1u << 4)) != 0;
     g.waitBattle       = (b.flags & (1u << 5)) != 0;
     g.crtOn            = (b.flags & (1u << 6)) != 0;
+    g.hasBoat          = (b.flags & (1u << 7)) != 0;
+    g.tideFound        = std::max(0, std::min(TIDE_ISLANDS, (int)((b.flags >> 8) & 3u)));
+    g.sailing          = false;
 
     g.openedChests.clear();
     int oc = std::max(0, std::min(SAVE_MAX_IDS, (int)b.openedChestCount));
@@ -1230,6 +1279,16 @@ bool loadGame() {
     g.walkTargetInteract = false;
     g.encounterGrace = 3.0f;
     g.stepDist = 0.0f;
+    parkSavedParty();   // a save can be read before the mode is set; be safe
+    if (g.sailing) { g.sailing = false; }
+    g.mode = MODE_OVERWORLD;
+    if (g.hasBoat && cellSailable((int)floorf(g.px), (int)floorf(g.py))) {
+        // The save was written afloat; parkSavedParty() has already moved the
+        // party onto a bank, so this is only a belt-and-braces check.
+        int x = (int)floorf(g.px), y = (int)floorf(g.py);
+        nearestWalkable(x, y, x, y);
+        if (cellWalkable(x, y)) { g.px = x + 0.5f; g.py = y + 0.5f; }
+    }
     // Keep older saves playable if the new river, cliff or grove covers the
     // saved position. The save layout and quest/chest IDs haven't changed.
     villageLoadAt(g.px,g.py);
@@ -1271,6 +1330,7 @@ void newGameState(uint32_t seed) {
     g.quests[QUEST_CROWN]  = { QS_OFFERED, 0, 1 };
     g.quests[QUEST_DEEP]   = { QS_OFFERED, 0, 1 };
     g.quests[QUEST_COMMONS] = { QS_OFFERED, 0, 1 };
+    g.quests[QUEST_TIDE] = { QS_OFFERED, 0, TIDE_ISLANDS };
 
     g.defeatedMonsters.clear();
     g.openedChests.clear();
@@ -1291,6 +1351,10 @@ void newGameState(uint32_t seed) {
     g.locketFound = false;
     g.towerChestOpened = false;
     g.startVillageSeen = false;
+    g.hasBoat = false;
+    g.sailing = false;
+    g.tideFound = 0;
+    g.surfT = 0;
     g.menuPage = 0;
     g.journalTab = 0;
     g.commonsJournalSel = 0;

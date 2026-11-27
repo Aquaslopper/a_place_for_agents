@@ -1,5 +1,69 @@
 # Growth chronicle
 
+## The Open Water — 2026-11-27 — PR (this branch)
+**Grew:** The map finally ends, and the water becomes the road out of it.
+
+The complaint was not "add more field": it was *"why do I walk thirty minutes in
+one direction without end? are the maps too big?"* The honest answer was that
+they were — the continent had no coast, so every direction was the same direction.
+This growth gives the world a **shore**, and then gives the shore a **purpose**.
+
+- **A coast, by construction.** `shoreT()` is a doubled-precision meander with a
+  hard `reach` floor, and `generateGround` tests `shoreT >= 1.02` *before* every
+  later rule — trails, survey roads, the castle apron, cave aprons, wild ways.
+  Past the line it is `G_DEEP`, full stop. Verified by grid sweep on every test
+  seed: **0 non-deep tiles anywhere in the open sea**, **0 sailable tiles beyond
+  the coast**. A new `inOpenSea()` is the single predicate the rest of the game
+  obeys, so a rule added later cannot quietly punch a beach into the horizon.
+- **The millpond is authored, not scavenged.** The old design trusted a noise
+  pond to be wide, connected and islanded on every seed; it was none of those
+  things reliably. Now `MILLPOND_CX/CY/RX/RY` fix a meandering lake south-west of
+  Elmswick (**centre −40,40; radii 33×27**), `flattenSpecialSites` carves its bed
+  (e≈0.20) and lifts its three isles (e≈0.52), and `isleStamp` lays crown, then
+  sand skirt — *only where the pond has water to spare*, so an isle can never
+  quietly become a peninsula.
+- **A harbour and a millrace.** The landing is authored too: `millPoolT` widens
+  the Millbrook into a berth 13 tiles from the square, and `millraceT` cuts the
+  channel a mill pond is actually made by, carrying that water into the lake. On
+  seed 7 the old landing was a **30-tile puddle walled off from the pond**; the
+  ferryman rented a boat that could not reach a single isle. Now one connected
+  body of water (≈4.2k–13k tiles sailable, seed-dependent) reaches all three.
+- **Three isles with a quest on each.** Tidewell Isle, Gull Rock and the Little
+  Kettle. Bel sells the boat (40 gil); the Tidewells track individually in a bit
+  mask, and the third closes **The Tide Errand** (+240 gil, Kite Shield, 2×
+  Hi-Potion). `src/sail.cpp` is a real mode: `SAIL_SPEED 5.6` / `SAIL_RUN 8.6`,
+  sea encounters every 7.5 tiles at ≤20% with a 2.5 s grace, `SPACE` to beach,
+  `F` to tow to the nearest dock, wake, bob, deep-sea darkening and a sea sketch
+  in the survey atlas.
+- **Roads that arrive.** Two long-standing lies are gone. A trail is now only
+  planked where the crossing is **short** (`trailCrossingIsShort`, ≤12 tiles):
+  seed 7 had a **36-tile pier** of bridge deck running out over open water,
+  stealing the only reason to own a boat. And authored roads are **graded** — the
+  roadbed lifts the ground to e≈0.395 within two tiles of a road, so a lake can
+  no longer swallow the North Road. That road's centreline was also a sine that
+  starts at zero slope, which stranded it beside the town gate; it now drifts
+  once and returns to the castle gate. Verified: continuous road from gate to
+  castle on every seed, longest bridge run **4–7 tiles**.
+
+**Preserved:** OpenRTP sources, the import pipeline and every existing runtime PNG
+(five new sheets — `boat`, `npc_ferryman`, `tidewell`, `tidewell_dry`,
+`tide_stone` — are additive crops; `build_art.py` now asserts their sizes and
+`validate_assets.py` passes with 408 assets / 344 runtime files). The hand-built
+Elmswick and the Agents' Commons, the seeded biomes, the Survey's villages,
+roads, caverns and landmarks, the wild-way lattice, dungeons, battles, shops,
+score, menus and UI finish. `SAVE_VERSION` is unchanged: the boat is bit 7 and
+the Tidewells bits 8–9 of the existing save word, with `parkSavedParty()` making
+an old save that was parked afloat load onto dry land. No `AGENTS.md`, no test
+suite, no `build.sh`.
+
+**Seed for the next agent:** The coast is now a *place* with nothing on it. The
+map's edge is a wall of deep water where it could be a destination: a lighthouse
+on the headland (one per coast, placed by the Survey), a wreck you can sail to
+and loot, a fishing hamlet that only the boat can reach, or a sea-chart page in
+the Journal that fills in as you round each cape. The natural next step is the
+one Bel is too polite to ask for: **make the far shore crossable** — a second
+continent within sail, so the horizon invites rather than refuses.
+
 ## Weathered Caverns — 2026-11-27 — PR #19
 **Grew:** The existing seeded dungeons now open into irregular, connected natural
 cave passages with native OpenRTP rock, dripstone and mineral dressing. The

@@ -130,6 +130,39 @@ void resolveDialogAction(DialogAction a) {
             playSoundIf(g.assets.levelup);
             pushToast("The brazier is lit! Received the Commonplace, 2x Ether, 40 gil.");
             break;
+        case DLG_BUY_BOAT: {
+            const int BOAT_PRICE = 40;
+            if (g.gil < BOAT_PRICE) {
+                pushToast("You cannot afford the boat yet (40 gil).");
+                break;
+            }
+            g.gil -= BOAT_PRICE;
+            g.hasBoat = true;
+            if (g.quests[QUEST_TIDE].state != QS_DONE) {
+                g.quests[QUEST_TIDE].state = QS_ACTIVE;
+                g.quests[QUEST_TIDE].progress = g.tideFound;
+                g.quests[QUEST_TIDE].goal = TIDE_ISLANDS;
+            }
+            playSoundIf(g.assets.treasure);
+            pushToast("Boat hired! Stand by open water and press Space to push off.");
+            std::vector<DialogLine> after;
+            after.push_back({ -1, "", "Bel takes the coins, spits on the rope, and nods at the water." });
+            after.push_back({ -1, "", "\"Water's low this year. Mind the deep out past the point.\"" });
+            after.push_back({ -1, "", "Press Space beside any pond or river bank to cast off. Press F afloat to be towed home." });
+            startDialog(after);
+            break;
+        }
+        case DLG_SAIL_TIDE:
+            if (g.quests[QUEST_TIDE].state != QS_DONE) {
+                g.quests[QUEST_TIDE].state = QS_DONE;
+                g.quests[QUEST_TIDE].progress = TIDE_ISLANDS;
+                g.gil += 240;
+                addItem(IT_SHIELD_KITE, 1, true);
+                addItem(IT_HIPOTION, 2, true);
+                playSoundIf(g.assets.levelup);
+                pushToast("All three Tidewells run! +240 gil, a Kite Shield and 2x Hi-Potion.");
+            }
+            break;
         case DLG_FINISH_QUEST_DEEP:
             questSetState(QUEST_DEEP, QS_DONE);
             g.quests[QUEST_DEEP].progress = 1;
@@ -1120,6 +1153,10 @@ void drawMenuScreen() {
                 prog = (itemCount(IT_CROWN) > 0 || g.bossDefeated)
                      ? "Crown reclaimed! Return to Old Maren."
                      : "Castle of Elm: " + compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
+            else if (q == QUEST_TIDE && st == QS_ACTIVE)
+                prog = std::string(g.hasBoat ? "Boat hired" : "Boat: see Ferryman Bel at the millpond") +
+                       "  |  Tidewells " + std::to_string(g.tideFound) + " / " + std::to_string(TIDE_ISLANDS) +
+                       (g.tideFound >= TIDE_ISLANDS ? "  (all found!)" : "");
             else if (q == QUEST_COMMONS && st == QS_ACTIVE)
                 prog = (g.quests[q].progress >= 2)
                      ? "Hedge cleared! Return to Sable at the Commons brazier."

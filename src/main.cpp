@@ -169,7 +169,8 @@ int main() {
 
         // Keep monotonic animation clock and toasts alive in modes that don't tick them themselves
         bool selfTicks = (g.mode == MODE_OVERWORLD || g.mode == MODE_ROOM ||
-                          g.mode == MODE_DUNGEON || g.mode == MODE_BATTLE);
+                          g.mode == MODE_DUNGEON || g.mode == MODE_BATTLE ||
+                          g.mode == MODE_SAIL);
         if (!selfTicks) {
             gAnimTime += dt;
             g.totalTime += dt;
@@ -182,6 +183,7 @@ int main() {
             case MODE_OVERWORLD: overworldUpdate(dt); break;
             case MODE_ROOM:      roomUpdate(dt); break;
             case MODE_DUNGEON:   dungeonUpdate(dt); break;
+            case MODE_SAIL:      sailUpdate(dt); break;
             case MODE_DIALOG:    dialogUpdate(dt); break;
             case MODE_MENU:      menuUpdate(dt); break;
             case MODE_BATTLE:    battleUpdate(dt); break;
@@ -211,15 +213,21 @@ int main() {
             case MODE_DUNGEON:
                 dungeonDraw();
                 break;
+            case MODE_SAIL:
+                sailDraw();
+                drawHUD();
+                break;
             case MODE_DIALOG:
                 if (g.dialogReturn == MODE_ROOM) roomDraw();
                 else if (g.dialogReturn == MODE_DUNGEON) dungeonDraw();
+                else if (g.dialogReturn == MODE_SAIL) { sailDraw(); drawHUD(); }
                 else { drawWorld(); drawHUD(); }
                 drawDialogBox();
                 break;
             case MODE_MENU:
                 if (g.menuReturn == MODE_ROOM) roomDraw();
                 else if (g.menuReturn == MODE_DUNGEON) dungeonDraw();
+                else if (g.menuReturn == MODE_SAIL) { sailDraw(); drawHUD(); }
                 else drawWorld();
                 drawMenuScreen();
                 break;

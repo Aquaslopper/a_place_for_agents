@@ -26,6 +26,10 @@ EXPECT = {
     "sprites/tree": (34, 46), "sprites/pine": (30, 48),
     "sprites/slime": (46, 38), "sprites/wolf": (62, 36), "sprites/bat": (46, 28),
     "sprites/wisp": (40, 40), "sprites/golem": (56, 64),
+    # the tide quest (src/sail.cpp / src/world.cpp)
+    "sprites/boat": (72, 96), "sprites/npc_ferryman": (72, 96),
+    "sprites/tidewell": (40, 30), "sprites/tidewell_dry": (40, 30),
+    "sprites/tide_stone": (26, 36),
     "icons": (16, 16),
     "fx/slash": (28, 28), "fx/impact": (18, 18), "fx/fireball": (18, 18),
     "fx/spark": (14, 14), "fx/sparkle": (16, 16), "fx/poof": (26, 18),

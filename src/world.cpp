@@ -68,9 +68,68 @@ static inline int64_t waySectorIndex(int sx, int sy) {
 static bool onWildWay(int tx, int ty);
 static GroundKind wayGroundKind(int tx, int ty, GroundKind natural);
 
+// ================================================================ the coast
+// The world used to be endless in every direction: noise all the way out, so
+// a player who walked north for half an hour met nothing but more of the same
+// forest. An SNES world map is finite and you can see its edge. This is ours:
+// one shore per seed, a ring whose radius breathes with the seed and a little
+// noise, and past it the sea. Land keeps its shape inside the ring and simply
+// falls away outside it, so every biome, road and village the Survey placed
+// still sits where it always sat — the continent just stops.
+//
+// The far coast is deliberately unreachable on foot: the water there is deep,
+// and deep water refuses a hull. The only way off the continent is the ferry
+// (src/sail.cpp), and the only destinations are its islands.
+constexpr float SHORE_BASE_R = 286.0f;   // tiles from the well to the mean shoreline
+constexpr float SHORE_BREATH = 34.0f;    // ± how far the seed moves the shore
+constexpr float SHORE_WOBBLE = 19.0f;    // ± how far the coast meanders within a seed
+
+float shoreRadius() {
+    static uint32_t cachedSeed = ~0u;
+    static float cached = SHORE_BASE_R;
+    if (cachedSeed != g.worldSeed) {
+        cachedSeed = g.worldSeed;
+        cached = SHORE_BASE_R + ((float)(hash2i(7, 11, g.worldSeed) % 1000u) / 1000.0f - 0.5f) * 2.0f * SHORE_BREATH;
+    }
+    return cached;
+}
+
+// 0 in the middle of the continent, 1 at the mean shoreline, >1 at sea.
+// The wobble is angular so the coast reads as bays and headlands, not a circle.
+static float shoreT(float x, float y) {
+    double d = sqrt((double)x * (double)x + (double)y * (double)y);
+    double ang = atan2((double)y, (double)x);
+    float wob = smoothNoise((float)cos(ang) * 2.3f + 17.0f, (float)sin(ang) * 2.3f - 9.0f,
+                            g.worldSeed ^ 0x5401u);
+    float reach = shoreRadius() + (wob - 0.5f) * 2.0f * SHORE_WOBBLE;
+    if (!(reach > 40.0f)) reach = 40.0f;
+    float r = (float)(d / (double)reach);
+    return r;
+}
+
+// The authored places near the well keep their ground exactly as it was.
+static bool nearHomeSites(float x, float y) {
+    return (x * x + y * y) < 30.0f * 30.0f ||
+           (fabsf(x - (float)BOSS_CASTLE_TX) < 24.0f && fabsf(y - (float)BOSS_CASTLE_TY) < 45.0f) ||
+           (fabsf(x - (float)LOCKET_SITE_TX) < 16.0f && fabsf(y - (float)LOCKET_SITE_TY) < 16.0f) ||
+           (fabsf(x - (float)TOWER_SITE_TX) < 16.0f && fabsf(y - (float)TOWER_SITE_TY) < 16.0f);
+}
+
 static float elevationAt(float x, float y, uint32_t seed) {
     float e = fbm(x * 0.016f, y * 0.016f, seed ^ 0x1eafu, 5);
-    return (e - 0.5f) * 1.4f + 0.5f;
+    e = (e - 0.5f) * 1.4f + 0.5f;
+    if (nearHomeSites(x, y)) return e;
+    float t = shoreT(x, y);
+    float shelf = 0.29f;                                  // dry land ends here
+    if (t <= 1.0f) return e + (1.0f - t) * 0.0f;          // untouched inside the shore
+    // past the mean shore the ground eases down to a beach, then into the sea
+    float k = t < 1.035f ? (t - 1.0f) / 0.035f : 1.0f;
+    float coast = e * (1.0f - k) + shelf * k;
+    if (t > 1.035f) {
+        float deepK = std::min(1.0f, (t - 1.035f) / 0.11f);
+        coast = shelf * (1.0f - deepK) + 0.19f * deepK;
+    }
+    return coast;
 }
 static float temperatureAt(float x, float y, uint32_t seed) {
     float t = fbm(x * 0.010f + 313.1f, y * 0.010f + 47.9f, seed ^ 0x7e47u, 3);
@@ -124,7 +183,108 @@ static void flattenSite(float x, float y, float cx, float cy, float innerR, floa
     }
 }
 
+// ================================================================ the millpond
+// Elmswick's millpond is authored, not scavenged. It is one lake with a fixed
+// centre, a meandering shore, one island in it and one jetty on the town bank.
+// That matters for more than looks: the boat, the Tidewell quest and the
+// Journal's sea all need a body of water that is *always* there, always wide
+// enough to sail, and always surrounded by dry land — a noise pond can be a
+// marsh one seed and a river the next, and then the ferryman sells a boat with
+// nowhere to go.
+// Centre and radii are chosen so the pond's north-east lobe reaches the
+// Millbrook at the town's own bank: the landing is 16 tiles from the square,
+// the pond runs away south-west from it, and the isles sit along that run. One
+// body of water, one journey — if the lake and the landing were separate
+// puddles the boat would be a toy.
+constexpr float MILLPOND_CX = -40.0f;
+constexpr float MILLPOND_CY = 40.0f;
+constexpr float MILLPOND_RX = 33.0f;
+constexpr float MILLPOND_RY = 27.0f;
+
+// Three isles: one in the pond, two out in its bay, so the sail has a near
+// destination and a far one. Radii are in tiles.
+struct MillIsle { float x, y, r; };
+static const MillIsle MILL_ISLES[TIDE_ISLANDS] = {
+    { MILLPOND_CX - 1.0f,  MILLPOND_CY - 2.0f,  4.5f },  // the mill isle, west bay
+    { MILLPOND_CX - 12.0f, MILLPOND_CY + 10.0f, 4.0f },  // Gull Rock, off the south shore
+    { MILLPOND_CX + 10.0f, MILLPOND_CY + 11.0f, 4.0f },  // the Little Kettle, east bay
+};
+
+// 0 in the middle, 1 at the mean shore, >1 outside.
+static float millpondT(float x, float y) {
+    float dx = (x - MILLPOND_CX) / MILLPOND_RX;
+    float dy = (y - MILLPOND_CY) / MILLPOND_RY;
+    float d = sqrtf(dx * dx + dy * dy);
+    float ang = atan2f(dy, dx);
+    float wob = smoothNoise(cosf(ang) * 2.1f + 5.0f, sinf(ang) * 2.1f + 3.0f, g.worldSeed ^ 0x9d0du);
+    return d / (0.88f + 0.22f * wob);
+}
+
+// The millrace. A mill pond is not a pond sunk in a field: it is water the
+// brook was made to fill. This is the cut that does it — the Millbrook at the
+// town's own landing, running south-west into the pond's north-east lobe. It is
+// the reason the ferryman's boat is not moored in a puddle of its own.
+// The landing pool: a widened berth at the town's own south bank, west of the
+// bridge and clear of the South Highway. Without it the landing is wherever the
+// seed's river noise happens to leave a puddle — and on some seeds that puddle
+// is thirty tiles of water walled off by its own banks, so the ferryman rents
+// out a boat that cannot reach the isles.
+static float millPoolT(float x, float y) {
+    float dx = (x + 6.0f) / 4.6f;
+    float dy = (y - 15.0f) / 3.2f;
+    float ang = atan2f(dy, dx);
+    float wob = smoothNoise(cosf(ang) * 1.7f + 11.0f, sinf(ang) * 1.7f + 2.0f, g.worldSeed ^ 0x51c3u);
+    return sqrtf(dx * dx + dy * dy) / (0.90f + 0.12f * wob);
+}
+
+static float millraceT(float x, float y) {
+    const float ax = -9.0f, ay = 17.0f;    // out of the landing pool
+    const float bx = -21.0f, by = 25.5f;   // spill into the pond
+    float vx = bx - ax, vy = by - ay;
+    float t = ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy);
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    float px = x - (ax + vx * t), py = y - (ay + vy * t);
+    float d = sqrtf(px * px + py * py);
+    float w = 2.45f + 0.45f * smoothNoise(x * 0.19f + 3.1f, y * 0.19f - 8.2f, g.worldSeed ^ 0x2ee1u);
+    return d / w;
+}
+
+// Everywhere the mill's water actually reaches.
+static float pondWaterT(float x, float y) {
+    return std::min(millpondT(x, y), std::min(millraceT(x, y), millPoolT(x, y)));
+}
+
+static bool onMillIsle(int tx, int ty, float pad = 0.0f) {
+    for (int i = 0; i < TIDE_ISLANDS; i++) {
+        float dx = (float)tx - MILL_ISLES[i].x, dy = (float)ty - MILL_ISLES[i].y;
+        float r = MILL_ISLES[i].r + pad;
+        if (dx * dx + dy * dy <= r * r) return true;
+    }
+    return false;
+}
+
 static void flattenSpecialSites(float x, float y, float& e, float& t, float& m) {
+    // The millpond: water out to its meandering shore, meadow banks.
+    {
+        float mp = pondWaterT(x, y);
+        if (mp < 1.35f) {
+            float k = mp < 1.0f ? 1.0f : 1.0f - (mp - 1.0f) / 0.35f;
+            k = k * k * (3.0f - 2.0f * k);
+            float bed = onMillIsle((int)x, (int)y) ? 0.50f : (mp < 0.72f ? 0.20f : 0.24f);
+            e = e * (1.0f - k) + bed * k;
+            if (k > 0.5f) { t = t * (1.0f - k) + 0.54f * k; m = m * (1.0f - k) + 0.52f * k; }
+        }
+        // The isles themselves rise out of the water as meadow.
+        for (int i = 0; i < TIDE_ISLANDS; i++) {
+            float dx = x - MILL_ISLES[i].x, dy = y - MILL_ISLES[i].y;
+            float d = sqrtf(dx * dx + dy * dy);
+            if (d < MILL_ISLES[i].r + 3.0f) {
+                float k = d <= MILL_ISLES[i].r ? 1.0f : 1.0f - (d - MILL_ISLES[i].r) / 3.0f;
+                k = k * k * (3.0f - 2.0f * k);
+                e = e * (1.0f - k) + 0.52f * k;
+            }
+        }
+    }
     flattenSite(x, y, 0.0f, 0.0f, 22.0f, 30.0f, e, t, m, 0.52f, 0.55f, 0.58f);
     flattenSite(x, y, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY, 12.0f, 19.0f,
                 e, t, m, 0.54f, 0.27f, 0.48f);
@@ -170,9 +330,17 @@ static Biome climate(int tx, int ty, float e, float t, float m, float patch) {
 // 0 = no trail, 1 = N/S planks, 2 = E/W planks. Two cells wide even on bends.
 static int trailAt(int x, int y) {
     // North Road: Elmswick north gate (0..1, -15) -> Castle of Elm gate (0..1, -137)
+    //
+    // The bend must be a *function of the road*, not of a wave: a sine starts at
+    // zero slope, so the old formula spent its first forty tiles within one tile
+    // of x=0 and then swung to x=±10 and back, leaving the middle of the road
+    // to fall wherever the noise put a lake. One gentle, readable drift across
+    // the whole run — and the far end must land on the castle gate, so the
+    // road ends where the castle is instead of twenty tiles off to one side.
     if (y <= -15 && y >= BOSS_CASTLE_TY + 7) {
         float u = (float)(-15 - y) / (float)(-15 - (BOSS_CASTLE_TY + 7));
-        int bend = (int)roundf(sinf(3.14159265f * u) * (4.5f * sinf(u * 12.566f) + 2.5f * sinf(u * 6.283f)));
+        float drift = 7.0f * sinf(3.14159265f * u) + 2.0f * (1.0f - cosf(6.2831853f * u)) * 0.5f;
+        int bend = (int)roundf(drift * (1.0f - u));     // returns to the gate at u=1
         if (x == bend || x == bend + 1) return 1;
     }
     // South Highway across Millbrook Bridge (0..1, 13..25)
@@ -196,6 +364,38 @@ static int trailAt(int x, int y) {
         if (y == cy || y == cy + 1) return 2;
     }
     return 0;
+}
+
+// How much water lies under this trail tile along the road's own axis? A
+// crossing is a short bridge; a road that runs twenty tiles out over a lake is
+// not a road, it is a pier to nowhere — and it steals the only reason to own a
+// boat. Planks are laid only where the far bank is genuinely close.
+static float shoreT(float x, float y);   // forward: defined below
+static bool trailCrossingIsShort(int tx, int ty, int axis) {
+    // Never sampleGround() here: this runs *inside* generateGround and would
+    // recurse until the stack dies. Water at this stage is either the pond's own
+    // authored reach or terrain low enough to be a lake bed — both are pure
+    // functions of the seed, so they can be asked directly.
+    auto isWater = [](int x, int y) {
+        if (pondWaterT((float)x + 0.5f, (float)y + 0.5f) < 1.0f) return true;
+        if (shoreT((float)x + 0.5f, (float)y + 0.5f) >= 1.02f) return true;
+        float e = elevationAt((float)x, (float)y, g.worldSeed);
+        float t, m;
+        flattenSpecialSites((float)x, (float)y, e, t, m);
+        return e < 0.325f;
+    };
+    if (!isWater(tx, ty)) return true;
+    // axis 1 = road runs north-south, so test that direction; 2 = east-west
+    int stepX = (axis == 2) ? 1 : 0;
+    int stepY = (axis == 1) ? 1 : 0;
+    int fwd = 0, back = 0;
+    for (int i = 1; i <= 12; i++) {
+        if (isWater(tx + stepX * i, ty + stepY * i)) fwd++; else break;
+    }
+    for (int i = 1; i <= 12; i++) {
+        if (isWater(tx - stepX * i, ty - stepY * i)) back++; else break;
+    }
+    return (fwd + back + 1) <= 12;
 }
 
 static bool nearTrail(int tx, int ty, int r) {
@@ -242,12 +442,36 @@ static bool surveyedCavernNear(int tx, int ty, int radius, Landmark& out) {
     return false;
 }
 
+static bool isleStamp(int tx, int ty, GroundTile& out);
+static bool onTidemillIsle(int tx, int ty);
+static bool nearTidemillIsle(int tx, int ty);
+
 static GroundTile generateGround(int tx, int ty) {
     GroundTile out;
     float x = (float)tx, y = (float)ty;
     uint32_t seed = g.worldSeed;
     float e = elevationAt(x, y, seed), t = temperatureAt(x, y, seed), m = moistureAt(x, y);
     flattenSpecialSites(x, y, e, t, m);
+
+    // Authored roads are graded, not drawn on whatever the noise left behind.
+    // The North Road runs 130 tiles from the town gate to the Castle of Elm; a
+    // lake astride the middle of it used to swallow the road entirely, and the
+    // party would walk into a wall of water halfway to the castle. A roadbed
+    // lifts the ground just clear of the waterline instead, so the road crosses
+    // its lakes on a natural dry causeway — the way a real road does.
+    {
+        float mpHere = pondWaterT(x, y);
+        if (mpHere >= 1.18f) {
+            int near = 0;
+            for (int dy = -2; dy <= 2 && !near; dy++) for (int dx = -2; dx <= 2; dx++)
+                if (trailAt(tx + dx, ty + dy) != 0) { near = 1; break; }
+            if (near) {
+                // 0.30 is open water, 0.368 the beach line: 0.40 is dry roadbed.
+                const float roadE = 0.395f;
+                if (e < roadE) e = roadE;
+            }
+        }
+    }
     float patch = smoothNoise(x * 0.095f, y * 0.095f, seed ^ 0x4921u);
     float canopy = canopyDensityAt(tx, ty, seed);
     uint32_t h = hash2i(tx, ty, seed ^ 0x9a11u);
@@ -263,6 +487,29 @@ static GroundTile generateGround(int tx, int ty) {
     if (out.biome == BI_AMBER && canopy > 0.43f) out.kind = G_LEAVES;
     if (out.biome == BI_DUNES && patch > 0.47f) out.kind = G_RIPPLES;
     if (out.biome == BI_FOREST && canopy < 0.40f) out.kind = G_GRASS;
+
+    // The Tidemill Isles are built, not found: stamp them before the water
+    // rules below so the pond closes around their sand skirts naturally.
+    if (isleStamp(tx, ty, out)) return out;
+
+    // The millpond is authored water. Nothing downstream — the Millbrook, the
+    // North Road, a survey road, a cave apron — may cut land into it, so it
+    // answers here and returns.
+    if (pondWaterT(x, y) < 1.0f) {
+        // A mill pond is a *pond*: two to four tiles of depth the whole way
+        // across. Nothing here is G_DEEP, because the boat's landing test looks
+        // for open water and an isle ringed in "deep" strands the party afloat.
+        out.kind = G_WATER;
+        out.biome = BI_MEADOW;
+        out.deco = (uint8_t)(((h >> 5) & 7) == 0 ? 4 : 0);      // lilies
+        return out;
+    }
+
+    // Past the coast it is sea, full stop. This has to come before every later
+    // rule (trails, roads, turnip plot, castle apron, cave apron, wild ways):
+    // any single one of them re-cutting "land" out there would put a beach in
+    // the middle of the ocean and undo the horizon.
+    if (shoreT(x, y) >= 1.02f) { out.kind = G_DEEP; out.deco = 0; return out; }
 
     // Stepped SNES rocky bluffs & hillside outcrops (rendered with 3D cliff faces via relief.png)
     float ridge = fbm(x * 0.062f + 19.3f, y * 0.082f - 41.7f, seed ^ 0x31ffu, 3);
@@ -291,6 +538,23 @@ static GroundTile generateGround(int tx, int ty) {
         }
     }
 
+    // Everything from here down cuts land out of the world: trails, survey
+    // roads, cave aprons, the castle yard. None of it may cut land out of the
+    // millpond, so the lake claims its own bank first and returns.
+    {
+        float mp = pondWaterT(x, y);
+        if (mp >= 1.0f && mp < 1.18f) {
+            // The bank frames the lake; it must never beach over water that is
+            // already running into it, or the Millbrook ends at the pond's rim
+            // and the landing is left sitting in a puddle of its own.
+            if (out.kind == G_WATER || out.kind == G_DEEP) return out;
+            out.kind = (mp < 1.05f) ? G_BEACH : G_GRASS;
+            out.biome = BI_MEADOW;
+            out.deco = 0;
+            return out;
+        }
+    }
+
     // Millbrook River & structural crossings
     int sector = (int)floorf((x + 32.0f) / 64.0f);
     int ford = sector * 64 + (sector ? (int)(hash2i(sector, 3, seed) % 19) - 9 : 0);
@@ -302,17 +566,22 @@ static GroundTile generateGround(int tx, int ty) {
     if ((tx == ford || tx == ford + 1) && bank < 4.6f) trail = 1;
     if (trail) {
         bool wet = out.kind == G_WATER || out.kind == G_DEEP;
+        // Only short crossings get planks. A long stretch of deep water under a
+        // trail is the boat's business; the trail walks up to the bank and stops.
+        if (wet && !trailCrossingIsShort(tx, ty, trail)) return out;
         out.kind = wet ? (trail == 1 ? G_BRIDGE_NS : G_BRIDGE_EW) : G_DIRT;
         return out;
     }
 
     // The Survey's roads (src/atlas.cpp) join the settlements. Two tiles of
     // packed dirt, and planks wherever a road meets water — a crossing the party
-    // can actually walk, which is the whole point of drawing them.
-    {
+    // can actually walk, which is the whole point of drawing them. Past the
+    // coast no road runs: the sea is the only way on.
+    if (shoreT(x, y) < 1.02f) {
         int axis = atlasRoadAxis(tx, ty);
         if (axis) {
             bool wet = out.kind == G_WATER || out.kind == G_DEEP;
+            if (wet && !trailCrossingIsShort(tx, ty, (axis & 1) ? 1 : 2)) return out;
             out.kind = wet ? ((axis & 1) ? G_BRIDGE_NS : G_BRIDGE_EW) : G_DIRT;
             out.deco = 0;
             return out;
@@ -379,6 +648,53 @@ static GroundTile generateGround(int tx, int ty) {
     if (nearSpecialSite(tx, ty) && (out.kind == G_ROCK || out.kind == G_WATER || out.kind == G_DEEP))
         out.kind = soils[out.biome];
 
+
+    // The millpond's bank: meadow on the rim, a beach where it meets water.
+    {
+        float mp = millpondT(x, y);
+        if (mp >= 1.0f && mp < 1.22f) {
+            bool wetHere = out.kind == G_WATER || out.kind == G_DEEP;
+            if (!wetHere && (out.kind == G_WATER || out.kind == G_DEEP || mp < 1.06f)) {
+                out.kind = G_BEACH;
+                out.biome = BI_MEADOW;
+                out.deco = 0;
+                return out;
+            }
+            if (!wetHere && (out.kind == G_ROCK || out.kind == G_SNOW || out.kind == G_ICE || out.kind == G_SWAMP))
+                out.kind = G_GRASS;
+            out.biome = BI_MEADOW;
+        }
+    }
+
+    // The coast: a sand ring wherever the land meets the sea, and no crag
+    // standing in the shallows. The millpond keeps its grassy bank (its water
+    // is inland, where shoreT is small), so Elmswick still looks like Elmswick.
+    {
+        float st = shoreT(x, y);
+        if (st > 0.955f && st < 1.06f) {
+            bool wetHere = out.kind == G_WATER || out.kind == G_DEEP;
+            bool nearWet = false;
+            // Ask the elevation field, never sampleGround(): sampling from
+            // inside the generator is a recursion the terrain does not survive.
+            for (int oy = -1; oy <= 1 && !wetHere; oy++)
+                for (int ox = -1; ox <= 1 && !wetHere; ox++) {
+                    if (!ox && !oy) continue;
+                    if (elevationAt(x + (float)ox, y + (float)oy, seed) < 0.325f) nearWet = true;
+                }
+            if (!wetHere && (nearWet || out.kind == G_BEACH || st > 1.0f)) {
+                out.kind = G_BEACH;
+                out.deco = 0;
+                return out;
+            }
+            if (wetHere && st > 1.0f) { out.kind = G_WATER; out.deco = 0; return out; }
+        }
+        if (st >= 1.06f && st < 1.16f && out.kind != G_WATER && out.kind != G_DEEP) {
+            out.kind = G_BEACH;
+            out.deco = 0;
+            return out;
+        }
+    }
+
     // Hedrick's fenced kitchen turnip plot in southwest Elmswick
     if (tx >= -13 && tx <= -9 && ty >= 9 && ty <= 11) {
         out.kind = G_SOIL;
@@ -439,14 +755,20 @@ SurveyTerrain worldSurveyTerrain(int tx, int ty) {
     float shelf = smoothNoise(x * 0.13f - 7.1f, y * 0.13f + 13.9f, seed ^ 0x8821u);
     out.elevation = e;
     out.biome = climate(tx, ty, e, t, m, patch);
+    // The Tidemill Isles are meadow and sand wherever the noise put them, so
+    // the Survey must not file them as open water and start a village there.
+    bool isle = onTidemillIsle(tx, ty);
+    if (isle) out.biome = BI_MEADOW;
     out.brookDistance = fabsf(y - brookCenterAt(x, seed));
 
     if (out.biome == BI_FEN) {
         if (patch < 0.24f || e < 0.29f) out.water = true;
         else out.swamp = true;
-    } else if (e < 0.325f) {
+    } else if (e < 0.325f && !isle) {
         out.water = true;
         out.deep = e < 0.265f;
+    } else if (isle) {
+        // meadow crown: no crag, no ice
     } else if (e > 0.745f ||
                ((out.biome == BI_HEATH || out.biome == BI_DUNES) && ridge > 0.61f && shelf > 0.50f) ||
                ((out.biome == BI_MEADOW || out.biome == BI_FOREST || out.biome == BI_AMBER) &&
@@ -470,6 +792,16 @@ GroundTile sampleGround(int tx, int ty) {
 
 static bool groundWalkable(GroundKind k) {
     return k != G_WATER && k != G_DEEP && k != G_ROCK;
+}
+// The water a boat may cross. Inside the continent every pond, river and lake
+// is fair water; past the coast the sea refuses a hull, so the horizon stays a
+// horizon and the whole ocean is a wall, not another 30 minutes of nothing.
+bool inOpenSea(float x, float y) { return shoreT(x, y) >= 1.02f; }
+
+bool waterSailableAt(int tx, int ty) {
+    GroundKind k = sampleGround(tx, ty).kind;
+    if (k != G_WATER && k != G_DEEP) return false;
+    return !inOpenSea((float)tx + 0.5f, (float)ty + 0.5f);
 }
 
 // ================================================================ wild ways
@@ -503,6 +835,18 @@ static const int d8Static[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 
 // roofs, paving, soil, a landmark's own stones, a dungeon mouth, the road, or a
 // scripted story site.
 static bool wayCarvable(int tx, int ty) {
+    // The Open Water: the wild ways connect the LAND, not the sea. A way may
+    // plank across a brook or a pond arm inside the coast, but never past the
+    // coast, never across the millpond's deep middle, and never onto one of
+    // the Tidemill Isles — those are a boat's business. Without this the
+    // survey would lay a dirt track over open water and quietly undo both the
+    // horizon and the islands.
+    if (shoreT((float)tx + 0.5f, (float)ty + 0.5f) >= 1.0f) return false;
+    {
+        GroundKind k = sampleGround(tx, ty).kind;
+        if ((k == G_WATER || k == G_DEEP) && (k == G_DEEP || onTidemillIsle(tx, ty) || nearTidemillIsle(tx, ty)))
+            return false;
+    }
     switch (sampleGround(tx, ty).kind) {
         case G_COBBLE: case G_FLOOR: case G_SOIL:
         case G_BRIDGE_NS: case G_BRIDGE_EW: case G_DIRT:
@@ -543,6 +887,29 @@ static bool wayPropSolid(PropKind p) {
 // can be consulted without recursing, because a way may only be opened where
 // this says a body could stand.
 static bool landmarkCellBlocked(int tx, int ty);   // defined with the landmark pass below
+// True iff this tile is water with dry land within five steps on BOTH sides of
+// one axis: a brook, a ditch, a pond's narrow arm. Anything wider is a lake, and
+// the water is the boat's business.
+static bool wayCrossableWater(int tx, int ty) {
+    GroundKind k = sampleGround(tx, ty).kind;
+    if (k != G_WATER && k != G_DEEP) return false;
+    static const int DX[4] = { 1, -1, 0, 0 }, DY[4] = { 0, 0, 1, -1 };
+    for (int axis = 0; axis < 2; axis++) {          // 0 = east/west, 1 = north/south
+        bool bothSides = true;
+        for (int side = 0; side < 2; side++) {
+            int dir = axis * 2 + side;
+            bool land = false;
+            for (int step = 1; step <= 5; step++) {
+                GroundKind nk = sampleGround(tx + DX[dir] * step, ty + DY[dir] * step).kind;
+                if (nk != G_WATER && nk != G_DEEP) { land = true; break; }
+            }
+            if (!land) { bothSides = false; break; }
+        }
+        if (bothSides) return true;
+    }
+    return false;
+}
+
 static bool wayStandable(int tx, int ty) {
     if (!wayGroundOpen(tx, ty)) return false;
     if (wayPropSolid(propAt(tx, ty))) return false;
@@ -553,7 +920,13 @@ static bool wayStandable(int tx, int ty) {
 // A way is only ever stamped where it had to cut. Ground a body can already
 // stand on stays exactly as the seed made it, so the wilds keep their look and
 // the survey's whole visible footprint is the cuts through real walls.
+static bool wayCrossableWater(int tx, int ty);   // defined with the water rules below
 static void wayCarve(int tx, int ty) {
+    // A cut through trees or crag becomes dirt; a cut through water becomes a
+    // boardwalk, and only across a crossing. Anything wider is a lake: the way
+    // routes around it and the party takes the boat.
+    GroundKind k = sampleGround(tx, ty).kind;
+    if ((k == G_WATER || k == G_DEEP) && !wayCrossableWater(tx, ty)) return;
     gWayCells.insert(wayKey(tx, ty));
 }
 
@@ -671,7 +1044,10 @@ static void wildWaySurveySector(int sx, int sy) {
                 int nx = x + d[0], ny = y + d[1];
                 if (nx < x0 || nx >= x0 + N || ny < y0 || ny >= y0 + N) continue;
                 bool stand = wayStandable(nx, ny);
-                if (!stand && !wayCarvable(nx, ny)) continue;
+                // A step that is not standable has to be carvable *as a crossing*.
+                // wayCarvable alone would let the survey plank the whole pond:
+                // this is the difference between a ford and a causeway.
+                if (!stand && !(wayCarvable(nx, ny) && (wayGroundOpen(nx, ny) || wayCrossableWater(nx, ny)))) continue;
                 // Open ground is cheap; a stand of trees is a worn track waiting
                 // to be cut (a groove through a wood is a pleasant thing to find);
                 // crag costs more and open water most, so ways prefer the
@@ -924,6 +1300,18 @@ static bool proceduralLandmarkNear(int tx, int ty, int radius, Landmark& out) {
 
 void expandLandmarkParts(const Landmark& lm, std::vector<LandmarkPart>& out) {
     out.clear();
+    // A Tidemill Isle's standing stones put a Tidewell at their heart. The
+    // island is identified by its seed tag, which outranks the generic ring.
+    if ((lm.seed & 0xFFFF0000u) == 0x71de0000u) {
+        out.push_back({ LP_TIDEWELL, lm.tx, lm.ty + 1, 1 });
+        out.push_back({ LP_PILLAR, lm.tx - 2, lm.ty, 1 });
+        out.push_back({ LP_PILLAR, lm.tx + 2, lm.ty, 1 });
+        out.push_back({ LP_PILLAR, lm.tx - 2, lm.ty + 2, 1 });
+        out.push_back({ LP_PILLAR, lm.tx + 2, lm.ty + 2, 1 });
+        out.push_back({ LP_TORCH, lm.tx - 1, lm.ty - 2, 1 });
+        out.push_back({ LP_TORCH, lm.tx + 1, lm.ty - 2, 1 });
+        return;
+    }
     bool isBossCastle = (lm.kind == LK_CASTLE && lm.tx == BOSS_CASTLE_TX && lm.ty == BOSS_CASTLE_TY);
     bool isStoryStones = (lm.kind == LK_STONES && lm.tx == LOCKET_SITE_TX && lm.ty == LOCKET_SITE_TY);
     bool isStoryTower = (lm.kind == LK_TOWER && lm.tx == TOWER_SITE_TX && lm.ty == TOWER_SITE_TY);
@@ -1017,6 +1405,9 @@ static bool landmarkCellBlocked(int tx, int ty) {
     }
     return false;
 }
+
+// A tile a hull may occupy: open water inside the coast.
+bool cellSailable(int tx, int ty) { return waterSailableAt(tx, ty); }
 
 bool cellWalkable(int tx, int ty) {
     // The world is endless, so the terrain's ways must exist before anything is
@@ -1159,7 +1550,7 @@ static PropKind propAtUncached(int tx, int ty) {
     GroundTile gt = sampleGround(tx, ty);
     if (gt.kind == G_DIRT || gt.kind == G_BRIDGE_NS || gt.kind == G_BRIDGE_EW ||
         gt.kind == G_COBBLE || gt.kind == G_FLOOR || gt.kind == G_SOIL ||
-        gt.kind == G_WATER || gt.kind == G_DEEP || gt.kind == G_ICE)
+        gt.kind == G_WATER || gt.kind == G_DEEP || gt.kind == G_ICE || gt.kind == G_BEACH)
         return P_NONE;
 
     uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0x77ee5u);
@@ -2103,6 +2494,60 @@ const char* npcRoleName(int role) {
     }
 }
 
+// ------------------------------------------------------------- the ferryman
+// One sailor stands on the millpond dock all day, and on whichever dock the
+// party last landed at. He is placed after everything else in the sector pass
+// so no random villager can take his plank, and he is placed whether or not a
+// village is loaded, because the dock is out on the water where no village is.
+static void placeFerryman(std::vector<Npc>& out) {
+    Dock d;
+    if (!dockFind(false, d)) return;
+    if (fabsf((float)d.tx + 0.5f - g.px) > 26.0f || fabsf((float)d.ty + 0.5f - g.py) > 26.0f) return;
+    Npc n;
+    n.id = 0x46e44ull;
+    n.sprite = NS_FERRYMAN;
+    n.face = FACE_RANGER;
+    n.facing = 0;
+    n.role = NPC_QUEST;
+    n.quest = QUEST_TIDE;
+    n.name = "Ferryman Bel";
+    n.lineSet = 0;
+    // The berth is a busy corner of the village and a villager is often standing
+    // exactly where Bel would tie up. Step along the bank rather than vanishing:
+    // an absent ferryman strands the whole tide quest, and which tile the cook
+    // happens to occupy is not the player's problem.
+    auto freeHere = [&](int tx, int ty) {
+        if (!cellWalkable(tx, ty)) return false;
+        for (const Npc& o : out)
+            if (fabsf(o.x - (tx + 0.5f)) < 1.2f && fabsf(o.y - (ty + 0.5f)) < 1.2f) return false;
+        return true;
+    };
+    // Prefer a free tile that still touches the water: Bel is a ferryman, and a
+    // ferryman standing in the middle of the square is just a man with a boat.
+    auto touchesWater = [&](int tx, int ty) {
+        for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++)
+            if (cellSailable(tx + dx, ty + dy)) return true;
+        return false;
+    };
+    int bx = -1, by = -1;
+    for (int r = 0; r <= 6 && bx < 0; r++) {
+        for (int dy = -r; dy <= r && bx < 0; dy++) for (int dx = -r; dx <= r && bx < 0; dx++) {
+            if (std::max(abs(dx), abs(dy)) != r) continue;
+            if (freeHere(d.tx + dx, d.ty + dy) && touchesWater(d.tx + dx, d.ty + dy)) { bx = d.tx + dx; by = d.ty + dy; }
+        }
+    }
+    for (int r = 0; r <= 6 && bx < 0; r++) {
+        for (int dy = -r; dy <= r && bx < 0; dy++) for (int dx = -r; dx <= r && bx < 0; dx++) {
+            if (std::max(abs(dx), abs(dy)) != r) continue;
+            if (freeHere(d.tx + dx, d.ty + dy)) { bx = d.tx + dx; by = d.ty + dy; }
+        }
+    }
+    if (bx < 0) return;
+    n.x = n.homeX = bx + 0.5f;
+    n.y = n.homeY = by + 0.5f;
+    out.push_back(n);
+}
+
 void npcsLoadFor(float x, float y, bool force) {
     bool useVillage = g.villageLoaded && fabsf(x - g.village.cx) < 30 && fabsf(y - g.village.cy) < 30;
     int sx = (int)floorf(x / 32), sy = (int)floorf(y / 32);
@@ -2230,6 +2675,10 @@ void npcsLoadFor(float x, float y, bool force) {
                 add(NS_RANGER, FACE_RANGER, NPC_VILLAGER, px, py, "Wandering Ranger", (int)(h % 8));
         }
     }
+    // The ferryman keeps the dock. He is added last so nothing displaces him,
+    // and he is on the water's side of the map, so he exists with or without
+    // a village loaded.
+    placeFerryman(g.npcs);
 }
 
 int npcNear(float x, float y, float radius, float* outDist) {
@@ -2273,6 +2722,182 @@ void chestsLoadFor(float x, float y) {
     }
 }
 
+// ================================================================ the Open Water
+// The ferryman needs four places: a landing on Elmswick's millpond, and three
+// isles with a beach. The landing is found from the shore nearest the well, so
+// it sits exactly where the pond is closest to the square and moves with the
+// seed. The isles are NOT scavenged from the noise: a pond's worth of noise
+// rarely leaves three islands big enough to stand on, and a fixed world that
+// sometimes has no destination is a broken promise. They are built into the
+// millpond instead, deterministically per seed, and then dressed like any
+// other shore: sand ring, meadow crown, a ring of standing stones, a Tidewell.
+// The nearest water tile to a land tile: the boat's slip.
+static bool nearestSlip(int tx, int ty, int maxR, int& ox, int& oy) {
+    for (int r = 1; r <= maxR; r++) {
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                if (std::max(abs(dx), abs(dy)) != r) continue;
+                if (sampleGround(tx + dx, ty + dy).kind == G_WATER) {
+                    ox = tx + dx; oy = ty + dy;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// ---- the three isles --------------------------------------------------------
+// The isles are the authored ones in MILL_ISLES above. They are stamped into
+// the terrain by elevationAt(), so ground, Survey, collision and the Journal
+// already agree about them without anyone asking a second time.
+static TideIsle isleLanding[TIDE_ISLANDS];
+static int isleCount = 0;
+static bool islesLaid = false;
+
+// Stamps an isle's crown and sand skirt. A pure function of the authored list,
+// so it is safe to call from inside generateGround().
+static bool isleStamp(int tx, int ty, GroundTile& out) {
+    for (int i = 0; i < TIDE_ISLANDS; i++) {
+        float dx = (float)tx - MILL_ISLES[i].x, dy = (float)ty - MILL_ISLES[i].y;
+        float r = MILL_ISLES[i].r;
+        float r2 = dx * dx + dy * dy;
+        if (r2 <= r * r) {
+            out.kind = G_GRASS;
+            out.biome = BI_MEADOW;
+            out.deco = (uint8_t)(hash2i(tx, ty, g.worldSeed ^ 0x1515u) % 3 == 0 ? 2 : 0);
+            return true;
+        }
+        // Sand skirt, but only where the pond has water to spare: a skirt that
+        // reaches dry land would make the isle a peninsula and the boat a joke.
+        if (r2 <= (r + 1.5f) * (r + 1.5f) && millpondT((float)tx, (float)ty) < 0.94f) {
+            out.kind = G_BEACH;
+            out.biome = BI_MEADOW;
+            out.deco = 0;
+            return true;
+        }
+    }
+    return false;
+}
+
+// The dry crown (the sand skirt still counts as beach).
+static bool onTidemillIsle(int tx, int ty) { return onMillIsle(tx, ty, 1.0f); }
+
+// The water around an isle is a boat's business: no survey planks, no builds.
+static bool nearTidemillIsle(int tx, int ty) { return onMillIsle(tx, ty, 9.0f); }
+
+static void buildIslets() {
+    if (islesLaid) return;
+    islesLaid = true;
+    isleCount = TIDE_ISLANDS;
+    for (int i = 0; i < TIDE_ISLANDS; i++) {
+        // The landing is the walkable crown tile nearest the town: the beach a
+        // ferry would nose into.
+        int bestX = (int)floorf(MILL_ISLES[i].x), bestY = (int)floorf(MILL_ISLES[i].y);
+        float bestD = 1e9f;
+        for (int oy = -8; oy <= 8; oy++) for (int ox = -8; ox <= 8; ox++) {
+            int x = (int)floorf(MILL_ISLES[i].x) + ox, y = (int)floorf(MILL_ISLES[i].y) + oy;
+            if (!onMillIsle(x, y)) continue;
+            if (!cellWalkable(x, y)) continue;
+            float dd = (float)x * x + (float)y * y;
+            if (dd < bestD) { bestD = dd; bestX = x; bestY = y; }
+        }
+        isleLanding[i].tx = bestX;
+        isleLanding[i].ty = bestY;
+        isleLanding[i].well = true;
+    }
+}
+
+void tideIslands() { buildIslets(); }
+int tideIslandCount() { buildIslets(); return isleCount; }
+bool tideIslandAt(int i, TideIsle& out) {
+    buildIslets();
+    if (i < 0 || i >= isleCount) return false;
+    out = isleLanding[i];
+    return true;
+}
+float tideIslandWellX(int i) { buildIslets(); return (i >= 0 && i < isleCount) ? isleLanding[i].tx + 0.5f : 0.0f; }
+float tideIslandWellY(int i) { buildIslets(); return (i >= 0 && i < isleCount) ? isleLanding[i].ty + 0.5f : 0.0f; }
+const char* tideIslandName(int i) {
+    static const char* NAMES[TIDE_ISLANDS] = { "Tidewell Isle", "Gull Rock", "The Little Kettle" };
+    return (i >= 0 && i < TIDE_ISLANDS) ? NAMES[i] : "an isle";
+}
+
+// The docks. Land-side docks are found from the shore nearest the well (the
+// Elmswick millpond landing) and from each isle's own beach; afloat, the
+// nearest dock is whichever of those the hull is closest to.
+static bool dockFromLand(int wx, int wy, Dock& out) {
+    int lx = 0, ly = 0;
+    for (int r = 1; r <= 8; r++) {
+        for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) {
+            if (std::max(abs(dx), abs(dy)) != r) continue;
+            int x = wx + dx, y = wy + dy;
+            if (!cellWalkable(x, y)) continue;
+            bool touches = false;
+            for (int oy = -1; oy <= 1 && !touches; oy++) for (int ox = -1; ox <= 1; ox++) {
+                if (sampleGround(x + ox, y + oy).kind == G_WATER) { touches = true; break; }
+            }
+            if (!touches) continue;
+            lx = x; ly = y;
+            int sx = 0, sy = 0;
+            if (!nearestSlip(lx, ly, 3, sx, sy)) continue;
+            out.valid = true; out.tx = lx; out.ty = ly; out.wx = sx; out.wy = sy;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool dockFind(bool sailing, Dock& out) {
+    out = Dock{};
+    float bestD = 1e9f;
+    auto consider = [&](const Dock& d) {
+        if (!d.valid) return;
+        float dx = (sailing ? gSailX : g.px) - (d.tx + 0.5f);
+        float dy = (sailing ? gSailY : g.py) - (d.ty + 0.5f);
+        float dd = dx * dx + dy * dy;
+        if (dd < bestD) { bestD = dd; out = d; }
+    };
+    if (!sailing) {
+        // The home dock sits on the millpond's north bank, a short walk from
+        // the square: find the shore nearest the well, then the landing on it.
+        int sx = 0, sy = 0;
+        bool have = false;
+        float bd = 1e9f;
+        for (int y = -60; y <= 60; y++) for (int x = -60; x <= 60; x++) {
+            if (sampleGround(x, y).kind != G_WATER) continue;
+            float dd = (float)x * x + (float)y * y;
+            if (dd < bd) { bd = dd; sx = x; sy = y; have = true; }
+        }
+        if (have) { Dock d; if (dockFromLand(sx, sy, d) && (d.tx - g.px) * (d.tx - g.px) + (d.ty - g.py) * (d.ty - g.py) < 24.0f * 24.0f) consider(d); }
+        // island docks are reachable only from their own beach
+        buildIslets();
+        for (int i = 0; i < isleCount; i++) {
+            Dock d;
+            int sx2 = 0, sy2 = 0;
+            if (nearestSlip(isleLanding[i].tx, isleLanding[i].ty, 14, sx2, sy2) && dockFromLand(sx2, sy2, d)) consider(d);
+        }
+    } else {
+        int sx = 0, sy = 0;
+        bool have = false;
+        float bd = 1e9f;
+        for (int y = -60; y <= 60; y++) for (int x = -60; x <= 60; x++) {
+            if (sampleGround(x, y).kind != G_WATER) continue;
+            float dd = (gSailX - x) * (gSailX - x) + (gSailY - y) * (gSailY - y);
+            if (dd < bd) { bd = dd; sx = x; sy = y; have = true; }
+        }
+        if (have) { Dock d; if (dockFromLand(sx, sy, d)) consider(d); }
+        buildIslets();
+        for (int i = 0; i < isleCount; i++) {
+            int sx2 = 0, sy2 = 0;
+            if (!nearestSlip(isleLanding[i].tx, isleLanding[i].ty, 14, sx2, sy2)) continue;
+            Dock d;
+            if (dockFromLand(sx2, sy2, d)) consider(d);
+        }
+    }
+    return out.valid;
+}
+
 bool landmarkNear(int tx, int ty, Landmark& out) {
     if (surveyedCavernNear(tx, ty, 6, out)) return true;
     if (abs(tx - BOSS_CASTLE_TX) <= 10 && abs(ty - BOSS_CASTLE_TY) <= 10) {
@@ -2314,6 +2939,15 @@ void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out)
     }
     Landmark northCave = northRoadCavern();
     maybeAdd(northCave.kind, northCave.tx, northCave.ty, northCave.seed);
+
+    // The three Tidemill Isles, each with a standing Tidewell at its heart.
+    buildIslets();
+    for (int i = 0; i < isleCount; i++) {
+        int cx = isleLanding[i].tx, cy = isleLanding[i].ty;
+        if (cx >= x0 - 10 && cx <= x1 + 10 && cy >= y0 - 10 && cy <= y1 + 10)
+            out.push_back({ LK_STONES, isleLanding[i].tx, isleLanding[i].ty,
+                            0x71de0000u + (uint32_t)i });
+    }
 
     // Everything else is surveyed ground: caverns, ruins, towers, castles,
     // standing stones and camps, each guaranteed by its lattice cell.

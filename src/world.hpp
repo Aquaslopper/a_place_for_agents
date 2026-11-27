@@ -64,7 +64,7 @@ float villageDecoCenterX(const Village::Deco& d);
 enum LandmarkPartKind {
     LP_CASTLE = 0, LP_TOWER, LP_STATUE, LP_PILLAR, LP_TORCH,
     LP_RUIN_ARCH, LP_MONUMENT, LP_TENT, LP_CAMPFIRE, LP_CAULDRON, LP_BARREL,
-    LP_CAVE
+    LP_CAVE, LP_TIDEWELL
 };
 struct LandmarkPart {
     LandmarkPartKind part;

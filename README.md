@@ -52,7 +52,7 @@ image-aligned scanline shading. Clean pixels are always available.
 
 | Direction | Route |
 |---|---|
-| South | Cross Millbrook's plank bridge. Follow the ochre woods east to the Standing Stones, or take the southwest trail to the Sunscorch Flats. |
+| South | Walk the millpond bank to **Bel's landing**, where the ferryman rents a boat. Follow the ochre woods east to the Standing Stones, or take the southwest trail to the Sunscorch Flats. |
 | East | Step out by the inn and take the meadow lane to **the Agents' Commons** — a ring of standing stones that records what every agent has built here. |
 | West | Find reed beds, willow pools and a causeway through Mirefen to the Old Watchtower. |
 | North | Circle the chapel, follow the road through Briarwood and the heath, then climb the snow track to the Castle of Elm. |
@@ -60,6 +60,17 @@ image-aligned scanline shading. Clean pixels are always available.
 Every gate also opens onto a **King's Road** — follow it and it will arrive at a
 village. `Esc → Journal → THE SURVEY` draws where those roads go, and names the
 country you are standing in.
+
+**The water is a road.** South of the square the Millbrook runs into the millpond,
+and a millrace carries it on into the wide lake behind the mill. **Ferryman Bel**
+stands at the landing on that bank and will rent you a boat for 40 gil. From the
+mooring you can sail anywhere the water is deep enough — around the headland, up
+the race, and out to the **Tidemill Isles**: Tidewell Isle, Gull Rock and the
+Little Kettle. Each has a stone Tidewell; find all three and Bel settles the
+**tide errand** with gil, a Kite Shield and two Hi-Potions. Boards sail at
+`SAIL_SPEED 5.6`, run at `8.6`, and sea encounters are rare by design (every 7.5
+tiles, ≤20%) so the crossing stays a journey, not a gauntlet. Press `SPACE` at any
+beach to step ashore — that is how you land on an isle.
 
 These story routes are fixed; beyond them, the seed shapes the terrain,
 settlements, landmarks and treasure. Use the **Sound Room** in **Esc → Options**
@@ -87,6 +98,13 @@ crossings are composed from tiles rather than one stretched map image.
 butterflies cross meadows, fireflies drift through the fen, snow falls in the
 Frozenreach and leaves move through Amberwood. A slow day/night wash, warm
 village windows and footstep dust give places a changing mood.
+- **A coast you can see and a horizon that ends.** The land stops. Past a
+meandering shoreline (about 253 tiles from the well) the sea is deep water that
+refuses a hull and refuses a step: there is no trickle of beach and no stray
+islet out there, and `inOpenSea()` is the one test everything obeys. The old
+complaint — walking thirty minutes in one direction and never arriving — is
+answered by geometry rather than by a wall of fog: the continent is finite, the
+water is the road, and every route that leaves the village arrives somewhere.
 - **Places worth finding, and a road to each of them.** The world's places are
 not left to luck. **The Survey** (`src/atlas.cpp`) owes every lattice cell one
 place: a village every 112 tiles, a ruin, tower, castle, stone circle or camp
@@ -262,6 +280,7 @@ references used while designing the terrain and walking-scale world.
 src/game.hpp      shared types and game state
 src/world.cpp     seeded terrain, props, NPCs, chests, pathfinding, ground/road stamping
 src/atlas.cpp     the Survey: guaranteed villages/landmarks/caverns, roads, region names
+src/sail.cpp      the boat: sailing, mooring, landings, the millpond sea encounters
 src/overworld.cpp field movement, camera, interactions and encounters
 src/render.cpp    field renderer, HUD, title, intro and game-over screens
 src/dialog.cpp    dialogue, shops, pause menu and options
@@ -276,7 +295,9 @@ tools/            art generation, importers and score rendering
 
 ## What this is
 
-An endless SNES-style JRPG in C++17 with [raylib](https://github.com/raysan5/raylib) 5.5.
+A SNES-scale JRPG in C++17 with [raylib](https://github.com/raysan5/raylib) 5.5 —
+a generated world with real edges: a coast you can walk to, water you can sail,
+and islands with something on them.
 You start in the hand-authored village **Elmswick** and the world generates
 procedurally around you: seven biomes, generated villages, landmarks, chests,
 field monsters, ATB battles, four quests, shops/inns/temples/forge, procedural
