@@ -1,8 +1,41 @@
 // overworld.cpp — field movement, pathing, encounters, interaction, camera
 #include "game.hpp"
+#include "commons.hpp"
 #include "world.hpp"
 #include "battle.hpp"
 #include <cstdio>
+
+// The keeper's errand, "The Kept Light" (the first growth from the Commons).
+// Two wisps hold the hedge east of the ring, at a fixed, surveyable spot.
+constexpr int KEEPER_WISPS = 2;
+constexpr float KEEPER_WISP_X = 26.5f;   // the hedge at the ring's east shoulder
+constexpr float KEEPER_WISP_Y = 9.5f;
+constexpr float KEEPER_STAND_X = 25.5f;  // the keeper's post: inside the gate corridor
+constexpr float KEEPER_STAND_Y = 8.5f;
+
+// She starts the day at the hedge she is worried about and steps back to the
+// gate once the errand is accepted, so the wisp vantage is never behind her.
+static void keeperTakePost(const Game& g, float& x, float& y);
+
+static void keeperUpdatePost() {
+    for (auto& n : g.npcs) {
+        if (n.role != NPC_KEEPER) continue;
+        float kx, ky;
+        keeperTakePost(g, kx, ky);
+        n.x = n.homeX = kx;
+        n.y = n.homeY = ky;
+        n.moving = false;
+    }
+}
+
+static void keeperTakePost(const Game& g, float& x, float& y) {
+    // Offered (or unseen) = she waits by the hedge, showing you where the
+    // trouble is. Accepted or finished = she keeps the gate.
+    int st = g.quests[QUEST_COMMONS].state;
+    bool busy = (st == QS_ACTIVE || st == QS_DONE);
+    x = KEEPER_STAND_X;
+    y = busy ? KEEPER_STAND_Y : KEEPER_WISP_Y + 0.5f;
+}
 
 std::vector<Chest> gChestsInView;
 std::vector<FieldMonster> gFieldMonsters;
@@ -185,6 +218,26 @@ static void updateFieldMonsters(float dt) {
         }
     }
 
+    // The keeper's errand (the Agents' Commons): two wisps haunt the hedge
+    // at the ring's east shoulder. They are ordinary field battles with their own,
+    // deterministic vantage point, so the errand is completable the moment a
+    // new party accepts it — no luck-of-the-spawn-grid on the story's first step.
+    if (g.quests[QUEST_COMMONS].state == QS_ACTIVE && g.encounterGrace <= 0.0f &&
+        g.quests[QUEST_COMMONS].progress < KEEPER_WISPS) {
+        // The hedge itself is the vantage: the keeper steps to the gate the
+        // moment the errand is accepted (see keeperTakePost), so this point is
+        // reached only by walking round her into the ring's east shoulder.
+        float dx = KEEPER_WISP_X - g.px, dy = KEEPER_WISP_Y - g.py;
+        if (dx * dx + dy * dy < 0.9f * 0.9f) {
+            clearWalkTarget();
+            int zl = std::max(1, zoneLevelAt(g.px, g.py));
+            battleStart({ EN_WISP }, zl, 0, false);
+            g.quests[QUEST_COMMONS].progress = std::min(KEEPER_WISPS, g.quests[QUEST_COMMONS].progress + 1);
+            g.encounterGrace = 3.5f;
+            return;
+        }
+    }
+
     // Slime King boss outside the Northern Castle gate
     if (!g.bossDefeated && g.encounterGrace <= 0.0f) {
         float dx = g.px - BOSS_KING_X, dy = g.py - BOSS_KING_Y;
@@ -316,6 +369,50 @@ static void talkToNpc(int npcIdx) {
             lines.push_back({ n.face, n.name, "\"Find a shard in the deepest chamber and I'll make it worth your while.\"" });
             action = DLG_START_QUEST_DEEP;
         }
+    } else if (n.role == NPC_KEEPER) {
+        Quest& q = g.quests[QUEST_COMMONS];
+        int built = commonsBuiltStones();
+        char buf[192];
+        if (q.state == QS_DONE) {
+            snprintf(buf, sizeof(buf),
+                     "\"Look at it burn. %d stone%s raised, and the ring still has room.\"", built,
+                     built == 1 ? "" : "s");
+            lines.push_back({ n.face, n.name, buf });
+            lines.push_back({ n.face, n.name,
+                              "\"Walk the ring and read it as often as you like. The next plot is already marked.\"", });
+            lines.push_back({ n.face, n.name,
+                              "\"Whoever comes after us will find it warm. That is the whole of my office.\"", });
+        } else if (q.state == QS_ACTIVE) {
+            int slain = std::min(KEEPER_WISPS, g.quests[QUEST_COMMONS].progress);
+            if (slain >= KEEPER_WISPS) {
+                lines.push_back({ n.face, n.name,
+                                  "\"The hedge is quiet. Whatever was in it has gone back to the dark.\"", });
+                lines.push_back({ n.face, n.name,
+                                  "\"Now the brazier. Say the words with me: one flame, kept for the ring.\"", });
+                action = DLG_FINISH_QUEST_COMMONS;
+            } else {
+                snprintf(buf, sizeof(buf),
+                         "\"Still %d wisp%s at the hedge on the ring's east shoulder, just past me. Bring them down.\"",
+                         KEEPER_WISPS - slain, (KEEPER_WISPS - slain == 1) ? "" : "s");
+                lines.push_back({ n.face, n.name, buf });
+                lines.push_back({ n.face, n.name,
+                                  "\"Sword, staff, prayer — whatever answers. They lurk just south-east of the gate.\"", });
+            }
+        } else {
+            lines.push_back({ n.face, n.name,
+                              "\"Halt a moment. You are standing at the edge of the Agents' Commons.\"", });
+            lines.push_back({ n.face, n.name,
+                              "\"Our village keeps maps. This place keeps hands. Every stone in the ring is work somebody finished.\"", });
+            snprintf(buf, sizeof(buf),
+                     "\"%d stones stand. %d plots are empty, and I will not fill one myself.\"", built,
+                     commonsPlotCount());
+            lines.push_back({ n.face, n.name, buf });
+            lines.push_back({ n.face, n.name,
+                              "\"But a place also needs keeping. Wisps have taken the hedge past my gate and leave the ring dark.\"", });
+            lines.push_back({ n.face, n.name,
+                              "\"Still it, and I will teach you how to light the brazier. Then read the stones.\"", });
+            action = DLG_START_QUEST_COMMONS;
+        }
     } else if (n.role == NPC_GUARD && n.name.find("Odo") != std::string::npos) {
         if (itemCount(IT_RUSTY_KEY) == 0 && !g.towerChestOpened) {
             lines.push_back({ n.face, n.name, "\"Heading out past the gate? Take this old Rusty Key I pulled from the ditch.\"" });
@@ -417,7 +514,13 @@ static void interactWithNearest() {
         }
     }
 
-    // 5. Nearby NPC
+    // 5. The Agents' Commons: its stones, its plots, its brazier, its board.
+    if (g.villageLoaded && inCommons(g.px, g.py) && commonsTryInteract()) {
+        g.interactT = 0.25f;
+        return;
+    }
+
+    // 6. Nearby NPC
     int npc = npcNear(g.px, g.py, 1.55f);
     if (npc >= 0) {
         talkToNpc(npc);
@@ -687,12 +790,17 @@ void overworldUpdate(float dt) {
     villageLoadAt(g.px, g.py);
     npcsLoadFor(g.px, g.py);
     chestsLoadFor(g.px, g.py);
+    keeperUpdatePost();         // she stands at the gate, or by the hedge she worries about
+    commonsTick(dt);            // the Commons brazier follows the quest table
 
     // NPC idle drift (shopkeepers/innkeepers/priests stay near their post)
     for (auto& n : g.npcs) {
         n.animT += dt;
         n.thinkT -= dt;
-        bool stationary = (n.role == NPC_SHOPKEEP || n.role == NPC_INNKEEP || n.role == NPC_PRIEST);
+        // The keeper holds her post exactly: she is the Commons' one voice and
+        // the wisp vantage is measured from where she stands.
+        bool stationary = (n.role == NPC_SHOPKEEP || n.role == NPC_INNKEEP || n.role == NPC_PRIEST ||
+                           n.role == NPC_KEEPER);
         if (stationary) {
             n.moving = false;
             n.facing = 0;
@@ -755,6 +863,7 @@ void overworldUpdate(float dt) {
         g.menuReturn = MODE_OVERWORLD;
         g.mode = MODE_MENU;
         g.menuPage = 0; g.menuIndex = 0;
+        g.journalTab = 0; g.commonsJournalSel = 0;
         playSoundIf(g.assets.confirm);
         return;
     }
@@ -781,6 +890,26 @@ const char* interactionPrompt() {
         if (dx * dx + dy * dy < 1.5f * 1.5f)
             return g.towerChestOpened ? "SPACE: empty chest"
                  : (itemCount(IT_RUSTY_KEY) > 0 ? "SPACE: unlock tower chest" : "SPACE: locked chest");
+    }
+    if (g.villageLoaded && inCommons(g.px, g.py)) {
+        int ptx = (int)floorf(g.px), pty = (int)floorf(g.py);
+        for (int s2 = 0; s2 < commonsBuiltStones(); s2++) {
+            int tx, ty;
+            commonsSlotCell(s2, tx, ty);
+            float dx = (tx + 0.5f) - g.px, dy = (ty + 0.5f) - g.py;
+            if (dx * dx + dy * dy < 2.4f * 2.4f) return "SPACE: read the stone";
+        }
+        for (int pl = 0; pl < commonsPlotCount(); pl++) {
+            int tx, ty;
+            commonsSlotCell(commonsBuiltStones() + pl, tx, ty);
+            float dx = (tx + 0.5f) - g.px, dy = (ty + 0.5f) - g.py;
+            if (dx * dx + dy * dy < 2.6f * 2.6f) return "SPACE: inspect the empty plot";
+        }
+        (void)ptx; (void)pty;
+        float bdx = (float)(COMMONS_CX - 1) + 0.5f - g.px, bdy = (float)(COMMONS_CY + 4) + 0.5f - g.py;
+        if (bdx * bdx + bdy * bdy < 2.0f * 2.0f) return "SPACE: read the keeper's board";
+        float cdx = (float)COMMONS_CX + 0.5f - g.px, cdy = (float)COMMONS_CY + 0.5f - g.py;
+        if (cdx * cdx + cdy * cdy < 2.5f * 2.5f) return "SPACE: the cold brazier";
     }
     if (!g.npcs.empty()) {
         int i = npcNear(g.px, g.py, 1.55f);

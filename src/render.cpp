@@ -2,6 +2,7 @@
 #include "game.hpp"
 #include "world.hpp"
 #include "battle.hpp"
+#include "commons.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -256,6 +257,10 @@ static char npcQuestMarker(const Npc& n) {
     } else if (n.quest == QUEST_DEEP) {
         if (g.quests[QUEST_DEEP].state == QS_OFFERED) return '!';
         if (g.quests[QUEST_DEEP].state == QS_ACTIVE && itemCount(IT_STAR_METAL) > 0) return '?';
+    } else if (n.quest == QUEST_COMMONS) {
+        if (g.quests[QUEST_COMMONS].state == QS_OFFERED) return '!';
+        if (g.quests[QUEST_COMMONS].state == QS_ACTIVE &&
+            g.quests[QUEST_COMMONS].progress >= 2) return '?';
     }
     return 0;
 }
@@ -434,10 +439,31 @@ void drawWorld() {
                            ? sinf(g.totalTime * 1.4f + hashf((int)d.x, (int)d.y, 0x5eedU) * 6.28f) * 1.0f
                            : 0.0f;
                 texFoot(*t, cx + sway, fy);
+                if (d.kind == VD_STATUS_STONE || d.kind == VD_EMPTY_PLOT) {
+                    // The ring's own light: a low glow that never quite settles,
+                    // brighter once the keeper's flame is lit.
+                    float pulse = 0.5f + 0.5f * sinf(g.totalTime * 1.4f + (float)d.variant * 1.7f);
+                    float lit = (g.quests[QUEST_COMMONS].state == QS_DONE) ? 0.10f : 0.04f;
+                    DrawCircleGradient((int)cx, (int)(fy - 3), 20 + pulse * 5,
+                                       Fade(Color{ 255, 226, 160, 255 }, lit + 0.05f * pulse + nightAmt * 0.06f), BLANK);
+                }
                 if (d.kind == VD_TORCH || d.kind == VD_CAMPFIRE) {
                     float pulse = 0.5f + 0.5f * sinf(g.totalTime * 4.5f + d.x);
                     DrawCircleGradient((int)cx, (int)(fy - h * 0.5f), 22 + pulse * 6,
                                        Fade(Color{ 255, 170, 60, 255 }, 0.22f + nightAmt * 0.18f), BLANK);
+                }
+                if (d.kind == VD_CAULDRON && d.variant >= 4) {
+                    // The keeper's brazier, lit: a small kept flame for the ring.
+                    float pulse = 0.5f + 0.5f * sinf(g.totalTime * 3.6f + 1.3f);
+                    float flick = sinf(g.totalTime * 11.0f) * 0.6f;
+                    DrawCircleGradient((int)cx, (int)(fy - h - 2), 26 + pulse * 8 + flick,
+                                       Fade(Color{ 255, 158, 60, 255 }, 0.26f + nightAmt * 0.20f), BLANK);
+                    DrawRectangle((int)(cx - 3), (int)(fy - h - 7 - pulse * 2), 6, 5,
+                                  Color{ 255, 196, 92, 255 });
+                    DrawRectangle((int)(cx - 2), (int)(fy - h - 9 - pulse * 2), 4, 4,
+                                  Color{ 255, 238, 168, 255 });
+                    DrawRectangle((int)(cx - 1), (int)(fy - h - 10 - pulse * 2), 2, 3,
+                                  Color{ 255, 252, 226, 255 });
                 }
                 break;
             }
@@ -543,6 +569,8 @@ void drawWorld() {
             }
         }
     }
+
+    if (g.villageLoaded && inCommons(g.px, g.py)) commonsDrawWorld();
 
     if (g.clickFlashT > 0) {
         float a = g.clickFlashT / 0.4f;

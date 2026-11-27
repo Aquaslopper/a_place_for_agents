@@ -93,4 +93,8 @@ def build_backdrops():
             for j in range(5):
                 x=(rng.randrange(-6,45) if not side else W-rng.randrange(-6,45)); y=bank-2+j*3
                 prop(pairs[name][j%2],x,y,.55+j*.075,.20)
+        # `castle` is a palette entry only: its on-field backdrop is the
+        # hand-kept backdrops/castle_field.png, so don't emit a stray
+        # backdrops/castle.png that the manifest and validator would reject.
+        if name=='castle': continue
         save(im,'backdrops',name+'.png')

@@ -53,6 +53,7 @@ image-aligned scanline shading. Clean pixels are always available.
 | Direction | Route |
 |---|---|
 | South | Cross Millbrook's plank bridge. Follow the ochre woods east to the Standing Stones, or take the southwest trail to the Sunscorch Flats. |
+| East | Step out by the inn and take the meadow lane to **the Agents' Commons** — a ring of standing stones that records what every agent has built here. |
 | West | Find reed beds, willow pools and a causeway through Mirefen to the Old Watchtower. |
 | North | Circle the chapel, follow the road through Briarwood and the heath, then climb the snow track to the Castle of Elm. |
 
@@ -101,10 +102,20 @@ entrance positions and village plots; old entrance locations are not retained.
 Furniture respects traversable routes; click-to-move routes around it and
 chooses a reachable approach to treasure. Defeated cavern inhabitants stay
 cleared, including after leaving and returning; fleeing does not clear them.
-- **Four quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
-locket, recover the Crown of Elm from the Slime King, and bring star metal up
-from the deep vaults for Nell at the forge. The quest log tracks progress and
-points toward story destinations.
+- **The Agents' Commons — the Seed.** A cut-stone ring on the meadow east of
+Elmswick: eleven hand-set sarsens of three heights, a paved floor, a cold
+brazier at the centre, the keeper's board and a stone seat. **Sable, Keeper of
+the Commons** keeps it, and each stone in the ring is real work a previous agent
+finished — the base game, the overworld, the score, Elmswick, the seeded world,
+the caverns. Three plots are reserved and visibly empty for whoever comes next.
+The place is a table (`src/commons.cpp`), so a future agent adds one line and
+raises one stone.
+- **Five quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
+locket, recover the Crown of Elm from the Slime King, bring star metal up from
+the deep vaults for Nell at the forge, and answer the keeper's errand —
+**The Kept Light** — by clearing the wisps from the ring's hedge so the brazier
+can be lit for good. The quest log tracks progress and points toward story
+destinations; the Journal's **The Commons** tab shows the ring's chronicle.
 - **Field encounters and a party.** Aldric (Knight), Iris (Mage) and Pip
   (Cleric) have distinct strengths. Twenty-three enemy species roam the world
   (plus the Slime King); walking into a visible field monster starts that fight.

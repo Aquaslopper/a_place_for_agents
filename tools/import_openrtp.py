@@ -157,6 +157,48 @@ def build_objects():
     save(centered(opened, (18, 22)), 'sprites', 'chest_open.png')
 
 
+# ============================================================== 3b. commons
+def build_commons_stone():
+    """The standing stones of the Agents' Commons (three 30x46 sheets).
+
+    The upright is a palette-ramped crop of the OpenRTP standing pillar
+    (ChipSet/Exterior, CC0 — the sheet that already supplies the church, the
+    ruin and the Standing Stones), doubled on the pixel grid so it reads as a
+    monolith beside the 24x32 villagers. The plinth is a slab of the same
+    sheet's cut-stone floor, ramped into the same cold family so stone and base
+    belong together.
+
+    Three heights are emitted and the ring cycles them, because Avebury's
+    sarsens do not match: an even ring of identical columns reads as scenery
+    furniture, an uneven one reads as a place somebody raised by hand.
+    """
+    RAMP = '4f6276 5b6f83 697d90 7a8ea0 8ea1b1 a7b7c4 c6d2d8'
+    full = ramp(trim(tcell(EXT, 27, 8, 1, 2, KEY_PINK)), RAMP)   # 12 x 30
+    w, h = full.size
+    plinth = ramp(tile(EXT, 12, 11), RAMP)
+
+    def make(name, r0, r1):
+        shaft = full.crop((0, r0, w, r1))
+        shaft = shaft.resize((shaft.width * 4 // 3, shaft.height * 4 // 3),
+                             Image.Resampling.NEAREST)
+        sw, sh = shaft.size
+        # Weather the crown: chamfered shoulders plus one chip, so no two
+        # neighbouring stones present the same silhouette.
+        for x, y in ((0, 0), (1, 0), (0, 1), (sw - 1, 0), (sw - 2, 0), (sw - 1, 1), (sw - 4, 0)):
+            shaft.putpixel((x, y), (0, 0, 0, 0))
+        stone = canvas(30, 46)
+        top = 46 - 7 - sh                      # base sits on the slab
+        stone.alpha_composite(shaft, ((30 - sw) // 2, top))
+        stone.alpha_composite(plinth.crop((0, 2, 26, 9)), (2, top + sh - 1))
+        save(stone, 'sprites', name)
+        return shaft
+
+    make('commons_stone.png', 3, 27)          # middling sarsen
+    make('commons_stone_tall.png', 0, 30)     # the entrance pair
+    make('commons_stone_low.png', 8, 30)      # a squat, half-sunk slab
+
+
+
 # ================================================================= 4. heroes
 CELL_W, CELL_H = 24, 32
 CHAR_W, CHAR_H = 72, 128
@@ -238,6 +280,10 @@ def build_heroes():
     save(portrait(P, 0, 1), 'sprites', 'face_innkeeper.png')
     save(portrait(A2, 3, 0), 'sprites', 'face_guard.png')
     save(portrait(A2, 0, 1), 'sprites', 'face_ranger.png')
+    # The Commons keeper: an unused People2 face (long silver hair) beside the
+    # unused People1 mantle-and-circlet walking slot below. Both are plain
+    # crops of the vendored sheets — no recolour, no repository-drawn frames.
+    save(portrait(P2, 1, 1), 'sprites', 'face_keeper.png')
 
 
 def build_villagers():
@@ -265,6 +311,9 @@ def build_villagers():
         ('npc_priest',    'CharSet/People4.png', 0, 0),
         ('npc_farmer',    'CharSet/People5.png', 0, 1),   # straw-hat farmer
         ('npc_ranger',    'CharSet/People5.png', 0, 0),   # blue-capped field ranger
+        # Keeper of the Commons — OpenRTP People1 slot not used by any other NPC
+        # (crowned circlet, long mantle): a silhouette nothing else in the village has.
+        ('npc_keeper',    'CharSet/People1.png', 1, 0),
     ]
     for name, sheet, col, row in npcs:
         frames=walk_sheet(sheet,col,row)
@@ -514,6 +563,7 @@ def main():
     build_tiles()
     build_cave_art()
     build_objects()
+    build_commons_stone()
     build_buildings()
     build_backdrops()
     build_heroes()

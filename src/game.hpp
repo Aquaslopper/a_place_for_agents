@@ -49,7 +49,7 @@ enum ItemId {
     IT_RING_POWER, IT_AMULET_MANA,
     IT_RING_WAR, IT_RING_SAGE, IT_AMULET_GUARD, IT_BOOTS_SWIFT,
     // key items
-    IT_RUSTY_KEY, IT_LOCKET, IT_CROWN, IT_STAR_METAL,
+    IT_RUSTY_KEY, IT_LOCKET, IT_CROWN, IT_STAR_METAL, IT_CODEX,
     IT_COUNT
 };
 enum ItemKind { IK_CONSUMABLE, IK_WEAPON, IK_ARMOR, IK_ACCESSORY, IK_KEY };
@@ -153,7 +153,7 @@ enum NpcSprite { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_ELDE
     NS_WOMAN, NS_CHILD, NS_GUARD, NS_SOLDIER, NS_KNIGHT, NS_MERCHANT, NS_SMITH,
     NS_PRIEST, NS_FARMER, NS_DOG, NS_CAT, NS_CHICKEN, NS_SHEEP,
     NS_VILLAGER4, NS_VILLAGER5, NS_VILLAGER6, NS_VILLAGER7, NS_VILLAGER8, NS_VILLAGER9,
-    NS_RANGER, NS_COW, NS_HORSE, NS_KIND_COUNT };
+    NS_RANGER, NS_COW, NS_HORSE, NS_KEEPER, NS_KIND_COUNT };
 
 struct Assets {
     Texture2D landscape{}, relief{}, bridge{}, lilies{}, turnips{};
@@ -169,11 +169,11 @@ struct Assets {
     Texture2D iceCrack{};
     // objects
     Texture2D tree[3]{}, treeSnow{}, pine[3]{}, deadTree{}, amberOak{}, copperOak{}, willow{}, reeds{}, yucca{}, crate{};
-    Texture2D rock[3]{}, boulder{}, crystal{};
+    Texture2D rock[3]{}, boulder{}, crystal{}, crystalCluster{};
     Texture2D bush[2]{}, mushroom{}, plant{}, urn{};
     Texture2D well{}, sign{}, bench{}, torch{}, campfire{}, cauldron{}, bucket{}, flowerbed{};
     Texture2D fence{}, fencePost{}, fenceGate{}, ladder{};
-    Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{}, tent{};
+    Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{}, tent{}, statusStone[3]{};
     Texture2D barrel{}, table{}, longtable{}, counter{}, lantern{}, candle{}, keg{}, plate{}, shelf{};
     Texture2D forgeHearth{}, forgeAnvil{};
     Texture2D mailbox{}, noticeboard{};
@@ -211,6 +211,7 @@ enum FaceId {
     FACE_SMITH, FACE_BARD, FACE_SHOPKEEPER, FACE_INNKEEPER, FACE_GUARD, FACE_RANGER,
     FACE_SLIME, FACE_GHOST, FACE_SKELETON, FACE_DEMON, FACE_DOG,
     FACE_VILLAGER4, FACE_VILLAGER5, FACE_VILLAGER6, FACE_VILLAGER7, FACE_VILLAGER8, FACE_VILLAGER9,
+    FACE_KEEPER,
     FACE_COUNT
 };
 
@@ -283,7 +284,7 @@ void nearestWalkable(int tx, int ty, int& outTx, int& outTy);
 
 // npcs
 enum NpcRole { NPC_VILLAGER, NPC_ELDER, NPC_CHILD, NPC_GUARD, NPC_SHOPKEEP, NPC_INNKEEP,
-               NPC_PRIEST, NPC_ANIMAL, NPC_QUEST };
+               NPC_PRIEST, NPC_ANIMAL, NPC_QUEST, NPC_KEEPER };
 struct Npc {
     uint64_t id = 0;
     int sprite = 0;         // index into assets.npc
@@ -342,7 +343,7 @@ float smoothNoise(float x, float y, uint32_t seed);
 float fbm(float x, float y, uint32_t seed, int octaves);
 
 // ============================================================== quests
-enum QuestId { QUEST_SLIMES = 0, QUEST_LOCKET, QUEST_CROWN, QUEST_DEEP, QUEST_COUNT };
+enum QuestId { QUEST_SLIMES = 0, QUEST_LOCKET, QUEST_CROWN, QUEST_DEEP, QUEST_COMMONS, QUEST_COUNT };
 enum QuestState { QS_UNKNOWN = 0, QS_OFFERED, QS_ACTIVE, QS_DONE };
 struct Quest {
     int state = QS_UNKNOWN;
@@ -385,7 +386,8 @@ enum DialogAction {
     DLG_FINISH_QUEST_SLIMES, DLG_START_QUEST_LOCKET, DLG_FINISH_QUEST_LOCKET,
     DLG_START_QUEST_CROWN, DLG_GIVE_KEY, DLG_HEAL, DLG_CROWN_REWARD,
     DLG_BOSS_SLIME_KING, DLG_SAVE_TIP,
-    DLG_START_QUEST_DEEP, DLG_FINISH_QUEST_DEEP
+    DLG_START_QUEST_DEEP, DLG_FINISH_QUEST_DEEP,
+    DLG_START_QUEST_COMMONS, DLG_FINISH_QUEST_COMMONS
 };
 void startDialog(const std::vector<DialogLine>& lines, DialogAction action = DLG_NONE);
 
@@ -494,6 +496,9 @@ struct Game {
     int menuUseHero = 0;
     int equipHero = 0, equipSlot = 0, equipIndex = 0;
     int optionsIndex = 0;
+    int journalTab = 0;            // Quests page: 0 = quests, 1 = the Commons chronicle
+    int commonsJournalSel = 0;     // first chronicle row shown on the Commons page
+    float commonsFlameT = 0;       // transient: flame lighting after the keeper's errand
     MusicCue audition = MUS_VILLAGE;  // sound room only; never part of a save
     bool waitBattle = true;        // true = ATB pauses in menus (WAIT), false = ACTIVE
     bool musicOn = true;
@@ -627,6 +632,11 @@ int dungeonTheme();                   // TH_* or -1 when not in a dungeon
 const char* dungeonThemeName();       // e.g. "Mossy Warren" for HUD
 const char* dungeonFullName();        // e.g. "Gloam Warrens — Mire Grotto"
 MusicCue dungeonMusicCue();            // theme-aware dungeon music
+
+// commons.cpp — the Agents' Commons east of Elmswick (see src/commons.hpp)
+bool commonsTryInteract();            // field interaction; true when consumed
+bool inCommonsArea(float x, float y); // zone/overwrite for the HUD and music
+void commonsTick(float dt);           // lighting + journal state, called each field frame
 
 // sound helper
 void playSoundIf(Sound& s);

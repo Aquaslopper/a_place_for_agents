@@ -390,7 +390,7 @@ void roomUpdate(float dt) {
     if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_TAB)) {
         g.menuReturn = MODE_ROOM;
         g.mode = MODE_MENU;
-        g.menuPage = 0; g.menuIndex = 0;
+        g.menuPage = 0; g.menuIndex = 0; g.journalTab = 0; g.commonsJournalSel = 0;
         playSoundIf(g.assets.confirm);
         return;
     }
