@@ -211,6 +211,8 @@ void enterBuilding(int buildingIndex) {
     if (!g.villageLoaded || buildingIndex < 0 || buildingIndex >= (int)g.village.buildings.size()) return;
     const Building& b = g.village.buildings[buildingIndex];
 
+    g.travelMap = false;
+    g.travelContext = 0;
     g.walkQueue.clear();
     g.hasMoveTarget = false;
     g.walkDoorBuilding = -1;
@@ -293,15 +295,23 @@ static void talkToKeeper() {
     } else if (g.roomNpcFace == FACE_ELDER && g.villageLoaded && g.village.startVillage) {
         if (g.quests[QUEST_CROWN].state == QS_DONE) {
             lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"The Crown gleams once more in Elmswick. The road beyond is yours.\"" });
+            if (!g.frontierGuardian)
+                lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Beyond the castle, follow the road through the far pass to a guardian's cavern.\"" });
+            else
+                lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"The far cavern's guardian has fallen, and our maps have grown.\"" });
         } else if (itemCount(IT_CROWN) > 0 || g.bossDefeated) {
             lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"You brought back the Crown of Elm! Take this Dragon Scale armour and 500 gil, heroes!\"" });
+            lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Beyond the castle, follow the road through the far pass to another guardian's cavern.\"" });
             act = DLG_CROWN_REWARD;
         } else if (g.quests[QUEST_CROWN].state == QS_ACTIVE) {
             std::string hint = compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
+            if (!g.hasWaystone)
+                lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"First find the Waystone in Hollow Hill, west of town. Its guardian holds the pass key.\"" });
             lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Follow the North Road (" + hint + ") to the old Castle of Elm.\"" });
         } else {
             lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"The Slime King seized the old Castle of Elm up the North Road — along with our village's ancient Crown.\"" });
-            lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"When you are ready, reclaim the Crown of Elm!\"" });
+            lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"First find the Waystone in Hollow Hill, west of town; its guardian opens the mountain passes.\"" });
+            lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Reclaim the Crown and the road beyond the castle will open too.\"" });
             act = DLG_START_QUEST_CROWN;
         }
     } else {

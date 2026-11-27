@@ -3,6 +3,7 @@
 #include "commons.hpp"
 #include "world.hpp"
 #include "atlas.hpp"
+#include "regions.hpp"
 #include "battle.hpp"
 #include <cstdio>
 
@@ -115,6 +116,7 @@ static void clearWalkTarget() {
 
 static void beginMove(int dirX, int dirY, float dt) {
     float speed = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? RUN_SPEED : WALK_SPEED;
+    if (g.travelMap) speed *= 1.35f;
     float nx = g.px + dirX * speed * dt;
     float ny = g.py + dirY * speed * dt;
     const float r = 0.28f;
@@ -134,6 +136,9 @@ static void beginMove(int dirX, int dirY, float dt) {
     } else {
         g.moving = false;
         pulseBlocked();
+        int ring = 0;
+        if (g.toastT <= 0.0f && regionLockedPassNear(g.px, g.py, ring))
+            pushToast("The pass is sealed. Press SPACE to inspect it.");
     }
 }
 
@@ -147,6 +152,7 @@ static void stepPath(float dt) {
     float dx = cx - g.px, dy = cy - g.py;
     float dist = sqrtf(dx * dx + dy * dy);
     float speed = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? RUN_SPEED : WALK_SPEED;
+    if (g.travelMap) speed *= 1.35f;
     float stepLen = speed * dt;
 
     if (fabsf(dx) > fabsf(dy) && dist > 0.01f) {
@@ -338,18 +344,26 @@ static void talkToNpc(int npcIdx) {
         }
     } else if (n.quest == QUEST_CROWN) {
         if (g.quests[QUEST_CROWN].state == QS_DONE) {
-            lines.push_back({ n.face, n.name, "\"The Crown of Elm rests where it belongs, and the road beyond is still endless. Walk proud.\"" });
+            lines.push_back({ n.face, n.name, "\"The Crown of Elm rests where it belongs. Walk proud.\"" });
+            if (!g.frontierGuardian)
+                lines.push_back({ n.face, n.name, "\"Past the castle, the road winds through the far pass to a cavern. Its guardian waits for a brave party.\"" });
+            else
+                lines.push_back({ n.face, n.name, "\"Word reached us of the guardian beyond the far pass. You have walked farther than our oldest maps.\"" });
         } else if (itemCount(IT_CROWN) > 0 || g.bossDefeated) {
             lines.push_back({ n.face, n.name, "\"By the Light... is that the Crown of Elm?! You bested the Slime King!\"" });
             lines.push_back({ n.face, n.name, "\"Elmswick owes you a debt it could never repay. Take this Dragon Scale armour and 500 gil, heroes!\"" });
+            lines.push_back({ n.face, n.name, "\"Past the castle, the road crosses the far pass and leads to another guardian's cavern.\"" });
             action = DLG_CROWN_REWARD;
         } else if (g.quests[QUEST_CROWN].state == QS_ACTIVE) {
             std::string hint = compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
+            if (!g.hasWaystone)
+                lines.push_back({ n.face, n.name, "\"The mountain pass is sealed. First find the Waystone in Hollow Hill, west of Elmswick.\"" });
             lines.push_back({ n.face, n.name, "\"Follow the North Road (" + hint + ") to the old Castle of Elm. Gear up well before facing the Slime King.\"" });
         } else {
             lines.push_back({ n.face, n.name, "\"Aldric... it is good to see you home. Yet dark jelly creeps along the North Road.\"" });
             lines.push_back({ n.face, n.name, "\"The Slime King seized the old Castle of Elm — and with it, our village's ancient Crown.\"" });
-            lines.push_back({ n.face, n.name, "\"When you are strong enough, follow the North Road and bring back the Crown of Elm.\"" });
+            lines.push_back({ n.face, n.name, "\"Hollow Hill lies west of town. Its guardian holds the Waystone that opens the North Road's mountain pass.\"" });
+            lines.push_back({ n.face, n.name, "\"Then follow the North Road and bring back the Crown of Elm. The Crown opens the far passes too.\"" });
             action = DLG_START_QUEST_CROWN;
         }
     } else if (n.quest == QUEST_DEEP) {
@@ -476,6 +490,25 @@ static void interactWithNearest() {
             lines.push_back({ FACE_SLIME, "Slime King",
                               "Come and take it! Royal Guards, squish them!" });
             startDialog(lines, DLG_BOSS_SLIME_KING);
+            g.interactT = 0.25f;
+            return;
+        }
+    }
+
+    // Each range has a visible seal and tells the player how to open it.
+    {
+        int ring = 0;
+        if (regionLockedPassNear(g.px, g.py, ring)) {
+            std::vector<DialogLine> lines;
+            if (ring == 1) {
+                lines.push_back({ -1, "", "A stone seal blocks the pass to the Crownlands." });
+                lines.push_back({ FACE_MAGE, "Iris", "The Waystone can wake it. The guardian of Hollow Hill holds that key." });
+                lines.push_back({ -1, "", "Take the west road from Elmswick to Hollow Hill. Wake its two vault runes and defeat the guardian." });
+            } else {
+                lines.push_back({ -1, "", "The mountains close the road into the Far Marches." });
+                lines.push_back({ FACE_CLERIC, "Pip", "The Crown of Elm is the key. The Slime King has it at the castle on the North Road." });
+            }
+            startDialog(lines);
             g.interactT = 0.25f;
             return;
         }
@@ -610,7 +643,8 @@ static void interactWithNearest() {
                 if (d.kind == VD_NOTICEBOARD) {
                     lines.push_back({ -1, "", "ELMSWICK FIELD BOARD — Posted notices:" });
                     lines.push_back({ -1, "", "'Wanted: six fewer meadow slimes (see Farmer Hedrick). Lost: one silver locket near the Standing Stones (see Tamsin).'" });
-                    lines.push_back({ -1, "", "'CAVES: take the west road, then the short north spur to Hollow Hill. Another mouth lies east of the north road in Briarwood. Click a mouth or press SPACE at its entrance.'" });
+                    lines.push_back({ -1, "", "'HOLLOW HILL: west road, then north spur. Wake the two runes in the deepest vault and defeat its guardian to find the Waystone.'" });
+                    lines.push_back({ -1, "", "'The Waystone opens the mountain passes. The Crown of Elm opens the far passes beyond the castle.'" });
                 } else if (g.village.startVillage) {
                     lines.push_back({ -1, "", "ELMSWICK — 'Where the meadow begins.'" });
                     lines.push_back({ -1, "", "North past the chapel: Briarwood and the castle. West past the shop: the marsh and Old Watchtower." });
@@ -660,8 +694,35 @@ static void clickToMove() {
     Vector2 m = getVirtualMouse();
     if (!mouseInVirtual()) return;
     if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
-    float wx = (m.x + g.camX) / TILE;
-    float wy = (m.y + g.camY) / TILE;
+    float wx = g.travelMap ? g.px + (m.x - g.vw * 0.5f) / TRAVEL_PIXELS_PER_TILE
+                           : (m.x + g.camX) / TILE;
+    float wy = g.travelMap ? g.py + (m.y - g.vh * 0.5f) / TRAVEL_PIXELS_PER_TILE
+                           : (m.y + g.camY) / TILE;
+
+    if (g.travelMap) {
+        // Icons and ground share world coordinates, not the close-up camera.
+        // Cave clicks walk to the mouth; the view will change as we approach.
+        Landmark cave;
+        int tx = (int)floorf(wx), ty = (int)floorf(wy);
+        bool enterCave = landmarkNear(tx, ty, cave) && cave.kind == LK_CAVERN &&
+                         fabsf(wx - cave.tx) < 4.0f && fabsf(wy - cave.ty) < 4.0f;
+        if (enterCave) { tx = cave.tx; ty = cave.ty + 1; }
+        WalkPath path;
+        if (findWalkPath(g.px, g.py, tx, ty, path) && !path.cells.empty()) {
+            clearWalkTarget();
+            g.walkQueue = path.cells;
+            g.hasMoveTarget = true;
+            // A blocked or too-distant destination may yield a partial path.
+            // Only interact if its endpoint actually reaches the chosen mouth.
+            const auto& end = path.cells.back();
+            float ex = end.first + 0.5f - (cave.tx + 0.5f);
+            float ey = end.second + 0.5f - (cave.ty + 1.4f);
+            g.walkTargetInteract = enterCave && ex * ex + ey * ey < 2.4f * 2.4f;
+            g.clickFlashT = 0.4f;
+            g.clickFlashX = tx + 0.5f; g.clickFlashY = ty + 0.5f;
+        } else pulseBlocked();
+        return;
+    }
 
     // 1. Clicking a building enters it
     if (g.villageLoaded) {
@@ -814,6 +875,40 @@ static void clickToMove() {
 }
 
 // ================================================================ update
+// Switch views at the edge of a settlement or landmark, while keeping the
+// party on the same physical map. Hysteresis at village edges avoids a flicker;
+// M remains a manual override until the next place boundary is crossed.
+static void updateTravelContext() {
+    bool wasLocal = g.travelContext == 0;
+    float homeRadius = wasLocal ? 32.0f : 28.0f;
+    bool local = g.px * g.px + g.py * g.py < homeRadius * homeRadius;
+    if (!local && g.villageLoaded && !g.village.startVillage) {
+        float dx = g.px - g.village.cx, dy = g.py - g.village.cy;
+        float radius = wasLocal ? 27.0f : 23.0f;
+        local = dx * dx + dy * dy < radius * radius;
+    }
+    if (!local) {
+        Landmark lm;
+        local = landmarkNear((int)floorf(g.px), (int)floorf(g.py), lm);
+    }
+    for (int i = 0; !local && i < tideIslandCount(); ++i) {
+        float dx = g.px - tideIslandWellX(i), dy = g.py - tideIslandWellY(i);
+        local = dx * dx + dy * dy < 12.0f * 12.0f;
+    }
+    int next = local ? 0 : 1;
+    if (g.travelContext < 0) {
+        g.travelContext = next;
+        g.travelMap = !local;
+        if (local) overworldSnapCamera();
+    } else if (g.travelContext != next) {
+        g.travelContext = next;
+        g.travelMap = !local;
+        if (local) overworldSnapCamera();
+        g.fade = 0.55f; g.fadeDir = -1;
+        if (!local) pushToast("Travelling map. Press M for a closer view.");
+    }
+}
+
 void overworldUpdate(float dt) {
     gAnimTime += dt;
     g.totalTime += dt;
@@ -827,6 +922,7 @@ void overworldUpdate(float dt) {
     updateClouds(dt);
     atlasUpdate(g.px, g.py, dt);   // name the country; raise the banner on a border
     villageLoadAt(g.px, g.py);
+    updateTravelContext();
     npcsLoadFor(g.px, g.py);
     chestsLoadFor(g.px, g.py);
     keeperUpdatePost();         // she stands at the gate, or by the hedge she worries about
@@ -898,6 +994,13 @@ void overworldUpdate(float dt) {
     updateCamera(dt);
 
     // input: menu / interact
+    if (IsKeyPressed(KEY_M)) {
+        g.travelMap = !g.travelMap;
+        if (!g.travelMap) overworldSnapCamera();
+        g.fade = 0.45f; g.fadeDir = -1;
+        pushToast(g.travelMap ? "Travelling map." : "Close view.");
+        return;
+    }
     if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_TAB)) {
         g.menuReturn = MODE_OVERWORLD;
         g.mode = MODE_MENU;
@@ -919,6 +1022,10 @@ const char* interactionPrompt() {
     if (!g.bossDefeated) {
         float dx = BOSS_KING_X - g.px, dy = BOSS_KING_Y - g.py;
         if (dx * dx + dy * dy < 2.2f * 2.2f) return "SPACE: challenge Slime King";
+    }
+    {
+        int ring = 0;
+        if (regionLockedPassNear(g.px, g.py, ring)) return "SPACE: inspect the sealed pass";
     }
     if (!g.locketFound) {
         float dx = LOCKET_PICKUP_X - g.px, dy = LOCKET_PICKUP_Y - g.py;

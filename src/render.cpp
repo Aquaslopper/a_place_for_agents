@@ -1,6 +1,7 @@
 // render.cpp — the field renderer, HUD and mode screens
 #include "game.hpp"
 #include "world.hpp"
+#include "regions.hpp"
 #include "battle.hpp"
 #include "commons.hpp"
 #include <algorithm>
@@ -96,11 +97,14 @@ static void drawGround(int x0, int y0, int x1, int y1) {
     static int lastX, lastY, lastW, lastH;
     static uint32_t seed;
     static uint64_t village;
+    static int lastAccess = -1;
     uint64_t key = g.villageLoaded ? g.villageKey : ~0ull;
+    int access = (regionPassOpen(1) ? 1 : 0) | (regionPassOpen(2) ? 2 : 0);
     auto at = [&](int x, int y) -> GroundTile& { return view[(y - y0 + 1) * w + x - x0 + 1]; };
-    if (lastW != w || lastH != h || lastX != x0 || lastY != y0 || seed != g.worldSeed || key != village) {
+    if (lastW != w || lastH != h || lastX != x0 || lastY != y0 || seed != g.worldSeed ||
+        key != village || access != lastAccess) {
         view.resize(w * h);
-        lastW = w; lastH = h; lastX = x0; lastY = y0; seed = g.worldSeed; village = key;
+        lastW = w; lastH = h; lastX = x0; lastY = y0; seed = g.worldSeed; village = key; lastAccess = access;
         for (int y = y0 - 1; y <= y1 + 1; ++y)
             for (int x = x0 - 1; x <= x1 + 1; ++x)
                 at(x, y) = sampleGround(x, y);
@@ -328,6 +332,24 @@ void drawWorld() {
     int y1 = y0 + g.vh / TILE + 3;
 
     drawGround(x0, y0, x1, y1);
+
+    // A sealed defile should read as an objective, not an inexplicable wall.
+    // The rock tiles carry the collision; the existing stone supplies its sign.
+    for (int ring = 1; ring <= 2; ++ring) {
+        if (regionPassOpen(ring)) continue;
+        for (int dir = 0; dir < 4; ++dir) {
+            int tx, ty; regionPassCenter(ring, dir, tx, ty);
+            if (tx < x0 - 2 || tx > x1 + 2 || ty < y0 - 2 || ty > y1 + 2) continue;
+            float sx = (tx + 0.5f) * TILE - g.camX;
+            float sy = (ty + 1.0f) * TILE - g.camY;
+            DrawCircleGradient((int)sx, (int)(sy - 9), 27,
+                               Fade(Color{130, 176, 255, 255}, 0.27f), BLANK);
+            texFoot(g.assets.statusStone[1], sx, sy, Color{195, 212, 255, 255});
+            float dx = tx + 0.5f - g.px, dy = ty + 0.5f - g.py;
+            if (dx * dx + dy * dy < 10.0f * 10.0f)
+                drawWorldLabel("SEALED PASS", sx, sy - 50, Color{255, 225, 165, 255}, 8);
+        }
+    }
 
     float dayT = g.totalTime * 0.004f;
     float night = (sinf(dayT * 6.2831853f) + 1.0f) * 0.5f;
@@ -665,10 +687,12 @@ void drawWorld() {
         if (std::max(abs(lm.tx - (int)floorf(g.px)), abs(lm.ty - (int)floorf(g.py))) > 34) continue;
         int sx, sy;
         bool storyCave = lm.kind == LK_CAVERN && startCavernSite(sx, sy) && lm.tx == sx && lm.ty == sy;
+        frontierCavernSite(sx, sy);
+        bool frontierCave = lm.kind == LK_CAVERN && lm.tx == sx && lm.ty == sy;
         const char* label = "LANDMARK";
         Color col{ 244, 216, 159, 255 };
         switch (lm.kind) {
-            case LK_CAVERN: label = storyCave ? "HOLLOW HILL" : "CAVERN";
+            case LK_CAVERN: label = storyCave ? "HOLLOW HILL" : (frontierCave ? "MARCHES CAVERN" : "CAVERN");
                             col = Color{ 244, 216, 159, 255 }; break;
             case LK_RUINS:  label = "RUINS";          col = Color{ 214, 202, 178, 255 }; break;
             case LK_TOWER:  label = "WATCHTOWER";     col = Color{ 214, 222, 240, 255 }; break;
@@ -720,9 +744,11 @@ void drawWorld() {
 
 // ================================================================ HUD
 void drawHUD() {
-    const char* zone = zoneNameAt(g.px, g.py);
-    char zoneBuf[96];
-    snprintf(zoneBuf, sizeof(zoneBuf), "%s  Lv.%d", zone, zoneLevelAt(g.px, g.py));
+    float wx = g.sailing ? gSailX : g.px, wy = g.sailing ? gSailY : g.py;
+    const char* zone = g.sailing ? sailZoneName() : zoneNameAt(wx, wy);
+    char zoneBuf[128];
+    snprintf(zoneBuf, sizeof(zoneBuf), "%s / %s  Lv.%d", regionNameAt(wx, wy), zone,
+             zoneLevelAt(wx, wy));
     Vector2 zsz = measureText(zoneBuf, 8);
     drawWindow({ 5, 5, zsz.x + 32, 20 });
     DrawTriangle({ 12, 16 }, { 16, 14 }, { 16, 7 }, Color{ 250, 218, 149, 255 });
@@ -792,7 +818,10 @@ void drawHUD() {
             else line += " [" + compassHint(g.px, g.py, LOCKET_PICKUP_X, LOCKET_PICKUP_Y) + "]";
         } else if (q == QUEST_CROWN) {
             if (itemCount(IT_CROWN) > 0 || g.bossDefeated) line += " (Return)";
-            else line += " [" + compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY) + "]";
+            else if (!g.hasWaystone) {
+                int tx, ty; startCavernSite(tx, ty);
+                line = "Waystone: Hollow Hill [" + compassHint(wx, wy, (float)tx, (float)ty) + "]";
+            } else line += " [" + compassHint(wx, wy, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY) + "]";
         }
         Vector2 sz = measureText(line.c_str(), 8);
         float qw = sz.x + 14.0f;
@@ -802,7 +831,7 @@ void drawHUD() {
     }
 
     // Interaction prompt (right of Party HUD when wide enough, otherwise cleanly above Party HUD)
-    const char* prompt = interactionPrompt();
+    const char* prompt = g.sailing ? nullptr : interactionPrompt();
     if (prompt) {
         Vector2 sz = measureText(prompt, 8);
         float pw = sz.x + 16.0f;

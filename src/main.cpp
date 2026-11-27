@@ -2,6 +2,7 @@
 // main loop, audio streams & transitions
 #include "game.hpp"
 #include "world.hpp"
+#include "regions.hpp"
 #include "battle.hpp"
 #include <algorithm>
 #include <cmath>
@@ -204,7 +205,7 @@ int main() {
                 drawIntroScreen();
                 break;
             case MODE_OVERWORLD:
-                drawWorld();
+                if (g.travelMap) drawTravelMap(); else drawWorld();
                 drawHUD();
                 break;
             case MODE_ROOM:
@@ -221,14 +222,14 @@ int main() {
                 if (g.dialogReturn == MODE_ROOM) roomDraw();
                 else if (g.dialogReturn == MODE_DUNGEON) dungeonDraw();
                 else if (g.dialogReturn == MODE_SAIL) { sailDraw(); drawHUD(); }
-                else { drawWorld(); drawHUD(); }
+                else { if (g.travelMap) drawTravelMap(); else drawWorld(); drawHUD(); }
                 drawDialogBox();
                 break;
             case MODE_MENU:
                 if (g.menuReturn == MODE_ROOM) roomDraw();
                 else if (g.menuReturn == MODE_DUNGEON) dungeonDraw();
                 else if (g.menuReturn == MODE_SAIL) { sailDraw(); drawHUD(); }
-                else drawWorld();
+                else { if (g.travelMap) drawTravelMap(); else drawWorld(); }
                 drawMenuScreen();
                 break;
             case MODE_BATTLE:

@@ -25,6 +25,7 @@ add_executable(aplaceforagents WIN32
     src/music.cpp
     src/core.cpp
     src/world.cpp
+    src/regions.cpp
     src/atlas.cpp
     src/commons.cpp
     src/sail.cpp
