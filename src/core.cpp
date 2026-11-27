@@ -188,6 +188,18 @@ static const EnemyDef ENEMIES[EN_COUNT] = {
     { "Golem",        150, 27, 20,  5, 190, 150, 1 << SCH_STORM,  IT_ELIXIR,      10, 4 },
     { "Night Rider",  190, 33, 16, 15, 260, 220, 1 << SCH_HOLY,   IT_HIPOTION,    25, 4 },
     { "Slime King",   420, 36, 16, 11, 900, 800, 1 << SCH_FIRE,   IT_CROWN,      100, 5 },
+    // OpenRTP additions, introduced at the matching field-zone tier.
+    { "Bandit",        54, 15,  6, 12,  45,  38, 1 << SCH_FIRE,   IT_POTION,      18, 2 },
+    { "Goblin",        43, 14,  5, 14,  42,  30, 1 << SCH_FIRE,   IT_ANTIDOTE,    20, 2 },
+    { "Reaper",        76, 20,  9, 13,  84,  68, 1 << SCH_HOLY,   IT_ETHER,       18, 3 },
+    { "Faerie",        38, 12,  4, 16,  45,  38, 1 << SCH_FIRE,   IT_POTION,      15, 2 },
+    { "Drake",        178, 31, 18, 13, 250, 190, 1 << SCH_STORM,  IT_HIETHER,     18, 4 },
+    { "Naga",         138, 27, 14, 15, 182, 135, 1 << SCH_STORM,  IT_HIETHER,     18, 4 },
+    { "Shade",         84, 22,  9, 15,  98,  76, 1 << SCH_HOLY,   IT_ETHER,       20, 3 },
+    { "Dread Knight", 205, 33, 23, 11, 310, 250, 1 << SCH_HOLY,   IT_HIPOTION,    18, 4 },
+    { "Archfiend",    280, 40, 24, 16, 445, 360, 1 << SCH_HOLY,   IT_ELIXIR,      10, 5 },
+    { "Tiger",         92, 24, 10, 16, 113,  86, 1 << SCH_FIRE,   IT_POTION,      15, 3 },
+    { "Porcupine",     62, 18, 13,  8,  76,  54, 1 << SCH_FIRE,   IT_ANTIDOTE,    14, 2 },
 };
 const EnemyDef& enemyDef(int kind) {
     static const EnemyDef none{ "???", 1, 1, 1, 1, 0, 0, 0, -1, 0, 0 };
@@ -381,6 +393,9 @@ bool loadAllAssets() {
         "sprites/npc_smith.png", "sprites/npc_priest.png", "sprites/npc_farmer.png",
         "sprites/npc_dog.png", "sprites/npc_cat.png", "sprites/npc_chicken.png",
         "sprites/npc_sheep.png",
+        "sprites/npc_villager4.png", "sprites/npc_villager5.png", "sprites/npc_villager6.png",
+        "sprites/npc_villager7.png", "sprites/npc_villager8.png", "sprites/npc_villager9.png",
+        "sprites/npc_ranger.png", "sprites/npc_cow.png", "sprites/npc_horse.png",
     };
     for (int i = 0; i < NS_KIND_COUNT; i++) a.npc[i] = loadTex(d, npcs[i]);
 
@@ -396,6 +411,8 @@ bool loadAllAssets() {
         "sprites/face_innkeeper.png", "sprites/face_guard.png", "sprites/face_ranger.png",
         "sprites/face_slime.png", "sprites/face_ghost.png", "sprites/face_skeleton.png",
         "sprites/face_demon.png", "sprites/face_dog.png",
+        "sprites/face_villager4.png", "sprites/face_villager5.png", "sprites/face_villager6.png",
+        "sprites/face_villager7.png", "sprites/face_villager8.png", "sprites/face_villager9.png",
     };
     for (int i = 0; i < FACE_COUNT; i++) a.face[i] = loadTex(d, faces[i]);
 
@@ -403,6 +420,8 @@ bool loadAllAssets() {
     const char* enemies[EN_COUNT] = {
         "slime", "imp", "bat", "hornet", "wisp", "wolf", "skeleton", "ghost",
         "orc", "serpent", "golem", "night_rider", "slime_king",
+        "bandit", "goblin", "reaper", "faerie", "drake", "naga", "shade",
+        "dread_knight", "archfiend", "tiger", "porcupine",
     };
     for (int i = 0; i < EN_COUNT; i++) {
         char buf[96];

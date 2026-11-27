@@ -76,8 +76,10 @@ the generated world. Interiors have their own small scenes.
 locket, and recover the Crown of Elm from the Slime King. The quest log tracks
 progress and points toward story destinations.
 - **Field encounters and a party.** Aldric (Knight), Iris (Mage) and Pip
-(Cleric) have distinct strengths. Thirteen monsters roam the world and join
-random encounters; walking into a visible field monster starts that fight.
+  (Cleric) have distinct strengths. Twenty-three enemy species roam the world
+  (plus the Slime King); walking into a visible field monster starts that fight.
+  The expanded OpenRTP roster includes bandits, goblins, spirits, dragons and
+  wilderness beasts.
 - **22 items and equipment slots.** Potions, ethers, revival items, weapons,
 armour, shields, accessories and quest items. Shops buy and sell; equip weapons,
 armour and accessories per hero.
