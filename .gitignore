@@ -1,3 +1,7 @@
 aplaceforagents_save.sav
 *.sav
 assets/audio/*.wav
+.scratch/
+__pycache__/
+*.pyc
+build/
