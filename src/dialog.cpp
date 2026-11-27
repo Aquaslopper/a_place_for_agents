@@ -240,8 +240,8 @@ static std::vector<int> equippableForSlot(int slot) {
 }
 
 static const int SHOP_VISIBLE = 9;
-static const float SHOP_ROW_Y0 = 54.0f;
-static const float SHOP_ROW_H  = 18.0f;
+static const float SHOP_ROW_Y0 = 56.0f;
+static const float SHOP_ROW_H  = 17.0f;
 static inline Rectangle innBtnStay()  { return { uiOx() + 146.0f, uiOy() + 180.0f, 100.0f, 24.0f }; }
 static inline Rectangle innBtnLeave() { return { uiOx() + 266.0f, uiOy() + 180.0f, 100.0f, 24.0f }; }
 
@@ -423,7 +423,7 @@ static void drawSoundRoom() {
     DrawRectangle(0, 0, g.vw, g.vh, Fade(BLACK, 0.76f));
     drawWindow({ ox + 23, oy + 15, 466, 256 });
     drawText("SOUND ROOM", ox + 36, oy + 27, Color{ 255, 231, 166, 255 }, 16);
-    drawText("Score / 13 cues", ox + 312, oy + 31, Color{ 190, 205, 229, 255 }, 8);
+    drawText("OpenRTP / 13 cues", ox + 301, oy + 31, Color{ 190, 205, 229, 255 }, 8);
     for (int i = 0; i < MUS_COUNT; ++i) {
         Rectangle r = trackRow(i);
         bool sel = g.audition == i;
@@ -547,7 +547,7 @@ void menuUpdate(float dt) {
             if (clicked) {
                 int scroll = std::max(0, g.menuIndex - 8);
                 for (int row = 0; row < 10 && scroll + row < n; row++) {
-                    if (CheckCollisionPointRec(m, { ox + 122, oy + 40.0f + row * 18.0f, 366, 17 })) {
+                    if (CheckCollisionPointRec(m, { ox + 122, oy + 42.0f + row * 17.0f, 366, 16 })) {
                         g.menuIndex = scroll + row;
                         int id = items[g.menuIndex];
                         const ItemDef& d = itemDef(id);
@@ -732,7 +732,9 @@ static void drawShopPage() {
     drawText(gbuf, ox + BASE_VW - 26.0f - gsz.x, oy + 17, Color{ 255, 232, 150, 255 }, 8);
 
     auto drawTab = [&](Rectangle r, const char* label, bool active) {
-        drawPixelPanel(r, active, false, Color{ 26, 36, 78, 255 }, Color{ 90, 110, 160, 255 });
+        DrawRectangleRounded(r, 0.35f, 4, active ? Color{ 62, 92, 170, 255 } : Color{ 26, 36, 78, 255 });
+        DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f,
+                                    active ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
         drawTextCentered(label, r.x + r.width * 0.5f, r.y + 5,
                          active ? Color{ 255, 240, 180, 255 } : Color{ 185, 200, 235, 255 }, 8);
     };
@@ -754,30 +756,30 @@ static void drawShopPage() {
             }
             int id = (g.shopTab == 0) ? stock[idx] : owned[idx];
             const ItemDef& d = itemDef(id);
-            if (sel) drawCursor(ox + 27, y + 5);
-            drawItemIcon(id, ox + 38, y + 1, 16);
-            drawText(d.name, ox + 58, y + 5, WHITE, 8);
+            if (sel) drawCursor(ox + 27, y + 4);
+            drawItemIcon(id, ox + 38, y + 1, 14);
+            drawText(d.name, ox + 56, y + 4, WHITE, 8);
 
             if (g.shopTab == 0) {
                 int own = itemCount(id);
                 if (own > 0) {
                     char obuf[24]; snprintf(obuf, sizeof(obuf), "Own:%d", own);
-                    drawText(obuf, ox + 272, y + 5, Color{ 165, 210, 255, 255 }, 8);
+                    drawText(obuf, ox + 272, y + 4, Color{ 165, 210, 255, 255 }, 8);
                 }
                 char pbuf[24]; snprintf(pbuf, sizeof(pbuf), "%d g", d.price);
                 Color pc = (g.gil >= d.price) ? Color{ 255, 232, 150, 255 } : Color{ 220, 110, 110, 255 };
                 Vector2 psz = measureText(pbuf, 8);
-                drawText(pbuf, ox + BASE_VW - 32.0f - psz.x, y + 5, pc, 8);
+                drawText(pbuf, ox + BASE_VW - 32.0f - psz.x, y + 4, pc, 8);
             } else {
                 char qbuf[24]; snprintf(qbuf, sizeof(qbuf), "x%d", itemCount(id));
-                drawText(qbuf, ox + 276, y + 5, Color{ 180, 200, 240, 255 }, 8);
+                drawText(qbuf, ox + 276, y + 4, Color{ 180, 200, 240, 255 }, 8);
                 if (!d.sells || d.kind == IK_KEY || d.price <= 0) {
                     Vector2 ksz = measureText("Key item", 8);
-                    drawText("Key item", ox + BASE_VW - 32.0f - ksz.x, y + 5, Color{ 160, 170, 200, 255 }, 8);
+                    drawText("Key item", ox + BASE_VW - 32.0f - ksz.x, y + 4, Color{ 160, 170, 200, 255 }, 8);
                 } else {
                     char sbuf[24]; snprintf(sbuf, sizeof(sbuf), "+%d g", std::max(1, d.price / 2));
                     Vector2 ssz = measureText(sbuf, 8);
-                    drawText(sbuf, ox + BASE_VW - 32.0f - ssz.x, y + 5, Color{ 150, 240, 170, 255 }, 8);
+                    drawText(sbuf, ox + BASE_VW - 32.0f - ssz.x, y + 4, Color{ 150, 240, 170, 255 }, 8);
                 }
             }
         }
@@ -786,11 +788,11 @@ static void drawShopPage() {
             snprintf(sc, sizeof(sc), "%d-%d / %d", g.shopScroll + 1,
                      std::min(count, g.shopScroll + SHOP_VISIBLE), count);
             Vector2 ssz = measureText(sc, 8);
-            drawText(sc, ox + BASE_VW - 32.0f - ssz.x, oy + 216, Color{ 170, 185, 225, 255 }, 8);
+            drawText(sc, ox + BASE_VW - 32.0f - ssz.x, oy + 212, Color{ 170, 185, 225, 255 }, 8);
         }
     }
 
-    DrawLine((int)ox + 24, (int)oy + 225, (int)ox + BASE_VW - 24, (int)oy + 225, Color{ 90, 110, 160, 180 });
+    DrawLine((int)ox + 24, (int)oy + 224, (int)ox + BASE_VW - 24, (int)oy + 224, Color{ 90, 110, 160, 180 });
     if (count > 0 && g.shopIndex >= 0 && g.shopIndex < count) {
         int id = (g.shopTab == 0) ? stock[g.shopIndex] : owned[g.shopIndex];
         drawTextWrapped(itemDef(id).desc, ox + 28, oy + 232, BASE_VW - 56.0f, 11, Color{ 225, 235, 255, 255 }, 8);
@@ -816,7 +818,8 @@ static void drawInnPage() {
     for (int i = 0; i < 3; i++) {
         const Hero& h = g.party[i];
         Rectangle card{ ox + 80.0f + i * 120.0f, oy + 114.0f, 112.0f, 52.0f };
-        drawPixelPanel(card, false, false, Color{ 20, 30, 68, 225 }, Color{ 84, 104, 162, 200 });
+        DrawRectangleRounded(card, 0.2f, 4, Color{ 20, 30, 68, 225 });
+        DrawRectangleRoundedLinesEx(card, 0.2f, 4, 1.0f, Color{ 84, 104, 162, 200 });
         drawTextCentered(heroName(h.klass), card.x + card.width * 0.5f, card.y + 7,
                          h.ko ? Color{ 240, 130, 130, 255 } : Color{ 255, 236, 176, 255 }, 8);
         char hp[32];
@@ -829,7 +832,9 @@ static void drawInnPage() {
     }
 
     auto drawBtn = [&](Rectangle r, const char* label, bool sel, bool dis) {
-        drawPixelPanel(r, sel, false, Color{ 26, 36, 78, 255 }, Color{ 95, 115, 165, 255 });
+        DrawRectangleRounded(r, 0.35f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 });
+        DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.2f,
+                                    sel ? Color{ 255, 232, 150, 255 } : Color{ 95, 115, 165, 255 });
         Color c = dis ? Color{ 160, 120, 120, 255 }
                       : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
         drawTextCentered(label, r.x + r.width * 0.5f, r.y + 8, c, 8);
@@ -848,7 +853,9 @@ static void drawHeroPicker(const char* title, int sel) {
         const Hero& h = g.party[i];
         Rectangle r{ ox + 110, oy + 90.0f + i * 32.0f, 292, 26 };
         bool s = (i == sel);
-        drawPixelPanel(r, s, false, Color{ 24, 34, 72, 255 }, Color{ 90, 110, 160, 255 });
+        DrawRectangleRounded(r, 0.3f, 4, s ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 255 });
+        DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
+                                    s ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
         if (s) drawCursor(r.x + 5, r.y + 9);
         char buf[96];
         snprintf(buf, sizeof(buf), "%-6s HP %d/%d  MP %d/%d%s",
@@ -873,7 +880,10 @@ void drawMenuScreen() {
     for (int i = 0; i < 5; i++) {
         bool sel = (i == g.menuPage);
         Rectangle r{ ox + 16, oy + 42.0f + i * 26.0f, 84, 22 };
-        if (sel) drawPixelPanel(r, true, false);
+        if (sel) {
+            DrawRectangleRounded(r, 0.35f, 4, Color{ 56, 86, 164, 255 });
+            DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f, Color{ 255, 232, 150, 255 });
+        }
         drawText(tabs[i], ox + 24, r.y + 7, sel ? Color{ 255, 236, 176, 255 } : Color{ 215, 225, 248, 255 }, 8);
     }
     char gbuf[32]; snprintf(gbuf, sizeof(gbuf), "%d g", g.gil);
@@ -888,15 +898,17 @@ void drawMenuScreen() {
             const Hero& h = g.party[i];
             float y = oy + 20.0f + i * 78.0f;
             bool sel = (i == g.menuIndex);
-            drawPixelPanel({ ox + 118, y, 376, 72 }, sel, false,
-                           Color{ 22, 32, 74, 215 }, Color{ 80, 100, 155, 220 });
+            DrawRectangleRounded({ ox + 118, y, 376, 72 }, 0.16f, 4,
+                                 sel ? Color{ 34, 52, 114, 245 } : Color{ 22, 32, 74, 215 });
+            DrawRectangleRoundedLinesEx({ ox + 118, y, 376, 72 }, 0.16f, 4, 1.0f,
+                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 220 });
             Texture2D& f = g.assets.face[i == 0 ? FACE_KNIGHT : (i == 1 ? FACE_MAGE : FACE_CLERIC)];
             if (f.id) DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height },
-                                     { ox + 124, y + 4, 64, 64 }, { 0, 0 }, 0.0f,
+                                     { ox + 126, y + 12, 48, 48 }, { 0, 0 }, 0.0f,
                                      h.ko ? Color{ 130, 130, 160, 255 } : WHITE);
             char line[96];
             snprintf(line, sizeof(line), "%s (%s) Lv.%d", heroName(h.klass), klassName(h.klass), h.level);
-            drawText(line, ox + 196, y + 8, Color{ 255, 236, 176, 255 }, 8);
+            drawText(line, ox + 182, y + 8, Color{ 255, 236, 176, 255 }, 8);
 
             const char* rowLabel = (h.row == 0) ? "[FRONT]" : "[BACK]";
             float rw = measureText(rowLabel, 8).x;
@@ -912,13 +924,13 @@ void drawMenuScreen() {
             }
 
             snprintf(line, sizeof(line), "HP %d/%d", h.hp, h.maxHp);
-            drawText(line, ox + 196, y + 23, WHITE, 8);
-            drawBar(ox + 294, y + 25, 84, 6, (float)h.hp / std::max(1, h.maxHp),
+            drawText(line, ox + 182, y + 23, WHITE, 8);
+            drawBar(ox + 282, y + 25, 88, 6, (float)h.hp / std::max(1, h.maxHp),
                     Color{ 96, 220, 120, 255 }, Color{ 24, 34, 70, 255 });
 
             snprintf(line, sizeof(line), "MP %d/%d", h.mp, h.maxMp);
-            drawText(line, ox + 196, y + 38, Color{ 180, 210, 255, 255 }, 8);
-            drawBar(ox + 294, y + 40, 84, 6, (float)h.mp / std::max(1, h.maxMp),
+            drawText(line, ox + 182, y + 38, Color{ 180, 210, 255, 255 }, 8);
+            drawBar(ox + 282, y + 40, 88, 6, (float)h.mp / std::max(1, h.maxMp),
                     Color{ 96, 160, 255, 255 }, Color{ 24, 34, 70, 255 });
 
             snprintf(line, sizeof(line), "XP %d/%d", h.xp, xpToNext(h));
@@ -927,7 +939,7 @@ void drawMenuScreen() {
 
             snprintf(line, sizeof(line), "ATK %d   DEF %d   MAG %d   SPD %d",
                      heroAtk(h), heroDef(h), heroMag(h), heroSpd(h));
-            drawText(line, ox + 196, y + 54, Color{ 195, 210, 240, 255 }, 8);
+            drawText(line, ox + 182, y + 54, Color{ 195, 210, 240, 255 }, 8);
         }
         drawText("SPACE/Click: switch row  |  ESC: close",
                  ox + 122, oy + BASE_VH - 22.0f, Color{ 170, 185, 225, 230 }, 8);
@@ -945,24 +957,24 @@ void drawMenuScreen() {
             for (int row = 0; row < 10 && scroll + row < n; row++) {
                 int idx = scroll + row;
                 int id = items[idx];
-                float y = oy + 40.0f + row * 18.0f;
+                float y = oy + 42.0f + row * 17.0f;
                 bool sel = (idx == g.menuIndex);
                 if (sel) {
-                    DrawRectangle((int)ox + 122, (int)y, 366, 17, Color{ 52, 76, 152, 230 });
-                    DrawRectangleLines((int)ox + 122, (int)y, 366, 17, Color{ 255, 232, 150, 200 });
-                    drawCursor(ox + 125, y + 5);
+                    DrawRectangle((int)ox + 122, (int)y, 366, 16, Color{ 52, 76, 152, 230 });
+                    DrawRectangleLines((int)ox + 122, (int)y, 366, 16, Color{ 255, 232, 150, 200 });
+                    drawCursor(ox + 125, y + 4);
                 }
                 const ItemDef& d = itemDef(id);
-                drawItemIcon(id, ox + 135, y + 1, 16);
-                drawText(d.name, ox + 155, y + 5, WHITE, 8);
+                drawItemIcon(id, ox + 135, y + 1, 14);
+                drawText(d.name, ox + 153, y + 4, WHITE, 8);
                 const char* tag = (d.kind == IK_CONSUMABLE) ? "Use"
                                 : (d.kind == IK_KEY ? "Key" : "Gear");
-                drawText(tag, ox + 388, y + 5, Color{ 165, 195, 235, 255 }, 8);
+                drawText(tag, ox + 388, y + 4, Color{ 165, 195, 235, 255 }, 8);
                 char qbuf[16]; snprintf(qbuf, sizeof(qbuf), "x%d", itemCount(id));
                 float qw = measureText(qbuf, 8).x;
-                drawText(qbuf, ox + 482.0f - qw, y + 5, Color{ 255, 232, 150, 255 }, 8);
+                drawText(qbuf, ox + 482.0f - qw, y + 4, Color{ 255, 232, 150, 255 }, 8);
             }
-            DrawLine((int)ox + 122, (int)oy + 222, (int)ox + 488, (int)oy + 222, Color{ 90, 110, 160, 180 });
+            DrawLine((int)ox + 122, (int)oy + 220, (int)ox + 488, (int)oy + 220, Color{ 90, 110, 160, 180 });
             if (g.menuIndex >= 0 && g.menuIndex < n)
                 drawTextWrapped(itemDef(items[g.menuIndex]).desc, ox + 124, oy + 228, 362, 11, Color{ 225, 235, 255, 255 }, 8);
         }
@@ -981,7 +993,9 @@ void drawMenuScreen() {
         for (int i = 0; i < 3; i++) {
             Rectangle r{ ox + 122.0f + i * 122.0f, oy + 24, 116, 22 };
             bool sel = (i == g.equipHero);
-            drawPixelPanel(r, sel, false, Color{ 26, 36, 78, 255 }, Color{ 90, 110, 160, 255 });
+            DrawRectangleRounded(r, 0.35f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 });
+            DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f,
+                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
             drawTextCentered(heroName(g.party[i].klass), r.x + r.width * 0.5f, r.y + 7,
                              sel ? Color{ 255, 236, 176, 255 } : WHITE, 8);
         }
@@ -996,7 +1010,9 @@ void drawMenuScreen() {
         for (int s = 0; s < 3; s++) {
             Rectangle r{ ox + 122, oy + 74.0f + s * 28.0f, 186, 24 };
             bool sel = (g.equipSlot == s);
-            drawPixelPanel(r, sel, false, Color{ 24, 34, 72, 220 }, Color{ 85, 105, 155, 200 });
+            DrawRectangleRounded(r, 0.25f, 4, sel ? Color{ 50, 74, 146, 240 } : Color{ 24, 34, 72, 220 });
+            DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.0f,
+                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
             drawText(sname[s], r.x + 6, r.y + 3, Color{ 180, 200, 235, 255 }, 8);
             const char* eqName = (cur[s] >= 0) ? itemDef(cur[s]).name : "- None -";
             drawText(eqName, r.x + 6, r.y + 13, WHITE, 8);
@@ -1008,10 +1024,13 @@ void drawMenuScreen() {
         for (int i = 0; i < total && i < 8; i++) {
             Rectangle r{ ox + 316, oy + 74.0f + i * 20.0f, 174, 18 };
             bool sel = (g.equipIndex >= 0 && i == g.equipIndex);
-            if (sel) drawPixelPanel(r, true, false);
+            if (sel) {
+                DrawRectangleRounded(r, 0.25f, 4, Color{ 56, 86, 164, 255 });
+                DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.0f, Color{ 255, 232, 150, 255 });
+            }
             if (i < (int)cands.size()) {
-                drawItemIcon(cands[i], r.x + 4, r.y + 1, 16);
-                drawText(itemDef(cands[i]).name, r.x + 24, r.y + 5, WHITE, 8);
+                drawItemIcon(cands[i], r.x + 4, r.y + 2, 14);
+                drawText(itemDef(cands[i]).name, r.x + 22, r.y + 5, WHITE, 8);
             } else {
                 drawText("[Unequip]", r.x + 8, r.y + 5, Color{ 225, 165, 165, 255 }, 8);
             }
@@ -1026,8 +1045,10 @@ void drawMenuScreen() {
         for (int q = 0; q < QUEST_COUNT; q++) {
             float y = oy + 40.0f + q * 61.0f;
             bool sel = (q == g.menuIndex);
-            drawPixelPanel({ ox + 122, y, 366, 56 }, sel, false,
-                           Color{ 22, 32, 74, 210 }, Color{ 80, 100, 155, 200 });
+            DrawRectangleRounded({ ox + 122, y, 366, 56 }, 0.16f, 4,
+                                 sel ? Color{ 36, 54, 116, 240 } : Color{ 22, 32, 74, 210 });
+            DrawRectangleRoundedLinesEx({ ox + 122, y, 366, 56 }, 0.16f, 4, 1.0f,
+                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 200 });
             int st = g.quests[q].state;
             const char* badge = (st == QS_DONE) ? "COMPLETE"
                               : (st == QS_ACTIVE ? "ACTIVE" : "AVAILABLE");
@@ -1075,7 +1096,9 @@ void drawMenuScreen() {
         for (int i = 0; i < 9; i++) {
             Rectangle r{ ox + 126, oy + 40.0f + i * 24.0f, 360, 21 };
             bool sel = (i == g.optionsIndex);
-            drawPixelPanel(r, sel, false, Color{ 24, 34, 72, 220 }, Color{ 85, 105, 155, 200 });
+            DrawRectangleRounded(r, 0.3f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 220 });
+            DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
+                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
             Color c = (i == 8) ? Color{ 255, 175, 175, 255 }
                                : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
             drawText(rows[i], r.x + 14, r.y + 6, c, 8);

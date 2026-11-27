@@ -1,621 +1,358 @@
-#!/usr/bin/env python3
-"""Generate all biome flora, boulders, village/dungeon props, furniture, and clouds.
+"""art_objects.py — SNES-style overworld objects, anchored bottom-centre.
 
-Every sprite is an exact 16px grid multiple, adheres to strict Core Palette and
-<=8-color biome ramps, uses upper-left sunlight, and carries a 1px selective outline.
+All sprites keep the exact pixel dimensions the renderer already expects, and
+every one gets a hard dark outline plus a hue-shifted shading ramp.
 """
-from __future__ import annotations
+from PIL import Image, ImageDraw
+import random
+from snes import H, mixc, ramp, outline, speckle, BAYER4, shadow_under
 
-import math
-from snes import (
-    INK_DEEP, SLATE_DARK, SLATE_MID, SLATE_LIGHT, STONE_WARM, CREAM_SUN,
-    UMBER_DARK, TIMBER_MID, OCHRE_MID, OCHRE_LIGHT, GOLD_SHADE, GOLD_SUN, SUN_WHITE,
-    LEAF_SHADOW, LEAF_DARK, LEAF_MID, LEAF_LIGHT, LEAF_SUN,
-    WATER_DEEP, WATER_MID, WATER_LIGHT, WATER_FOAM,
-    CRIMSON_DARK, CRIMSON_MID, CORAL_LIGHT,
-    NAVY_UI, INDIGO_ROYAL, LAVENDER, ROSE_CHEEK,
-    BIOME_RAMPS, canvas, px, rect, hline, vline, line, ell, shaded_ell,
-    sel_outline_in_place, stamp_palette_sprite, h2, save_png,
-)
+# ---------------------------------------------------------------- palettes
+TRUNK  = ramp(H("#7a5330"))
+TRUNK_D= ramp(H("#5d3f28"))
+LEAF   = ramp(H("#3f8c3a"))          # broadleaf
+LEAF_D = ramp(H("#356f37"))
+PINE   = ramp(H("#2f6b45"))
+PINE_D = ramp(H("#24543a"))
+ROCKC  = ramp(H("#8e8b96"))
+BUSH   = ramp(H("#4a9448"))
+WOOD   = ramp(H("#a8763f"))
+WOOD_D = ramp(H("#7d5429"))
+ROOF_R = ramp(H("#b6493c"))
+ROOF_B = ramp(H("#3f5f9e"))
+ROOF_G = ramp(H("#4a8a5c"))
+WALL   = ramp(H("#d9c69a"), shadow_hue=(-6,-8,20), light_hue=(8,6,-8))
+WALL_D = ramp(H("#b9a37c"))
+STONE  = ramp(H("#9b98a4"))
+OUTL   = (26, 20, 38)
 
+def canvas(w, h):
+    return Image.new("RGBA", (w, h), (0, 0, 0, 0))
 
-def _broadleaf(
-    im,
-    trunk_x: int,
-    base_y: int,
-    clusters: list[tuple[float, float, float, float]],
-    ramp: list[tuple[int, int, int]],
-    seed: int = 0,
-    droop: bool = False,
-) -> None:
-    """Tiered broadleaf canopy with shadowed trunk and sunlit UL leaf lobes."""
-    # Flared roots & shaded trunk
-    rect(im, trunk_x - 3, base_y - 12, 6, 11, TIMBER_MID)
-    vline(im, trunk_x - 3, base_y - 11, base_y - 2, OCHRE_MID)
-    vline(im, trunk_x + 2, base_y - 12, base_y - 1, UMBER_DARK)
-    hline(im, trunk_x - 4, trunk_x + 3, base_y - 1, UMBER_DARK)
-    # Under-canopy trunk cast shadow
-    rect(im, trunk_x - 3, base_y - 12, 6, 3, UMBER_DARK)
+def px(img, x, y, c, a=255):
+    if 0 <= x < img.width and 0 <= y < img.height:
+        img.putpixel((x, y), c + (a,))
 
-    # Paint leaf clusters back-to-front (lower/right shadow lobes first, UL sunlit top last)
-    for cx, cy, rx, ry in clusters:
-        shaded_ell(im, cx, cy, rx, ry, ramp, seed=seed, dither=False)
-        # Crisp leaf-clump highlights along UL arc
-        for _ in range(int(rx * 1.4)):
-            lx = int(round(cx - rx * 0.45 + (h2(int(cx), _, seed + 3) - 0.5) * rx))
-            ly = int(round(cy - ry * 0.45 + (h2(_, int(cy), seed + 9) - 0.5) * ry * 0.7))
-            if 0 <= lx < im.width and 0 <= ly < im.height and im.getpixel((lx, ly))[3] > 0:
-                px(im, lx, ly, ramp[-1])
+def blob(img, cx, cy, rx, ry, cols, seed=0, jitter=1):
+    """A dithered foliage blob: dark rim, mid body, lit crown."""
+    rnd = random.Random(seed)
+    d = ImageDraw.Draw(img)
+    d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=cols[1] + (255,))
+    d.ellipse([cx - rx * 0.72, cy - ry * 0.78, cx + rx * 0.72, cy + ry * 0.2], fill=cols[2] + (255,))
+    d.ellipse([cx - rx * 0.36, cy - ry * 0.86, cx + rx * 0.36, cy - ry * 0.1], fill=cols[3] + (255,))
+    # rim shadow
+    for a in range(0, 360, 7):
+        import math
+        x = int(cx + math.cos(math.radians(a)) * rx)
+        y = int(cy + math.sin(math.radians(a)) * ry)
+        if math.sin(math.radians(a)) > 0.1:
+            px(img, x, y, cols[0])
+    return img
 
-    if droop:
-        # Weeping willow hanging fronds along lower rim
-        for fx in range(4, im.width - 4, 3):
-            col_top = None
-            for yy in range(im.height - 6):
-                if im.getpixel((fx, yy))[3] > 0:
-                    col_top = yy
-            if col_top and col_top < base_y - 4:
-                length = 4 + (fx % 5)
-                for dy in range(1, length):
-                    if col_top + dy < base_y - 1:
-                        px(im, fx, col_top + dy, ramp[2] if dy < length - 1 else ramp[1])
+# ---------------------------------------------------------------- trees
+def tree(variant):
+    """Broadleaf tree, 34x46, trunk at bottom-centre (renderer anchors here)."""
+    w, h = 34, 46
+    img = canvas(w, h)
+    cx = w // 2
+    # trunk
+    for y in range(h - 14, h):
+        half = 1 if y < h - 5 else 2
+        for x in range(cx - half, cx + half + 1):
+            px(img, x, y, TRUNK[1] if x <= cx else TRUNK[0])
+    for y in range(h - 14, h):        # bark texture
+        if y % 3 == 0:
+            px(img, cx - 1, y, TRUNK_D[0])
+    px(img, cx + 1, h - 1, TRUNK_D[1]); px(img, cx - 2, h - 1, TRUNK[0])
+    px(img, cx - 2, h - 13, TRUNK[1]); px(img, cx + 2, h - 14, TRUNK[1])
+    # canopy: stacked tiers, widest at the bottom
+    base = LEAF if variant != 2 else LEAF_D
+    blob(img, cx, 24, 16, 13, base, seed=100 + variant)
+    blob(img, cx - 9, 18, 10, 9, base, seed=200 + variant)
+    blob(img, cx + 9, 19, 10, 9, base, seed=300 + variant)
+    blob(img, cx, 11, 11, 8, base, seed=400 + variant)
+    # leaf detail: clumps of highlight and shadow
+    rnd = random.Random(500 + variant)
+    for _ in range(30):
+        x = rnd.randrange(2, w - 2); y = rnd.randrange(1, 32)
+        if img.getpixel((x, y))[3] == 0: continue
+        px(img, x, y, base[3])
+        if x + 1 < w: px(img, x + 1, y, base[3])
+    for _ in range(22):
+        x = rnd.randrange(2, w - 2); y = rnd.randrange(4, 34)
+        if img.getpixel((x, y))[3] == 0: continue
+        px(img, x, y, base[0])
+    img = outline(img, OUTL)
+    return img
 
-    sel_outline_in_place(im, INK_DEEP, ramp[1])
-
-
-def _conifer(im, cx: int, base_y: int, width_scale: float, ramp: list[tuple[int, int, int]],
-             snow: bool = False) -> None:
-    """Tiered evergreen spruce/pine with upper-left highlights and dark needle tiers."""
-    rect(im, cx - 2, base_y - 6, 4, 5, TIMBER_MID)
-    vline(im, cx - 2, base_y - 5, base_y - 1, OCHRE_MID)
-    vline(im, cx + 1, base_y - 5, base_y - 1, UMBER_DARK)
-
-    tiers = [
-        (base_y - 6, 13 * width_scale, 9),
-        (base_y - 14, 11 * width_scale, 9),
-        (base_y - 22, 9 * width_scale, 9),
-        (base_y - 30, 6.5 * width_scale, 9),
-        (base_y - 37, 4 * width_scale, 8),
-    ]
-    dk, mid, lit, hi = ramp[1], ramp[2], ramp[3], ramp[4]
-    for tier_idx, (ty_bot, half_w, th) in enumerate(tiers):
-        for dy in range(th):
-            y = int(ty_bot - th + dy)
-            if y < 1 or y >= im.height:
-                continue
-            frac = dy / max(1, th - 1)
-            hw = max(1, int(round(1 + frac * half_w)))
+def pine(variant):
+    """Conifer, 30x48: stacked tiers, lit left edge, dark right edge."""
+    w, h = 30, 48
+    img = canvas(w, h)
+    cx = w // 2
+    base = PINE if variant != 2 else PINE_D
+    for y in range(h - 8, h):
+        px(img, cx, y, TRUNK[0]); px(img, cx - 1, y, TRUNK[1]); px(img, cx + 1, y, TRUNK_D[1])
+    tiers = [(30, 36, 12), (23, 29, 10), (16, 22, 8), (9, 15, 6), (3, 8, 4)]
+    for i, (y0, y1, half) in enumerate(tiers):
+        for y in range(y0, y1):
+            t = (y - y0) / float(y1 - y0)
+            hw = int(half * (0.35 + 0.65 * t))
             for x in range(cx - hw, cx + hw + 1):
-                if x < 1 or x >= im.width - 1:
-                    continue
-                if snow and dy <= max(1, th // 2 - (1 if x > cx else 0)):
-                    c = BIOME_RAMPS["frost"][6] if x <= cx else BIOME_RAMPS["frost"][5]
-                elif dy == th - 1:
-                    c = ramp[0]
-                elif x < cx - hw // 3 or dy < 2:
-                    c = hi if x <= cx else lit
-                elif x > cx + hw // 3:
-                    c = dk
-                else:
-                    c = lit if ((x + dy + tier_idx) & 1) == 0 else mid
-                px(im, x, y, c)
-    sel_outline_in_place(im, INK_DEEP, dk)
+                if x <= cx - hw + 1:   c = base[3]
+                elif x >= cx + hw - 1: c = base[0]
+                else:                  c = base[2] if y < (y0 + y1) // 2 else base[1]
+                px(img, x, y, c)
+        for x in range(cx - int(half * 0.7), cx + int(half * 0.7)):
+            if 0 <= x < w and img.getpixel((x, y1 - 1))[3]:
+                px(img, x, y1 - 1, base[0])
+    img = outline(img, OUTL)
+    return img
 
+def dead_tree():
+    w, h = 24, 32
+    img = canvas(w, h)
+    cx = w // 2
+    C0, C1 = H("#6b5140"), H("#4a3a2e")
+    for y in range(h - 20, h):
+        for x in range(cx - 1, cx + 2):
+            px(img, x, y, C1 if x < cx else C0)
+    px(img, cx, h - 21, C0)
+    for (x0, y0, x1, y1) in [(cx, h - 14, cx - 5, h - 21), (cx, h - 17, cx + 5, h - 24),
+                             (cx - 5, h - 21, cx - 7, h - 26), (cx + 5, h - 24, cx + 6, h - 28),
+                             (cx, h - 21, cx + 2, h - 27)]:
+        ImageDraw.Draw(img).line([(x0, y0), (x1, y1)], fill=C0 + (255,))
+    img = outline(img, OUTL)
+    return img
 
-def make_trees() -> None:
-    meadow_ramp = [LEAF_SHADOW, LEAF_DARK, LEAF_MID, LEAF_LIGHT, LEAF_SUN]
-    forest_ramp = [BIOME_RAMPS["forest"][1], BIOME_RAMPS["forest"][2], BIOME_RAMPS["forest"][3],
-                   BIOME_RAMPS["forest"][4], BIOME_RAMPS["forest"][5]]
-    amber_ramp  = [BIOME_RAMPS["amber"][1], BIOME_RAMPS["amber"][2], BIOME_RAMPS["amber"][3],
-                   BIOME_RAMPS["amber"][4], BIOME_RAMPS["amber"][5], GOLD_SUN]
-    copper_ramp = [UMBER_DARK, CRIMSON_DARK, CRIMSON_MID, CORAL_LIGHT, OCHRE_LIGHT, GOLD_SUN]
-    willow_ramp = [BIOME_RAMPS["fen"][1], BIOME_RAMPS["fen"][2], BIOME_RAMPS["fen"][3],
-                   BIOME_RAMPS["fen"][4], BIOME_RAMPS["fen"][5]]
+def rock(variant):
+    w, h = 18, 14
+    img = canvas(w, h)
+    R = ROCKC
+    ImageDraw.Draw(img).polygon([(1, 13), (2, 6), (6, 2), (12, 3), (16, 8), (16, 13)], fill=R[2] + (255,))
+    ImageDraw.Draw(img).polygon([(3, 13), (4, 7), (8, 5), (12, 8), (13, 13)], fill=R[1] + (255,))
+    ImageDraw.Draw(img).line([(6, 3), (11, 4)], fill=R[3] + (255,))
+    ImageDraw.Draw(img).line([(2, 7), (5, 4)], fill=R[3] + (255,))
+    ImageDraw.Draw(img).line([(9, 7), (9, 12)], fill=R[0] + (255,))
+    return outline(img, OUTL)
 
-    # Broadleaf 0 (lush Valley Oak, 32x48)
-    t0 = canvas(32, 48)
-    _broadleaf(t0, 16, 47, [(19, 25, 10, 8), (12, 24, 10, 8), (16, 17, 11, 9), (14, 12, 8, 6)],
-               meadow_ramp, seed=11)
-    save_png(t0, "sprites/tree_0.png")
+def bush():
+    w, h = 16, 12
+    img = canvas(w, h)
+    blob(img, 8, 7, 7, 5, BUSH, seed=7)
+    blob(img, 5, 6, 4, 3, BUSH, seed=8)
+    blob(img, 11, 7, 4, 3, BUSH, seed=9)
+    return outline(img, OUTL)
 
-    # Broadleaf 1 (tall Elm, 32x48)
-    t1 = canvas(32, 48)
-    _broadleaf(t1, 16, 47, [(19, 22, 9, 9), (12, 20, 9, 9), (16, 13, 9, 8), (15, 8, 6, 5)],
-               meadow_ramp, seed=23)
-    save_png(t1, "sprites/tree_1.png")
+def mushroom():
+    w, h = 12, 10
+    img = canvas(w, h)
+    RED = ramp(H("#c8453c")); STEM = ramp(H("#e8e0cc"))
+    ImageDraw.Draw(img).rectangle([4, 5, 7, 9], fill=STEM[1] + (255,))
+    ImageDraw.Draw(img).ellipse([1, 1, 10, 7], fill=RED[1] + (255,))
+    ImageDraw.Draw(img).ellipse([2, 1, 6, 4], fill=RED[2] + (255,))
+    px(img, 4, 3, (255, 255, 255)); px(img, 8, 4, (255, 255, 255)); px(img, 6, 2, (255, 255, 255))
+    return outline(img, OUTL)
 
-    # Broadleaf 2 (forest canopy oak, 32x48)
-    t2 = canvas(32, 48)
-    _broadleaf(t2, 16, 47, [(18, 25, 10, 8), (12, 23, 9, 8), (16, 15, 10, 9)],
-               forest_ramp, seed=37)
-    save_png(t2, "sprites/tree_2.png")
+def well():
+    """28x30: stone ring, wooden posts, small roof."""
+    w, h = 28, 30
+    img = canvas(w, h)
+    cx = w // 2
+    # stone ring
+    ImageDraw.Draw(img).ellipse([2, 18, 26, 29], fill=STONE[1] + (255,))
+    ImageDraw.Draw(img).ellipse([5, 20, 23, 27], fill=(24, 20, 34, 255))
+    ImageDraw.Draw(img).ellipse([7, 21, 21, 26], fill=ramp(H("#2f6fa8"))[1] + (255,))
+    ImageDraw.Draw(img).ellipse([9, 22, 15, 24], fill=ramp(H("#4f93c8"))[2] + (255,))
+    for x in range(3, 26, 4):        # masonry joints
+        px(img, x, 25, STONE[0]); px(img, x + 2, 28, STONE[0])
+    # posts + roof
+    for y in range(6, 19):
+        px(img, 4, y, WOOD[1]); px(img, 5, y, WOOD[0])
+        px(img, 22, y, WOOD[1]); px(img, 23, y, WOOD[0])
+    ImageDraw.Draw(img).polygon([(1, 7), (14, 0), (27, 7)], fill=ROOF_R[1] + (255,))
+    ImageDraw.Draw(img).polygon([(1, 7), (14, 3), (14, 8), (1, 9)], fill=ROOF_R[2] + (255,))
+    ImageDraw.Draw(img).line([(2, 8), (26, 8)], fill=ROOF_R[0] + (255,))
+    # bucket rope
+    ImageDraw.Draw(img).line([(14, 8), (14, 16)], fill=H("#c8b070") + (255,))
+    ImageDraw.Draw(img).rectangle([12, 16, 16, 19], fill=WOOD_D[1] + (255,))
+    return outline(img, OUTL)
 
-    # Amber Oak (32x48)
-    ao = canvas(32, 48)
-    _broadleaf(ao, 16, 47, [(19, 24, 10, 8), (12, 23, 10, 8), (16, 15, 11, 9), (13, 11, 7, 5)],
-               amber_ramp, seed=41)
-    save_png(ao, "sprites/amber_oak.png")
+def sign():
+    w, h = 16, 18
+    img = canvas(w, h)
+    for y in range(9, 18):
+        px(img, 7, y, WOOD[0]); px(img, 8, y, WOOD_D[1])
+    ImageDraw.Draw(img).rectangle([1, 2, 14, 10], fill=WOOD[2] + (255,))
+    ImageDraw.Draw(img).rectangle([1, 2, 14, 3], fill=WOOD[3] + (255,))
+    for y in (5, 7):     # "writing"
+        ImageDraw.Draw(img).line([(4, y), (11, y)], fill=WOOD_D[0] + (255,))
+    px(img, 3, 9, WOOD_D[0]); px(img, 12, 9, WOOD_D[0])
+    return outline(img, OUTL)
 
-    # Copper Oak (32x48)
-    co = canvas(32, 48)
-    _broadleaf(co, 16, 47, [(18, 25, 10, 8), (13, 22, 9, 8), (16, 14, 10, 8)],
-               copper_ramp, seed=53)
-    save_png(co, "sprites/copper_oak.png")
+def fence():
+    w, h = 16, 10
+    img = canvas(w, h)
+    for x in (2, 13):
+        for y in range(1, 10):
+            px(img, x, y, WOOD[2]); px(img, x + 1, y, WOOD[0])
+        px(img, x, 1, WOOD[3])
+    for y in (3, 6):
+        ImageDraw.Draw(img).line([(2, y), (14, y)], fill=WOOD[2] + (255,))
+        ImageDraw.Draw(img).line([(2, y + 1), (14, y + 1)], fill=WOOD_D[1] + (255,))
+    return outline(img, OUTL)
 
-    # Weeping Willow (32x48)
-    wl = canvas(32, 48)
-    _broadleaf(wl, 16, 47, [(18, 23, 11, 8), (13, 22, 11, 8), (16, 15, 11, 8)],
-               willow_ramp, seed=67, droop=True)
-    save_png(wl, "sprites/willow.png")
+# ---------------------------------------------------------------- buildings
+def _house_common(img, w, h, wall, roof, roof_dark, door_col, windows=True, awning=None):
+    d = ImageDraw.Draw(img)
+    base_y = h - 1
+    body_top = h - 31
+    # ---- walls: lit left, shaded right, thin plaster texture
+    d.rectangle([4, body_top, w - 5, base_y], fill=wall[2] + (255,))
+    for y in range(body_top, base_y + 1):
+        for x in range(4, w - 4):
+            t = (x - 4) / float(w - 8)
+            if t < 0.14:   px(img, x, y, wall[3])
+            elif t > 0.86: px(img, x, y, wall[1])
+    for y in range(body_top + 2, base_y, 5):      # faint plaster banding
+        for x in range(6, w - 6, 3):
+            if BAYER4[y & 3][x & 3] < 3 and img.getpixel((x, y))[3]:
+                px(img, x, y, wall[1])
+    # ---- timber framing: corner posts + a beam under the eave
+    for y in range(body_top, base_y + 1):
+        px(img, 4, y, WOOD_D[1]); px(img, w - 5, y, WOOD_D[1])
+    for x in range(4, w - 4):
+        px(img, x, body_top, WOOD_D[1])
+        if x % 2: px(img, x, body_top + 1, WOOD_D[2] if len(WOOD_D) > 2 else WOOD_D[1])
+    # ---- door with frame and step
+    dx0, dx1 = w // 2 - 6, w // 2 + 6
+    d.rectangle([dx0 - 1, base_y - 19, dx1 + 1, base_y], fill=WOOD_D[1] + (255,))
+    d.rectangle([dx0, base_y - 18, dx1, base_y], fill=door_col[1] + (255,))
+    d.rectangle([dx0, base_y - 18, dx1, base_y - 17], fill=door_col[2] + (255,))
+    d.line([(w // 2, base_y - 18), (w // 2, base_y)], fill=door_col[0] + (255,))
+    d.rectangle([dx0 + 1, base_y - 12, dx1 - 1, base_y - 11], fill=door_col[2] + (255,))
+    d.rectangle([dx0 + 1, base_y - 6, dx1 - 1, base_y - 5], fill=door_col[2] + (255,))
+    px(img, dx1 - 2, base_y - 10, H("#e8c860"))
+    px(img, dx1 - 3, base_y - 10, H("#b89a40"))
+    # ---- windows: deep blue glass, warm lit top, wooden cross frame
+    if windows:
+        for wx in (w // 2 - 22, w // 2 + 11):
+            d.rectangle([wx - 1, body_top + 6, wx + 9, body_top + 19], fill=WOOD_D[1] + (255,))
+            d.rectangle([wx, body_top + 7, wx + 8, body_top + 18], fill=H("#33507a") + (255,))
+            d.rectangle([wx, body_top + 7, wx + 8, body_top + 8], fill=H("#7fa8d0") + (255,))
+            d.line([(wx + 4, body_top + 7), (wx + 4, body_top + 18)], fill=WOOD_D[1] + (255,))
+            d.line([(wx, body_top + 12), (wx + 8, body_top + 12)], fill=WOOD_D[1] + (255,))
+            px(img, wx + 1, body_top + 10, H("#bcd8f2"))
+    # ---- roof: trapezoid, staggered shingle rows, lit ridge, dark eave
+    ry = body_top
+    top_y = ry - 17
+    d.polygon([(0, ry), (7, top_y), (w - 8, top_y), (w - 1, ry)], fill=roof[1] + (255,))
+    d.polygon([(0, ry), (7, top_y), (w // 2 - 2, top_y), (w // 2 - 2, ry)], fill=roof[2] + (255,))
+    # shingle rows
+    for row in range(0, 4):
+        yy = top_y + 3 + row * 4
+        span_a = 0 + row * 2
+        span_b = w - 1 - row * 2
+        for x in range(span_a + (row % 2) * 3, span_b, 6):
+            for k in range(3):
+                if 0 <= yy < h and img.getpixel((x + k, yy))[3]:
+                    px(img, x + k, yy, roof[0])
+                    if yy + 1 < h and img.getpixel((x + k, yy + 1))[3]:
+                        px(img, x + k, yy + 1, roof[3] if row < 2 else roof[2])
+    # ridge highlight + eave shadow
+    d.line([(8, top_y), (w - 9, top_y)], fill=roof[3] + (255,))
+    d.line([(1, ry), (w - 2, ry)], fill=roof_dark[0] + (255,))
+    d.line([(0, ry - 1), (w - 1, ry - 1)], fill=roof_dark[1] + (255,))
+    # barge boards along the slopes
+    d.line([(0, ry), (7, top_y)], fill=roof_dark[1] + (255,))
+    d.line([(w - 1, ry), (w - 8, top_y)], fill=roof_dark[1] + (255,))
+    # ---- chimney: brick, sits on the right slope
+    chx = w - 22
+    d.rectangle([chx, top_y - 9, chx + 6, top_y + 6], fill=ramp(H("#9a5b48"))[1] + (255,))
+    d.rectangle([chx - 1, top_y - 10, chx + 7, top_y - 8], fill=ramp(H("#9a5b48"))[0] + (255,))
+    for yy in range(top_y - 6, top_y + 5, 3):
+        for xx in range(chx + 1, chx + 6, 3):
+            px(img, xx + (yy % 2), yy, ramp(H("#9a5b48"))[0])
+    # ---- shop awning: scalloped stripes
+    if awning:
+        ay = body_top + 2
+        for x in range(2, w - 2, 8):
+            for k in range(7):
+                c = awning[0] if (x // 8) % 2 == 0 else awning[1]
+                px(img, x + k, ay, c); px(img, x + k, ay + 1, c)
+                px(img, x + k, ay + 2, mixc(c, (0, 0, 0), 0.25))
+            px(img, x + 1, ay + 3, awning[0] if (x // 8) % 2 == 0 else awning[1])
+            px(img, x + 4, ay + 3, awning[0] if (x // 8) % 2 == 0 else awning[1])
+    return img
 
-    # Pine 0, 1, 2 (32x48)
-    for i, sc in enumerate((0.92, 1.0, 0.84)):
-        pn = canvas(32, 48)
-        _conifer(pn, 16, 47, sc, forest_ramp, snow=False)
-        save_png(pn, f"sprites/pine_{i}.png")
+def house(variant):
+    """66x58 village house, door at bottom-centre."""
+    w, h = 66, 58
+    img = canvas(w, h)
+    roofs = [(ROOF_R, ROOF_R), (ROOF_B, ROOF_B), (ROOF_G, ROOF_G)]
+    wall = WALL if variant != 1 else WALL_D
+    roof, roof_d = roofs[variant % 3]
+    _house_common(img, w, h, wall, roof, roof_d, WOOD_D)
+    img = outline(img, OUTL)
+    return img
 
-    # Snow Spruce (32x48)
-    ts = canvas(32, 48)
-    _conifer(ts, 16, 47, 0.98, [LEAF_SHADOW, LEAF_DARK, LEAF_MID, LEAF_LIGHT, WATER_FOAM], snow=True)
-    save_png(ts, "sprites/tree_snow.png")
+def shop():
+    """66x58 shop: red awning, hanging sign, wide window."""
+    w, h = 66, 58
+    img = canvas(w, h)
+    _house_common(img, w, h, WALL, ROOF_B, ROOF_B, WOOD_D, windows=False,
+                  awning=(H("#c8453c"), H("#e8e0cc")))
+    d = ImageDraw.Draw(img)
+    # shop window (wide, warm lit)
+    d.rectangle([10, 36, 30, 47], fill=H("#e0b060") + (255,))
+    d.rectangle([10, 36, 30, 37], fill=H("#f8e0a0") + (255,))
+    d.line([(20, 36), (20, 47)], fill=WOOD_D[1] + (255,))
+    d.rectangle([36, 36, 56, 47], fill=H("#e0b060") + (255,))
+    d.rectangle([36, 36, 56, 37], fill=H("#f8e0a0") + (255,))
+    # hanging sign
+    d.rectangle([24, 24, 42, 32], fill=WOOD[2] + (255,))
+    d.rectangle([24, 24, 42, 25], fill=WOOD[3] + (255,))
+    d.line([(33, 24), (33, 21)], fill=H("#c8b070") + (255,))
+    for x in (28, 33, 38):
+        px(img, x, 28, WOOD_D[0]); px(img, x, 29, WOOD_D[0])
+    img = outline(img, OUTL)
+    return img
 
-    # Dead Snag Tree (32x48)
-    dt = canvas(32, 48)
-    rect(dt, 14, 22, 4, 25, TIMBER_MID)
-    vline(dt, 14, 22, 46, STONE_WARM)
-    vline(dt, 17, 22, 46, UMBER_DARK)
-    line(dt, 15, 28, 7, 17, OCHRE_MID)
-    line(dt, 7, 17, 5, 11, STONE_WARM)
-    line(dt, 17, 25, 25, 15, TIMBER_MID)
-    line(dt, 25, 15, 27, 9, OCHRE_MID)
-    line(dt, 15, 22, 13, 11, STONE_WARM)
-    line(dt, 13, 11, 16, 5, CREAM_SUN)
-    sel_outline_in_place(dt, INK_DEEP, UMBER_DARK)
-    save_png(dt, "sprites/dead_tree.png")
+def inn():
+    """66x58 inn: sign board with a bed pictogram."""
+    w, h = 66, 58
+    img = canvas(w, h)
+    _house_common(img, w, h, ramp(H("#cdb894")), ROOF_R, ROOF_R, WOOD_D)
+    d = ImageDraw.Draw(img)
+    d.rectangle([20, 22, 46, 33], fill=WOOD[2] + (255,))
+    d.rectangle([20, 22, 46, 23], fill=WOOD[3] + (255,))
+    # little bed pictogram
+    d.rectangle([24, 27, 41, 30], fill=H("#e8e0cc") + (255,))
+    d.rectangle([24, 26, 30, 27], fill=H("#f8f0dc") + (255,))
+    d.line([(24, 25), (24, 31)], fill=WOOD_D[0] + (255,))
+    d.line([(41, 25), (41, 31)], fill=WOOD_D[0] + (255,))
+    img = outline(img, OUTL)
+    return img
 
-    # Desert Yucca (32x32)
-    yc = canvas(32, 32)
-    rect(yc, 14, 16, 4, 14, TIMBER_MID)
-    vline(yc, 14, 16, 29, OCHRE_MID)
-    for ang_deg, length in ((-130, 10), (-105, 11), (-75, 11), (-50, 10), (-160, 8), (-20, 8)):
-        rad = math.radians(ang_deg)
-        ex = int(round(16 + math.cos(rad) * length))
-        ey = int(round(16 + math.sin(rad) * length))
-        line(yc, 16, 16, ex, ey, LEAF_MID if ang_deg < -90 else LEAF_DARK)
-        line(yc, 16, 15, ex, ey - 1, LEAF_LIGHT if ang_deg < -80 else LEAF_MID)
-    px(yc, 16, 8, CREAM_SUN)
-    px(yc, 16, 9, GOLD_SUN)
-    sel_outline_in_place(yc, INK_DEEP, LEAF_SHADOW)
-    save_png(yc, "sprites/yucca.png")
-
-
-def make_rocks_and_flora() -> None:
-    # 3 small rocks (16x16)
-    rock_shapes = [
-        (8, 10, 5.5, 4.2, [SLATE_DARK, SLATE_MID, SLATE_LIGHT, STONE_WARM, CREAM_SUN]),
-        (8, 11, 6.0, 3.8, [UMBER_DARK, TIMBER_MID, OCHRE_MID, OCHRE_LIGHT, CREAM_SUN]),
-        (8, 10, 5.2, 4.5, [BIOME_RAMPS["frost"][2], BIOME_RAMPS["frost"][3], BIOME_RAMPS["frost"][4],
-                           BIOME_RAMPS["frost"][5], BIOME_RAMPS["frost"][6]]),
-    ]
-    for i, (cx, cy, rx, ry, rmp) in enumerate(rock_shapes):
-        rk = canvas(16, 16)
-        shaded_ell(rk, cx, cy, rx, ry, rmp, seed=i * 19 + 3)
-        sel_outline_in_place(rk, INK_DEEP, rmp[1])
-        save_png(rk, f"sprites/rock_{i}.png")
-
-    # Highland boulder (32x32)
-    bd = canvas(32, 32)
-    shaded_ell(bd, 16, 20, 12, 9, [SLATE_DARK, SLATE_MID, SLATE_LIGHT, STONE_WARM, CREAM_SUN], seed=5)
-    shaded_ell(bd, 12, 16, 7, 5, [SLATE_MID, SLATE_LIGHT, STONE_WARM, CREAM_SUN], seed=8)
-    # Moss patch on upper-left crest
-    rect(bd, 9, 12, 5, 2, LEAF_LIGHT)
-    rect(bd, 10, 14, 4, 2, LEAF_MID)
-    sel_outline_in_place(bd, INK_DEEP, SLATE_DARK)
-    save_png(bd, "sprites/boulder.png")
-
-    # Arcane crystal cluster (16x16)
-    cr = canvas(16, 16)
-    for x0, y0, w, h, hi, mid in ((6, 2, 4, 12, WATER_FOAM, LAVENDER),
-                                  (3, 6, 3, 8, WATER_FOAM, WATER_LIGHT),
-                                  (10, 7, 3, 7, LAVENDER, INDIGO_ROYAL)):
-        rect(cr, x0, y0 + 2, w, h - 2, mid)
-        vline(cr, x0, y0 + 1, y0 + h - 1, hi)
-        px(cr, x0 + w // 2, y0, SUN_WHITE)
-    sel_outline_in_place(cr, INK_DEEP, SLATE_DARK)
-    save_png(cr, "sprites/crystal.png")
-
-    # Bushes (16x16)
-    for fname, berries in (("sprites/bush.png", True), ("sprites/bush_plain.png", False)):
-        bs = canvas(16, 16)
-        shaded_ell(bs, 8, 10, 6, 4.5, [LEAF_SHADOW, LEAF_DARK, LEAF_MID, LEAF_LIGHT, LEAF_SUN], seed=7)
-        shaded_ell(bs, 6, 8, 4, 3, [LEAF_DARK, LEAF_MID, LEAF_LIGHT, LEAF_SUN], seed=12)
-        if berries:
-            for bx, by in ((5, 8), (9, 7), (11, 10), (7, 11)):
-                px(bs, bx, by, CRIMSON_MID)
-                px(bs, bx, by - 1, CORAL_LIGHT)
-        sel_outline_in_place(bs, INK_DEEP, LEAF_SHADOW)
-        save_png(bs, fname)
-
-    # Mushroom cluster (16x16)
-    ms = canvas(16, 16)
-    rect(ms, 6, 9, 3, 5, CREAM_SUN)
-    rect(ms, 8, 10, 1, 4, STONE_WARM)
-    ell(ms, 7.5, 7.5, 4.5, 2.8, CRIMSON_MID)
-    hline(ms, 4, 9, 6, CORAL_LIGHT)
-    px(ms, 5, 6, CREAM_SUN)
-    px(ms, 9, 7, CREAM_SUN)
-    rect(ms, 11, 11, 2, 3, CREAM_SUN)
-    ell(ms, 12, 10, 2.5, 1.5, OCHRE_LIGHT)
-    sel_outline_in_place(ms, INK_DEEP, UMBER_DARK)
-    save_png(ms, "sprites/mushroom.png")
-
-    # Potted plant (16x16)
-    pp = canvas(16, 16)
-    rect(pp, 5, 10, 6, 5, CRIMSON_MID)
-    hline(pp, 4, 11, 10, CORAL_LIGHT)
-    hline(pp, 5, 10, 14, CRIMSON_DARK)
-    shaded_ell(pp, 8, 7, 4.2, 3.2, [LEAF_DARK, LEAF_MID, LEAF_LIGHT, LEAF_SUN], seed=14)
-    sel_outline_in_place(pp, INK_DEEP, LEAF_SHADOW)
-    save_png(pp, "sprites/potted_plant.png")
-
-    # Urn (16x16)
-    ur = canvas(16, 16)
-    ell(ur, 8, 10, 4.5, 4.5, OCHRE_MID)
-    ell(ur, 7, 9, 3.0, 3.0, OCHRE_LIGHT)
-    rect(ur, 6, 4, 4, 2, OCHRE_LIGHT)
-    hline(ur, 5, 10, 4, CREAM_SUN)
-    hline(ur, 6, 9, 5, UMBER_DARK)
-    sel_outline_in_place(ur, INK_DEEP, UMBER_DARK)
-    save_png(ur, "sprites/urn.png")
-
-    # Stump (16x16)
-    st = canvas(16, 16)
-    rect(st, 5, 8, 6, 6, TIMBER_MID)
-    vline(st, 5, 8, 13, OCHRE_MID)
-    vline(st, 10, 8, 13, UMBER_DARK)
-    ell(st, 8, 8, 3.5, 2.0, OCHRE_LIGHT)
-    px(st, 8, 8, TIMBER_MID)
-    px(st, 4, 13, UMBER_DARK)
-    px(st, 11, 13, UMBER_DARK)
-    sel_outline_in_place(st, INK_DEEP, UMBER_DARK)
-    save_png(st, "sprites/stump.png")
-
-    # Reeds (16x16)
-    rd = canvas(16, 16)
-    for rx, h in ((4, 11), (7, 13), (10, 12), (12, 9)):
-        vline(rd, rx, 15 - h, 14, LEAF_MID if rx < 9 else LEAF_DARK)
-        px(rd, rx, 15 - h, LEAF_LIGHT)
-    for cx, cy in ((7, 3), (10, 5)):
-        rect(rd, cx, cy, 2, 3, TIMBER_MID)
-        px(rd, cx, cy, OCHRE_LIGHT)
-    sel_outline_in_place(rd, LEAF_SHADOW, LEAF_DARK)
-    save_png(rd, "sprites/reeds.png")
-
-
-def make_village_and_dungeon_props() -> None:
-    # 1. Signpost (16x16)
-    sg = canvas(16, 16)
-    rect(sg, 7, 8, 2, 7, TIMBER_MID)
-    rect(sg, 2, 2, 12, 7, OCHRE_LIGHT)
-    hline(sg, 2, 13, 2, CREAM_SUN)
-    hline(sg, 2, 13, 8, UMBER_DARK)
-    hline(sg, 4, 11, 4, TIMBER_MID)
-    hline(sg, 4, 9, 6, TIMBER_MID)
-    sel_outline_in_place(sg, INK_DEEP, UMBER_DARK)
-    save_png(sg, "sprites/sign.png")
-
-    # 2. Torch (16x16)
-    tc = canvas(16, 16)
-    rect(tc, 7, 7, 2, 8, TIMBER_MID)
-    rect(tc, 6, 5, 4, 3, SLATE_MID)
-    rect(tc, 6, 2, 4, 3, GOLD_SUN)
-    px(tc, 7, 1, CORAL_LIGHT)
-    px(tc, 7, 3, SUN_WHITE)
-    px(tc, 8, 3, SUN_WHITE)
-    sel_outline_in_place(tc, INK_DEEP, UMBER_DARK)
-    save_png(tc, "sprites/torch.png")
-
-    # 3. Campfire (16x16)
-    cf = canvas(16, 16)
-    for rx, ry in ((4, 13), (12, 13), (8, 14), (6, 12), (10, 12)):
-        rect(cf, rx - 1, ry - 1, 2, 2, SLATE_MID)
-    line(cf, 4, 11, 12, 12, TIMBER_MID)
-    line(cf, 5, 12, 11, 10, OCHRE_MID)
-    ell(cf, 8, 8, 3.0, 3.5, CRIMSON_MID)
-    ell(cf, 8, 8, 2.0, 2.5, GOLD_SUN)
-    px(cf, 8, 7, SUN_WHITE)
-    px(cf, 7, 4, GOLD_SUN)
-    sel_outline_in_place(cf, INK_DEEP, UMBER_DARK)
-    save_png(cf, "sprites/campfire.png")
-
-    # 4. Iron Cauldron (16x16)
-    cd = canvas(16, 16)
-    ell(cd, 8, 10, 5.5, 4.5, SLATE_DARK)
-    ell(cd, 7, 9, 3.5, 2.5, SLATE_MID)
-    hline(cd, 4, 12, 5, SLATE_LIGHT)
-    hline(cd, 5, 11, 6, LEAF_SUN)
-    px(cd, 7, 5, LEAF_LIGHT)
-    sel_outline_in_place(cd, INK_DEEP, SLATE_DARK)
-    save_png(cd, "sprites/cauldron.png")
-
-    # 5. Water Basin / Bucket (16x16)
-    bs = canvas(16, 16)
-    rect(bs, 4, 6, 8, 8, TIMBER_MID)
-    hline(bs, 4, 11, 8, SLATE_LIGHT)
-    hline(bs, 4, 11, 12, SLATE_DARK)
-    ell(bs, 8, 6, 4.0, 1.8, WATER_LIGHT)
-    px(bs, 7, 6, WATER_FOAM)
-    sel_outline_in_place(bs, INK_DEEP, UMBER_DARK)
-    save_png(bs, "sprites/basin.png")
-
-    # 6. Fence H (16x16), Fence Post (16x16), Fence Gate (32x16)
-    fn = canvas(16, 16)
-    hline(fn, 0, 15, 7, OCHRE_LIGHT)
-    hline(fn, 0, 15, 8, TIMBER_MID)
-    hline(fn, 0, 15, 12, OCHRE_MID)
-    hline(fn, 0, 15, 13, UMBER_DARK)
-    for px_x in (2, 11):
-        rect(fn, px_x, 4, 3, 11, TIMBER_MID)
-        vline(fn, px_x, 4, 14, OCHRE_LIGHT)
-        px(fn, px_x + 1, 3, CREAM_SUN)
-    sel_outline_in_place(fn, INK_DEEP, UMBER_DARK)
-    save_png(fn, "sprites/fence.png")
-
-    fp = canvas(16, 16)
-    rect(fp, 6, 4, 4, 11, TIMBER_MID)
-    vline(fp, 6, 4, 14, OCHRE_LIGHT)
-    vline(fp, 9, 4, 14, UMBER_DARK)
-    hline(fp, 6, 9, 3, CREAM_SUN)
-    sel_outline_in_place(fp, INK_DEEP, UMBER_DARK)
-    save_png(fp, "sprites/fence_post.png")
-
-    fg = canvas(32, 16)
-    for px_x in (2, 27):
-        rect(fg, px_x, 3, 3, 12, TIMBER_MID)
-        vline(fg, px_x, 3, 14, OCHRE_LIGHT)
-    for gx in range(6, 26, 4):
-        rect(fg, gx, 5, 2, 9, OCHRE_MID)
-        px(fg, gx, 5, CREAM_SUN)
-    hline(fg, 5, 26, 7, OCHRE_LIGHT)
-    hline(fg, 5, 26, 11, TIMBER_MID)
-    sel_outline_in_place(fg, INK_DEEP, UMBER_DARK)
-    save_png(fg, "sprites/fence_gate.png")
-
-    # 7. Bench (32x16) & Flowerbed (32x16)
-    bn = canvas(32, 16)
-    rect(bn, 3, 5, 26, 3, OCHRE_LIGHT)
-    hline(bn, 3, 28, 7, TIMBER_MID)
-    rect(bn, 2, 9, 28, 3, OCHRE_MID)
-    rect(bn, 4, 12, 3, 3, UMBER_DARK)
-    rect(bn, 25, 12, 3, 3, UMBER_DARK)
-    sel_outline_in_place(bn, INK_DEEP, UMBER_DARK)
-    save_png(bn, "sprites/bench.png")
-
-    fb = canvas(32, 16)
-    rect(fb, 2, 7, 28, 8, TIMBER_MID)
-    hline(fb, 2, 29, 7, OCHRE_LIGHT)
-    rect(fb, 4, 6, 24, 5, LEAF_DARK)
-    for fx in range(5, 27, 3):
-        px(fb, fx, 5, LEAF_LIGHT)
-        px(fb, fx + 1, 5, GOLD_SUN if (fx % 6 == 2) else CRIMSON_MID)
-        px(fb, fx + 1, 4, SUN_WHITE if (fx % 6 == 2) else CORAL_LIGHT)
-    sel_outline_in_place(fb, INK_DEEP, UMBER_DARK)
-    save_png(fb, "sprites/flowerbed.png")
-
-    # 8. Ladder (16x16), Barrel (16x16), Crate (16x16), Keg (16x16)
-    ld = canvas(16, 16)
-    rect(ld, 4, 1, 2, 14, TIMBER_MID)
-    rect(ld, 10, 1, 2, 14, TIMBER_MID)
-    for y in (3, 7, 11):
-        hline(ld, 5, 10, y, OCHRE_LIGHT)
-    sel_outline_in_place(ld, INK_DEEP, UMBER_DARK)
-    save_png(ld, "sprites/ladder.png")
-
-    br = canvas(16, 16)
-    ell(br, 8, 9, 5.0, 5.5, TIMBER_MID)
-    rect(br, 4, 4, 8, 2, OCHRE_LIGHT)
-    hline(br, 3, 12, 6, SLATE_LIGHT)
-    hline(br, 3, 12, 11, SLATE_DARK)
-    vline(br, 5, 5, 13, OCHRE_MID)
-    sel_outline_in_place(br, INK_DEEP, UMBER_DARK)
-    save_png(br, "sprites/barrel.png")
-
-    ct = canvas(16, 16)
-    rect(ct, 3, 3, 10, 11, OCHRE_MID)
-    rect(ct, 4, 4, 8, 9, OCHRE_LIGHT)
-    hline(ct, 3, 12, 3, CREAM_SUN)
-    line(ct, 4, 4, 11, 11, TIMBER_MID)
-    line(ct, 11, 4, 4, 11, TIMBER_MID)
-    sel_outline_in_place(ct, INK_DEEP, UMBER_DARK)
-    save_png(ct, "sprites/crate.png")
-
-    kg = canvas(16, 16)
-    ell(kg, 8, 8, 5.5, 4.5, TIMBER_MID)
-    hline(kg, 3, 12, 6, OCHRE_LIGHT)
-    vline(kg, 6, 4, 12, SLATE_LIGHT)
-    vline(kg, 10, 4, 12, SLATE_DARK)
-    px(kg, 8, 10, GOLD_SUN)
-    sel_outline_in_place(kg, INK_DEEP, UMBER_DARK)
-    save_png(kg, "sprites/keg.png")
-
-    # 9. Table (16x16), Longtable (48x16), Counter (16x16), Stool (16x16)
-    tb = canvas(16, 16)
-    rect(tb, 2, 4, 12, 5, OCHRE_LIGHT)
-    hline(tb, 2, 13, 4, CREAM_SUN)
-    hline(tb, 2, 13, 9, TIMBER_MID)
-    rect(tb, 3, 10, 2, 4, UMBER_DARK)
-    rect(tb, 11, 10, 2, 4, UMBER_DARK)
-    sel_outline_in_place(tb, INK_DEEP, UMBER_DARK)
-    save_png(tb, "sprites/table.png")
-
-    lt = canvas(48, 16)
-    rect(lt, 2, 4, 44, 6, OCHRE_LIGHT)
-    hline(lt, 2, 45, 4, CREAM_SUN)
-    hline(lt, 2, 45, 9, TIMBER_MID)
-    for lx in (4, 23, 41):
-        rect(lt, lx, 10, 3, 4, UMBER_DARK)
-    sel_outline_in_place(lt, INK_DEEP, UMBER_DARK)
-    save_png(lt, "sprites/longtable.png")
-
-    cn = canvas(16, 16)
-    rect(cn, 0, 2, 16, 13, TIMBER_MID)
-    hline(cn, 0, 15, 2, CREAM_SUN)
-    hline(cn, 0, 15, 3, OCHRE_LIGHT)
-    hline(cn, 0, 15, 5, UMBER_DARK)
-    hline(cn, 0, 15, 14, INK_DEEP)
-    save_png(cn, "sprites/counter.png")
-
-    sl = canvas(16, 16)
-    rect(sl, 5, 6, 6, 3, OCHRE_LIGHT)
-    hline(sl, 5, 10, 6, CREAM_SUN)
-    rect(sl, 5, 9, 2, 5, TIMBER_MID)
-    rect(sl, 9, 9, 2, 5, UMBER_DARK)
-    sel_outline_in_place(sl, INK_DEEP, UMBER_DARK)
-    save_png(sl, "sprites/stool.png")
-
-    # 10. Lantern (16x16), Candle (16x16), Plate (16x16)
-    ln = canvas(16, 16)
-    rect(ln, 6, 4, 4, 2, SLATE_DARK)
-    rect(ln, 5, 6, 6, 6, GOLD_SUN)
-    rect(ln, 6, 7, 4, 4, SUN_WHITE)
-    hline(ln, 5, 10, 12, SLATE_MID)
-    sel_outline_in_place(ln, INK_DEEP, SLATE_DARK)
-    save_png(ln, "sprites/lantern.png")
-
-    cnd = canvas(16, 16)
-    rect(cnd, 6, 11, 4, 2, GOLD_SHADE)
-    rect(cnd, 7, 6, 2, 5, CREAM_SUN)
-    px(cnd, 7, 4, GOLD_SUN)
-    px(cnd, 8, 4, GOLD_SUN)
-    px(cnd, 7, 3, SUN_WHITE)
-    sel_outline_in_place(cnd, INK_DEEP, UMBER_DARK)
-    save_png(cnd, "sprites/candle.png")
-
-    pl = canvas(16, 16)
-    ell(pl, 8, 9, 4.5, 3.0, CREAM_SUN)
-    ell(pl, 8, 9, 2.8, 1.8, STONE_WARM)
-    px(pl, 7, 8, CORAL_LIGHT)
-    px(pl, 9, 9, GOLD_SUN)
-    sel_outline_in_place(pl, INK_DEEP, SLATE_DARK)
-    save_png(pl, "sprites/plate.png")
-
-    # 11. Shelf (48x32), Bed (16x32), Pillar (16x32)
-    sh = canvas(48, 32)
-    rect(sh, 2, 2, 44, 28, TIMBER_MID)
-    hline(sh, 2, 45, 2, OCHRE_LIGHT)
-    for sy in (9, 18, 27):
-        rect(sh, 4, sy - 6, 40, 5, UMBER_DARK)
-        hline(sh, 3, 44, sy, OCHRE_LIGHT)
-        for bx in range(6, 42, 4):
-            col = (CRIMSON_MID, INDIGO_ROYAL, GOLD_SUN, LEAF_MID, WATER_LIGHT)[(bx + sy) % 5]
-            rect(sh, bx, sy - 5, 3, 4, col)
-            px(sh, bx, sy - 5, SUN_WHITE)
-    sel_outline_in_place(sh, INK_DEEP, UMBER_DARK)
-    save_png(sh, "sprites/shelf.png")
-
-    bd = canvas(16, 32)
-    rect(bd, 2, 3, 12, 27, TIMBER_MID)
-    hline(bd, 2, 13, 3, OCHRE_LIGHT)
-    rect(bd, 3, 5, 10, 6, CREAM_SUN)
-    rect(bd, 3, 11, 10, 17, CRIMSON_MID)
-    hline(bd, 3, 12, 11, CREAM_SUN)
-    hline(bd, 3, 12, 12, CORAL_LIGHT)
-    hline(bd, 3, 12, 27, CRIMSON_DARK)
-    sel_outline_in_place(bd, INK_DEEP, UMBER_DARK)
-    save_png(bd, "sprites/bed.png")
-
-    pil = canvas(16, 32)
-    rect(pil, 3, 3, 10, 4, CREAM_SUN)
-    rect(pil, 4, 7, 8, 19, STONE_WARM)
-    vline(pil, 5, 7, 25, CREAM_SUN)
-    vline(pil, 7, 7, 25, SLATE_LIGHT)
-    vline(pil, 10, 7, 25, SLATE_DARK)
-    rect(pil, 2, 26, 12, 4, SLATE_MID)
-    hline(pil, 2, 13, 26, CREAM_SUN)
-    sel_outline_in_place(pil, INK_DEEP, SLATE_DARK)
-    save_png(pil, "sprites/pillar.png")
-
-    # 12. Mailbox (16x16), Noticeboard (16x16), Chest Closed (16x16), Chest Open (16x16)
-    mb = canvas(16, 16)
-    rect(mb, 7, 9, 2, 6, TIMBER_MID)
-    rect(mb, 4, 4, 8, 6, SLATE_MID)
-    hline(mb, 4, 11, 4, SLATE_LIGHT)
-    px(mb, 11, 5, CRIMSON_MID)
-    px(mb, 11, 6, CORAL_LIGHT)
-    sel_outline_in_place(mb, INK_DEEP, SLATE_DARK)
-    save_png(mb, "sprites/mailbox.png")
-
-    nb = canvas(16, 16)
-    rect(nb, 3, 9, 2, 6, TIMBER_MID)
-    rect(nb, 11, 9, 2, 6, UMBER_DARK)
-    rect(nb, 1, 2, 14, 9, OCHRE_MID)
-    rect(nb, 2, 3, 12, 7, TIMBER_MID)
-    rect(nb, 3, 4, 4, 5, CREAM_SUN)
-    rect(nb, 9, 4, 4, 4, GOLD_SUN)
-    sel_outline_in_place(nb, INK_DEEP, UMBER_DARK)
-    save_png(nb, "sprites/noticeboard.png")
-
-    cc = canvas(16, 16)
-    rect(cc, 2, 5, 12, 9, TIMBER_MID)
-    hline(cc, 2, 13, 5, GOLD_SUN)
-    hline(cc, 2, 13, 9, GOLD_SHADE)
-    vline(cc, 4, 5, 13, GOLD_SUN)
-    vline(cc, 11, 5, 13, GOLD_SHADE)
-    rect(cc, 7, 8, 2, 3, SUN_WHITE)
-    sel_outline_in_place(cc, INK_DEEP, UMBER_DARK)
-    save_png(cc, "sprites/chest_closed.png")
-
-    co = canvas(16, 16)
-    rect(co, 2, 3, 12, 4, OCHRE_MID)
-    hline(co, 2, 13, 3, GOLD_SUN)
-    rect(co, 2, 7, 12, 7, TIMBER_MID)
-    rect(co, 3, 7, 10, 3, INK_DEEP)
-    hline(co, 2, 13, 10, GOLD_SHADE)
-    vline(co, 4, 3, 13, GOLD_SUN)
-    vline(co, 11, 3, 13, GOLD_SHADE)
-    sel_outline_in_place(co, INK_DEEP, UMBER_DARK)
-    save_png(co, "sprites/chest_open.png")
-
-    # 13. Forge Hearth (48x48) & Forge Anvil (32x32)
-    fh = canvas(48, 48)
-    rect(fh, 16, 2, 16, 20, SLATE_MID)
-    vline(fh, 16, 2, 21, STONE_WARM)
-    rect(fh, 6, 18, 36, 27, SLATE_DARK)
-    rect(fh, 8, 20, 32, 23, SLATE_MID)
-    hline(fh, 6, 41, 18, CREAM_SUN)
-    # Glowing coal arch
-    rect(fh, 14, 27, 20, 15, INK_DEEP)
-    rect(fh, 16, 33, 16, 8, CRIMSON_MID)
-    rect(fh, 18, 35, 12, 5, GOLD_SUN)
-    rect(fh, 20, 37, 8, 3, SUN_WHITE)
-    sel_outline_in_place(fh, INK_DEEP, SLATE_DARK)
-    save_png(fh, "sprites/forge_hearth.png")
-
-    fa = canvas(32, 32)
-    rect(fa, 9, 17, 14, 12, TIMBER_MID)
-    vline(fa, 9, 17, 28, OCHRE_MID)
-    # Horned iron anvil on block
-    rect(fa, 7, 11, 18, 4, SLATE_MID)
-    hline(fa, 5, 25, 11, CREAM_SUN)
-    hline(fa, 5, 9, 12, SLATE_LIGHT)
-    rect(fa, 12, 15, 8, 3, SLATE_DARK)
-    sel_outline_in_place(fa, INK_DEEP, SLATE_DARK)
-    save_png(fa, "sprites/forge_anvil.png")
-
-    # 14. Pixel Cloud (64x32) — clean 1x clouds
-    cl = canvas(64, 32)
-    for cx, cy, rx, ry in ((20, 19, 14, 7), (33, 16, 15, 9), (45, 20, 11, 6)):
-        shaded_ell(cl, cx, cy, rx, ry, [SLATE_LIGHT, WATER_FOAM, CREAM_SUN, SUN_WHITE], seed=9)
-    hline(cl, 12, 52, 25, SLATE_LIGHT)
-    save_png(cl, "sprites/cloud.png")
-
-
-def generate_objects() -> None:
-    make_trees()
-    make_rocks_and_flora()
-    make_village_and_dungeon_props()
-
-
-if __name__ == "__main__":
-    generate_objects()
-    print("Generated all flora, rocks, props, furniture, and cloud sprites")
+def castle():
+    w, h = 74, 78
+    img = canvas(w, h)
+    d = ImageDraw.Draw(img)
+    d.rectangle([6, 34, 67, 77], fill=STONE[2] + (255,))
+    for x in range(6, 68, 8):
+        d.rectangle([x, 28, x + 5, 34], fill=STONE[2] + (255,))
+    for tw, tx in ((16, 26), (16, 42)):
+        d.rectangle([tw, tx, tw + 13, tx + 24], fill=STONE[1] + (255,))
+        for x in range(tw, tw + 14, 5):
+            d.rectangle([x, tx - 4, x + 3, tx], fill=STONE[1] + (255,))
+    d.rectangle([30, 56, 43, 77], fill=(24, 20, 34, 255))
+    d.ellipse([33, 58, 40, 71], fill=H("#5a4230") + (255,))
+    for y in range(40, 70, 6):
+        d.line([(8, y), (65, y)], fill=STONE[0] + (255,))
+    for x in range(12, 66, 12):
+        for y in range(40, 70, 12):
+            d.line([(x, y), (x, y + 5)], fill=STONE[0] + (255,))
+    d.polygon([(0, 30), (37, 6), (73, 30)], fill=ROOF_B[1] + (255,))
+    d.polygon([(0, 30), (37, 6), (37, 13), (0, 33)], fill=ROOF_B[2] + (255,))
+    d.line([(0, 30), (73, 30)], fill=ROOF_B[0] + (255,))
+    return outline(img, OUTL)

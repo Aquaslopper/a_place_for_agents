@@ -1,29 +1,37 @@
-# Credits & Asset Provenance
+# Credits & licenses
 
-All runtime assets are inventoried in `ART_MANIFEST.md` and validated by `tools/validate_assets.py`.
+## Soundtrack
 
-## Visual Art & SFX (CC0 1.0)
+The 13 in-game cues are recordings of compositions from [EasyRPG/OpenRTP](https://github.com/EasyRPG/RTP/tree/993d88cbc78c658d348bbfa74a3b424d393d27e5/Music). **Juan Manuel Nigretti** ([Good Game Audio](https://soundcloud.com/goodgameaudio)) wrote the twelve CC BY pieces in 2010; **[Someoneman](https://github.com/Someoneman)** wrote *Boss 3* (2022, CC0). See [the cue sheet](assets/audio/SCORE.txt) for every original title, its use, duration and license. The original MIDIs are included.
 
-- **16-bit Pixel Art (`assets/tiles/`, `assets/sprites/`, `assets/icons/`, `assets/fx/`, `assets/backdrops/`, `assets/ui/`, `assets/title_bg.png`):**
-  100% original repository-authored pixel art generated via the unified `tools/build_art.py` pipeline under `tools/snes.py`'s 32-color Valley Hearth palette and ≤8-color biome ramps.
-  Dedicated to the public domain under **CC0 1.0 Universal**: https://creativecommons.org/publicdomain/zero/1.0/
-- **Sound Effects (`assets/audio/{cursor,confirm,cancel,sword,hit,spell,heal,coin,potion,door,encounter,levelup,flee}.ogg`):**
-  Synthesized offline by `tools/gen_assets.py`. Dedicated under **CC0 1.0 Universal**.
+`tools/render_score.py` renders these pieces offline with the **GeneralUser GS** instrument bank by **[S. Christian Collins](https://www.schristiancollins.com/generaluser.php)**, adds stereo echo, prepares loop/release tails and balances levels. The bank has its own license; it is not redistributed. The score is not covered by the original SFX's CC0 dedication.
 
-## Music Score (`assets/audio/*.ogg`)
+## Pixel art
 
-All 13 music cues are offline Ogg Vorbis recordings rendered by `tools/render_score.py` using the GeneralUser GS v1.471 SoundFont (`GeneralUser GS SoundFont License v2.0`, S. Christian Collins). See `assets/audio/SCORE.txt` for full cue mappings and playback details.
+Source: [OpenRTP, revision `993d88c`](https://github.com/EasyRPG/RTP/tree/993d88cbc78c658d348bbfa74a3b424d393d27e5). The [vendored authors list](assets/source/openrtp/AUTHORS.md) gives licenses, attribution links and individual frame credits. CC BY here means [CC BY 4.0 International](https://creativecommons.org/licenses/by/4.0/); CC0 means [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 
-- **12 Cues (`title`, `village`, `field`, `wood`, `fen`, `pass`, `dunes`, `hearth`, `chapel`, `battle`, `victory`, `gameover`):**
-  Original MIDIs (`Opening 2`, `Town 1`, `Field 1`, `Ending 2`, `Dungeon 1`, `Castle 1`, `Vehicle 1`, `Sorrow`, `Church`, `Battle 1`, `JFanfare 1`, `Game Over 1`) by **Juan Manuel Nigretti** (2010, EasyRPG OpenRTP `993d88c`), licensed under **CC BY 4.0**: https://creativecommons.org/licenses/by/4.0/
-- **Boss Cue (`boss.ogg`):**
-  Original MIDI (`Boss 3`) by **Someoneman** (2022, EasyRPG OpenRTP `993d88c`), dedicated under **CC0 1.0 Universal**.
+| Source | Credit and use in this game |
+|---|---|
+| `ChipSet/{Exterior,Interior,Dungeon,World}.png` | **[Jason Perry / finalbossblues](https://finalbossblues.itch.io/openrtp-tiles)** (CC0). Cropped 16 px textures and complete objects; palette swaps, transition masks, planted scenery, new full-size building facades (including the slate-and-stone smithy), and battlefield compositions. |
+| `CharSet/Actor1.png` | **[Marina Navarro Travesset](https://muerteatartajo.blogspot.com)** (base) and **[VictorSena](https://vashmaker.blogspot.com/p/works.html)** (edits), CC BY. Color-keyed and reordered walking frames. |
+| `CharSet/People1–5.png`, `Animal.png` | **VictorSena** (CC BY); **[Garakuta](http://garakutamaker.blog.fc2.com/)** (CC0 animal frames). People3 includes **Easychar** work by **R.C.O.**, **Jason Perry** and **Marina Navarro Travesset**; see upstream frame credits. The expanded generated-village roster, ranger, and cow/horse farm animals are cropped and reordered; the child was resized. |
+| `CharSet/Monster1–3.png`, `Monster/Hornet.png` | **MerchantShade**, **Garakuta**, **Jetrotal**, **Jason Perry** (CC0 contributions); **VictorSena**, **R.C.O.** and **Orochii Zouveleki** (CC BY contributions). Field and side-view battle frames were selected, keyed and scaled, including previously unused bandit, goblin, reaper, faerie, drake, naga, shade, dread knight and archfiend slots. The Slime King is a crowned adaptation of MerchantShade's slime; tiger and porcupine use OpenRTP Animal frames. The wolf, bat, wisp and serpent are repository-drawn instead. |
+| `CharSet/Object1.png`, `Object2.png` | **Tom Lemmens**, **Blarumyrran** (original chest, CC0) and **Verdant_Jack** (Object2, CC0). Cropped object frames and building doors. |
+| `FaceSet/{Actor1,Actor2,People1,People2,Monster}.png` | **Garakuta**, CC0. Cropped character portraits. |
+| `Battle/{Arrow,Blow,Sword1}.png` | **Someoneman**, CC0. Green-keyed, trimmed combat-effect frames. |
+| `System/{System,Royal}.png` | **andwhyisit**, CC BY / OGA-BY. UI frame and gauge crops. |
+| `Title/{Title1,Title2}.png` | **Francisco de la Peña**, CC0. Resized title plates. |
+| `GameOver/Game Over.png` | **jetrotal**, CC0; **kou**, CC BY (koubit_001 font). Resized game-over plate. |
+| `Panorama/{Dawn2,Night Sky1}.png`, `Picture/Cloud.png` | **Tom Lemmens**, CC BY / OGA-BY (panoramas); **DonMiguel**, CC0 (cloud). Resized backgrounds and trimmed cloud sprite. |
 
-## Typography
+Additional original artwork and synthesized UI/combat sound effects in `tools/` are CC0 by the repository's authors. That dedication does **not** replace the licenses of any upstream material used in a composite.
 
-- **Press Start 2P (`assets/fonts/PressStart2P-Regular.ttf`):**
-  By Cody Boisclair (`cody@zone38.net`), licensed under the **SIL Open Font License 1.1** (`assets/fonts/OFL.txt`).
+## Visual references, not game assets
 
-## Engine & Libraries
+- [Potos Village](https://www.snesmaps.com/maps/SecretOfMana/002bPotosVillageMap.html) and the [Pandora–Potos–Water Palace path](https://www.snesmaps.com/maps/SecretOfMana/003bPandoraPotosWaterPalacePathMap.html), *Secret of Mana*, via SNESMaps. The study was about **walking scale and layout**: roads meet doors and cross streams at specific places; vegetation frames clearings; banks and cliff faces continue across tiles. No map or graphics from that game are distributed here.
+- [Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles) and the [RM2k/3 chipset template guide](https://www.deviantart.com/jojogape/art/RPG-Maker-2000-and-2003-Tileset-Template-v2-327699881). Distinguish overworld symbols, full exterior objects, interior furnishings and terrain blocks. The field atlas is a new corner-mask implementation, not an emulator of the original autotiler.
 
-- **raylib 5.5:** Copyright (c) Ramon Santamaria (`raysan5`), licensed under **zlib/libpng**.
+## Engine and font
+
+- [raylib](https://github.com/raysan5/raylib) 5.5 — zlib/libpng license; fetched at build time.
+- **Press Start 2P** by CodeMan38 — SIL Open Font License 1.1. See [OFL.txt](assets/fonts/OFL.txt).

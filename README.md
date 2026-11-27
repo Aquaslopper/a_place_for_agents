@@ -11,10 +11,10 @@ king who has made off with the village crown.
 
 ![Elmswick, the village the game opens in](docs/screenshots/village.png)
 
-Built in C++17 with [raylib 5.5](https://github.com/raysan5/raylib), coherent
-repository-authored 16-bit pixel art, and a streamed 13-cue score. See
-[the art bible](docs/ART_BIBLE.md), [the asset manifest](ART_MANIFEST.md),
-[credits and licenses](CREDITS.md), and the [soundtrack cue sheet](assets/audio/SCORE.txt).
+Built in C++17 with [raylib 5.5](https://github.com/raysan5/raylib), adapted
+OpenRTP pixel art and a streamed 13-cue score. See [credits and licenses](CREDITS.md)
+and the [soundtrack cue sheet](assets/audio/SCORE.txt). If you are working on
+the game as an agent, the repository guide is [AGENTS.md](AGENTS.md).
 
 ## Play
 
@@ -103,7 +103,7 @@ points toward story destinations.
 - **Field encounters and a party.** Aldric (Knight), Iris (Mage) and Pip
   (Cleric) have distinct strengths. Twenty-three enemy species roam the world
   (plus the Slime King); walking into a visible field monster starts that fight.
-  The expanded bestiary includes bandits, goblins, spirits, dragons and
+  The expanded OpenRTP roster includes bandits, goblins, spirits, dragons and
   wilderness beasts.
 - **44 items and equipment slots.** Tiered potions, ethers, smoke bombs,
 remedies, eight weapon lines (swords, axes, polearms, daggers, bows, maces,
@@ -186,9 +186,8 @@ All runtime assets are committed. These optional tools regenerate art and sound
 effects; Python dependencies are only needed if you are editing the source art.
 
 ```bash
-python3 tools/build_art.py        # regenerate all 250 16-bit PNGs (Pillow, NumPy)
-python3 tools/validate_assets.py  # validate grid alignment, manifest & C++ parity
-python3 tools/gen_assets.py       # art + short SFX: also needs soundfile
+python3 tools/build_art.py     # art only: Pillow, NumPy
+python3 tools/gen_assets.py    # art + short SFX: also needs soundfile
 ```
 
 To render the score explicitly, install `mido`, `numpy`, `soundfile` and
@@ -200,8 +199,9 @@ python3 tools/render_score.py /path/to/GeneralUser.sf2 village  # one cue
 ```
 
 See [SCORE.txt](assets/audio/SCORE.txt) for the cue list and composition
-credits, and [CREDITS.md](CREDITS.md) for asset provenance and licenses.
-The instrument bank is not redistributed.
+credits. The instrument bank is not redistributed. See
+[Visual references](CREDITS.md#visual-references-not-game-assets) for the
+references used while designing the terrain and walking-scale world.
 
 ## Repository map
 
@@ -217,7 +217,7 @@ src/dungeon.cpp   procedural cavern dungeons (BSP floors, loot, descent)
 src/core.cpp      asset loading, UI primitives, saves and game tables
 src/main.cpp      window, pixel-perfect presentation, mode loop
 assets/           runtime pixel art, font and audio
-tools/            unified pixel-art generators, validator and score renderer
+tools/            art generation, importers and score rendering
 ```
 
 ## What this is
@@ -263,8 +263,8 @@ only builds and packages the Windows exe and Linux binary.
 - `src/overworld.cpp` — field movement (cardinal-only keyboard, click-to-move
   with A*), camera, encounters, interactions, prompts.
 - `src/render.cpp` — Y-sorted field renderer, HUD, title/intro/game-over,
-  dialogue box. SNES look: 9-slice navy windows with gold-bevel borders,
-  Press Start 2P, blinking cursor triangles.
+  dialogue box. SNES look: navy windows with white double borders, gold
+  accents, Press Start 2P, blinking cursor triangles.
 - `src/dialog.cpp` — dialogue, pause menu (Party/Items/Equip/Quests/Options),
   shop, inn, Sound Room.
 - `src/room.cpp` — interiors (shop/inn/temple/house).
@@ -291,8 +291,7 @@ only builds and packages the Windows exe and Linux binary.
 
 ## Where to look for things
 
-- **Art Bible & Manifest:** [docs/ART_BIBLE.md](docs/ART_BIBLE.md) and [ART_MANIFEST.md](ART_MANIFEST.md)
-- **Controls / first walks / what's in the game:** [README.md](README.md)
-- **Art, music and font licenses:** [CREDITS.md](CREDITS.md)
-- **Cue sheet (titles, durations, licenses):** `assets/audio/SCORE.txt`
-- **Screenshots:** `docs/screenshots/`
+- Controls / first walks / what's in the game: [README.md](README.md)
+- Art, music and font licenses + visual references: [CREDITS.md](CREDITS.md)
+- Cue sheet (titles, durations, licenses): `assets/audio/SCORE.txt`
+- Screenshots: `docs/screenshots/`
