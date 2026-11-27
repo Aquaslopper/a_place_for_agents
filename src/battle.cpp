@@ -63,6 +63,11 @@ struct BattleState {
 };
 
 static BattleState B;
+MusicCue battleMusicCue() {
+    if (B.phase == BP_VICTORY) return MUS_VICTORY;
+    if (B.phase == BP_DEFEAT) return MUS_GAMEOVER;
+    return B.isBoss ? MUS_BOSS : MUS_BATTLE;
+}
 static int gPendingSpellIdx = -1; // index into spellsFor(activeHero)
 static int gPendingItem = -1;     // ItemId or -1
 
@@ -132,7 +137,7 @@ void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fi
         e.hitT = 0;
         e.lungeT = 0;
         e.x = (e.boss ? 94.0f : 76.0f) + (i % 2) * 58.0f;
-        e.y = (count == 1) ? 132.0f : (92.0f + i * (96.0f / std::max(1, count - 1)));
+        e.y = (count == 1) ? 132.0f : (104.0f + i * (66.0f / std::max(1, count - 1)));
         B.foes.push_back(e);
     }
 
@@ -150,7 +155,6 @@ void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fi
     g.mode = MODE_BATTLE;
     g.fade = 1.0f; g.fadeDir = -1;
     playSoundIf(g.assets.encounter);
-    syncModeMusic();
 }
 
 // ================================================================ damage math
@@ -267,8 +271,6 @@ static void checkBattleEnd() {
             B.rewards.push_back("Reclaimed the Crown of Elm!");
         }
         playSoundIf(g.assets.levelup);
-        stopAllMusic();
-        if (g.musicOn && g.assets.victory.frameCount > 0) PlayMusicStream(g.assets.victory);
         setBanner(B.isBoss ? "The Slime King dissolves into harmless jelly!" : "Victory!", 4.0f);
     } else if (aliveHeroCount() == 0) {
         B.phase = BP_DEFEAT;
@@ -504,7 +506,6 @@ void battleUpdate(float dt) {
             g.mode = MODE_OVERWORLD;
             g.fade = 1.0f; g.fadeDir = -1;
             g.encounterGrace = 3.5f;
-            syncModeMusic();
         }
         return;
     }
@@ -514,7 +515,6 @@ void battleUpdate(float dt) {
         if (B.phaseT <= 0) {
             g.mode = MODE_GAMEOVER;
             g.fade = 1.0f; g.fadeDir = -1;
-            syncModeMusic();
         }
         return;
     }
@@ -806,44 +806,8 @@ static Texture2D* fxTex(FxKind k) {
 
 static void drawBattleBackdrop(float sx, float sy) {
     GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
-    Color skyTop{ 34, 62, 120, 255 }, skyBot{ 126, 168, 224, 255 };
-    Texture2D* ground = &g.assets.grass[0];
-    if (B.isBoss) {
-        skyTop = { 24, 16, 44, 255 }; skyBot = { 76, 44, 92, 255 };
-        ground = &g.assets.flagstone;
-    } else if (gt.kind == G_SNOW || gt.kind == G_ICE) {
-        skyTop = { 62, 92, 140, 255 }; skyBot = { 196, 222, 248, 255 };
-        ground = &g.assets.snow[0];
-    } else if (gt.kind == G_SAND) {
-        skyTop = { 64, 112, 178, 255 }; skyBot = { 235, 206, 152, 255 };
-        ground = &g.assets.sand;
-    } else if (gt.kind == G_SWAMP) {
-        skyTop = { 28, 44, 54, 255 }; skyBot = { 76, 108, 92, 255 };
-        ground = &g.assets.swamp;
-    } else if (gt.kind == G_ROCK) {
-        skyTop = { 46, 54, 84, 255 }; skyBot = { 132, 144, 174, 255 };
-        ground = &g.assets.rockHill[0];
-    }
-
-    DrawRectangleGradientV((int)sx, (int)sy, VRES_W, 88, skyTop, skyBot);
-    // Distant hills silhouette
-    for (int x = 0; x < VRES_W; x += 8) {
-        float h = 16.0f + sinf(x * 0.018f + 1.2f) * 9.0f + cosf(x * 0.043f) * 5.0f;
-        DrawRectangle((int)(x + sx), (int)(86 - h + sy), 9, (int)h + 6,
-                      B.isBoss ? Color{ 44, 30, 62, 255 } : Color{ 56, 88, 72, 255 });
-    }
-    // Tiled battleground floor
-    for (int y = 84; y < 190; y += TILE) {
-        for (int x = 0; x < VRES_W; x += TILE) {
-            if (ground && ground->id) {
-                DrawTexturePro(*ground, { 0, 0, (float)ground->width, (float)ground->height },
-                               { x + sx, y + sy, TILE, TILE }, { 0, 0 }, 0.0f, WHITE);
-            } else {
-                DrawRectangle((int)(x + sx), (int)(y + sy), TILE, TILE, Color{ 68, 128, 64, 255 });
-            }
-        }
-    }
-    DrawRectangleGradientV((int)sx, (int)(84 + sy), VRES_W, 18, Fade(BLACK, 0.25f), BLANK);
+    Texture2D tex=B.isBoss ? g.assets.castleBattlefield : g.assets.battlefield[gt.biome];
+    DrawTexture(tex,(int)sx,(int)sy,WHITE);
 }
 
 void battleDraw() {

@@ -40,9 +40,9 @@ static const ItemDef ITEMS[IT_COUNT] = {
     { "Mana Amulet",  "Thoughts flow easier. MAG +6",         600,  IK_ACCESSORY, 6, ICON_RING,   true },
 
     // key items
-    { "Rusty Key",    "Opens the old western watchtower chest.",0,  IK_KEY, 0, ICON_GEM,  false },
+    { "Rusty Key",    "Opens the old western watchtower chest.",0,  IK_KEY, 0, ICON_KEY,  false },
     { "Lost Locket",  "A silver locket from the standing stones.",0,IK_KEY, 0, ICON_RING, false },
-    { "Crown of Elm", "The old crown of the first village.",    0,  IK_KEY, 0, ICON_COIN, false },
+    { "Crown of Elm", "The old crown of the first village.",    0,  IK_KEY, 0, ICON_CROWN,false },
 };
 const ItemDef& itemDef(int id) {
     static const ItemDef none{ "Nothing", "", 0, IK_KEY, 0, ICON_GEM, false };
@@ -235,34 +235,6 @@ void playSoundIf(Sound& s) {
     if (s.frameCount > 0) PlaySound(s);
 }
 
-void stopAllMusic() {
-    if (g.assets.title.frameCount > 0) StopMusicStream(g.assets.title);
-    if (g.assets.field.frameCount > 0) StopMusicStream(g.assets.field);
-    if (g.assets.battle.frameCount > 0) StopMusicStream(g.assets.battle);
-    if (g.assets.victory.frameCount > 0) StopMusicStream(g.assets.victory);
-    if (g.assets.gameover.frameCount > 0) StopMusicStream(g.assets.gameover);
-}
-
-void syncModeMusic() {
-    stopAllMusic();
-    if (!g.musicOn) return;
-    switch (g.mode) {
-        case MODE_TITLE:
-        case MODE_INTRO:
-            if (g.assets.title.frameCount > 0) PlayMusicStream(g.assets.title);
-            break;
-        case MODE_BATTLE:
-            if (g.assets.battle.frameCount > 0) PlayMusicStream(g.assets.battle);
-            break;
-        case MODE_GAMEOVER:
-            if (g.assets.gameover.frameCount > 0) PlayMusicStream(g.assets.gameover);
-            break;
-        default:
-            if (g.assets.field.frameCount > 0) PlayMusicStream(g.assets.field);
-            break;
-    }
-}
-
 void returnToTitle() {
     g.mode = MODE_TITLE;
     g.menuPage = 0;
@@ -270,15 +242,14 @@ void returnToTitle() {
     g.fade = 1.0f;
     g.fadeDir = -1;
     refreshSaveExists();
-    syncModeMusic();
 }
 
 // ================================================================ assets
 static std::string resolveAssetsDir() {
     const char* env = getenv("APFA_ASSETS_DIR");
     if (env && env[0]) { std::string d = env; if (d.back() != '/') d += '/'; return d; }
-    if (FileExists("assets/tiles/grass_0.png")) return "assets/";
-    if (FileExists("../assets/tiles/grass_0.png")) return "../assets/";
+    if (FileExists("assets/tiles/landscape.png")) return "assets/";
+    if (FileExists("../assets/tiles/landscape.png")) return "../assets/";
     return std::string(GetApplicationDirectory()) + "assets/";
 }
 
@@ -294,23 +265,18 @@ static Texture2D loadTex(const std::string& dir, const char* rel, bool required 
     return t;
 }
 static Sound loadSnd(const std::string& dir, const char* rel) {
-    return LoadSound((dir + rel).c_str());
+    return IsAudioDeviceReady() ? LoadSound((dir + rel).c_str()) : Sound{};
 }
-static Music loadMus(const std::string& dir, const char* rel) {
-    return LoadMusicStream((dir + rel).c_str());
-}
-
 bool loadAllAssets() {
     std::string d = resolveAssetsDir();
     Assets& a = g.assets;
 
     // --- terrain
-    for (int i = 0; i < 4; i++) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "tiles/grass_%d.png", i);
-        a.grass[i] = loadTex(d, buf, false);
-    }
-    a.grassTall = loadTex(d, "tiles/grass_dark.png", false);
+    a.landscape = loadTex(d,"tiles/landscape.png");
+    a.relief = loadTex(d,"tiles/relief.png");
+    a.bridge = loadTex(d,"tiles/bridge.png");
+    a.turnips = loadTex(d,"tiles/turnips.png");
+    a.lilies = loadTex(d,"tiles/lilies.png");
     for (int i = 0; i < 3; i++) {
         char buf[64];
         snprintf(buf, sizeof(buf), "tiles/tuft_%d.png", i);
@@ -318,34 +284,28 @@ bool loadAllAssets() {
     }
     for (int i = 0; i < 2; i++) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "tiles/water_%d.png", i); a.water[i] = loadTex(d, buf);
         snprintf(buf, sizeof(buf), "tiles/flower_%d.png", i); a.flowers[i] = loadTex(d, buf, false);
     }
-    a.snow[0] = loadTex(d, "tiles/snow.png");
-    a.snow[1] = loadTex(d, "tiles/snow_drift.png", false);
-    a.ice[0] = loadTex(d, "tiles/ice.png");
-    a.ice[1] = loadTex(d, "tiles/ice_crack.png", false);
-    a.rockHill[0] = loadTex(d, "tiles/rock_hill.png");
-    a.rockHill[1] = loadTex(d, "tiles/rock_hill2.png", false);
     a.brickFloor[0] = loadTex(d, "tiles/brick.png", false);
     a.brickFloor[1] = loadTex(d, "tiles/brick_dark.png", false);
-    a.dirt = loadTex(d, "tiles/dirt.png");
-    a.soil = loadTex(d, "tiles/soil.png");
-    a.sand = loadTex(d, "tiles/sand.png");
-    a.beach = loadTex(d, "tiles/beach.png");
-    a.cobble = loadTex(d, "tiles/cobble.png");
-    a.flagstone = loadTex(d, "tiles/flagstone.png");
-    a.tundra = loadTex(d, "tiles/tundra.png");
-    a.deepWater = loadTex(d, "tiles/deep_water.png");
-    a.swamp = loadTex(d, "tiles/swamp.png");
-    a.dungeonFloor = loadTex(d, "tiles/dungeon_floor.png", false);
     a.plankFloor = loadTex(d, "tiles/plank_floor.png", false);
     a.tileFloor = loadTex(d, "tiles/tile_floor.png", false);
     a.stoneFloor = loadTex(d, "tiles/stone_floor.png", false);
     a.carpet = loadTex(d, "tiles/carpet.png", false);
     a.pebble = loadTex(d, "tiles/pebble.png", false);
 
+    const char* scenes[BI_COUNT] = {"meadow", "forest", "amber", "fen", "heath", "frost", "dunes"};
+    for (int i=0; i<BI_COUNT; ++i)
+        a.battlefield[i] = loadTex(d,(std::string("backdrops/")+scenes[i]+".png").c_str());
+    a.castleBattlefield = loadTex(d,"backdrops/castle.png");
+
     // --- props
+    a.amberOak = loadTex(d,"sprites/amber_oak.png");
+    a.copperOak = loadTex(d,"sprites/copper_oak.png");
+    a.willow = loadTex(d,"sprites/willow.png");
+    a.yucca = loadTex(d,"sprites/yucca.png");
+    a.reeds = loadTex(d,"sprites/reeds.png");
+    a.crate = loadTex(d,"sprites/crate.png");
     for (int i = 0; i < 3; i++) {
         char buf[64];
         snprintf(buf, sizeof(buf), "sprites/tree_%d.png", i); a.tree[i] = loadTex(d, buf);
@@ -382,7 +342,8 @@ bool loadAllAssets() {
     a.statue = loadTex(d, "sprites/statue.png");
     a.pillar = loadTex(d, "sprites/pillar.png");
     a.ruinShrine = loadTex(d, "sprites/monument.png");
-    a.ruinArch = loadTex(d, "sprites/pavilion.png");
+    a.tent = loadTex(d, "sprites/pavilion.png");
+    a.ruinArch = loadTex(d, "sprites/ruin_arch.png");
     a.barrel = loadTex(d, "sprites/barrel.png");
     a.table = loadTex(d, "sprites/table.png");
     a.counter = loadTex(d, "sprites/counter.png");
@@ -393,7 +354,6 @@ bool loadAllAssets() {
     a.shelf = loadTex(d, "sprites/shelf.png", false);
     a.chestClosed = loadTex(d, "sprites/chest_closed.png");
     a.chestOpen = loadTex(d, "sprites/chest_open.png");
-    a.jar = loadTex(d, "sprites/urn.png", false);
     a.bed = loadTex(d, "sprites/bed.png", false);
     a.stoolTex = loadTex(d, "sprites/stool.png", false);
     a.cloud = loadTex(d, "sprites/cloud.png", false);
@@ -410,19 +370,15 @@ bool loadAllAssets() {
     // --- heroes
     const char* heroes[3] = { "sprites/hero_knight.png", "sprites/hero_mage.png", "sprites/hero_cleric.png" };
     for (int i = 0; i < 3; i++) a.heroWalk[i] = loadTex(d, heroes[i]);
-    for (int i = 0; i < 6; i++) {
-        char buf[64]; snprintf(buf, sizeof(buf), "sprites/hero_alt%d.png", i);
-        a.heroExtra[i] = loadTex(d, buf, false);
-    }
-    const char* npcs[16] = {
+    const char* npcs[NS_KIND_COUNT] = {
         "sprites/npc_villager0.png", "sprites/npc_villager1.png", "sprites/npc_villager2.png",
         "sprites/npc_villager3.png", "sprites/npc_elder.png", "sprites/npc_mayor.png",
         "sprites/npc_woman.png", "sprites/npc_child.png", "sprites/npc_guard.png",
         "sprites/npc_soldier.png", "sprites/npc_knight.png", "sprites/npc_merchant.png",
         "sprites/npc_smith.png", "sprites/npc_priest.png", "sprites/npc_farmer.png",
-        "sprites/npc_dog.png",
+        "sprites/npc_dog.png", "sprites/npc_cat.png", "sprites/npc_chicken.png",
     };
-    for (int i = 0; i < 16; i++) a.npc[i] = loadTex(d, npcs[i]);
+    for (int i = 0; i < NS_KIND_COUNT; i++) a.npc[i] = loadTex(d, npcs[i]);
 
     // --- faces, in FACE_* order
     const char* faces[FACE_COUNT] = {
@@ -435,7 +391,7 @@ bool loadAllAssets() {
         "sprites/face_smith.png", "sprites/face_bard.png", "sprites/face_shopkeeper.png",
         "sprites/face_innkeeper.png", "sprites/face_guard.png", "sprites/face_ranger.png",
         "sprites/face_slime.png", "sprites/face_ghost.png", "sprites/face_skeleton.png",
-        "sprites/face_demon.png", "sprites/face_wolf.png",
+        "sprites/face_demon.png", "sprites/face_dog.png",
     };
     for (int i = 0; i < FACE_COUNT; i++) a.face[i] = loadTex(d, faces[i]);
 
@@ -459,7 +415,7 @@ bool loadAllAssets() {
         "icons/gem.png", "icons/coin.png",
         "icons/sword_0.png", "icons/sword_1.png", "icons/sword_2.png",
         "icons/armor_0.png", "icons/armor_1.png", "icons/armor_2.png", "icons/armor_3.png",
-        "icons/shield.png", "icons/ring.png",
+        "icons/shield.png", "icons/ring.png", "icons/key.png", "icons/crown.png",
     };
     for (int i = 0; i < ICON_COUNT; i++) a.icon[i] = loadTex(d, icons[i], false);
 
@@ -512,12 +468,7 @@ bool loadAllAssets() {
     a.chime     = loadSnd(d, "audio/confirm.ogg");
     a.treasure  = loadSnd(d, "audio/coin.ogg");
 
-    a.title    = loadMus(d, "audio/title.ogg");
-    a.field    = loadMus(d, "audio/field.ogg");
-    a.battle   = loadMus(d, "audio/battle.ogg");
-    a.victory  = loadMus(d, "audio/victory.ogg");
-    a.gameover = loadMus(d, "audio/gameover.ogg");
-    a.village  = a.field;
+    loadScore(d);
 
     a.ok = true;
     return true;
@@ -893,12 +844,22 @@ bool loadGame() {
     g.walkTargetInteract = false;
     g.encounterGrace = 3.0f;
     g.stepDist = 0.0f;
+    // Keep older saves playable if the new river, cliff or grove covers the
+    // saved position. The save layout and quest/chest IDs haven't changed.
+    villageLoadAt(g.px,g.py);
+    if (positionBlocked(g.px,g.py,0.25f)) {
+        int x=(int)floorf(g.px), y=(int)floorf(g.py);
+        nearestWalkable(x,y,x,y);
+        if (cellWalkable(x,y)) { g.px=x+0.5f; g.py=y+0.5f; }
+        else { g.px=0.5f; g.py=4.5f; }
+        villageLoadAt(g.px,g.py);
+    }
     return true;
 }
 
 void newGameState(uint32_t seed) {
     g.worldSeed = seed;
-    g.px = 0.5f; g.py = 7.5f;      // just south of the Elmswick plaza
+    g.px = 0.5f; g.py = 4.5f;      // just south of the Elmswick plaza
     g.facing = 0;
     g.sideFlip = false;
     g.runTime = 0;
@@ -953,5 +914,4 @@ void startNewAdventure() {
     g.introT = 0;
     g.fade = 1.0f;
     g.fadeDir = -1;
-    syncModeMusic();
 }

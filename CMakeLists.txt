@@ -19,6 +19,7 @@ FetchContent_MakeAvailable(raylib)
 # ---------------------------------------------------------------- game
 add_executable(aplaceforagents
     src/main.cpp
+    src/music.cpp
     src/core.cpp
     src/world.cpp
     src/overworld.cpp

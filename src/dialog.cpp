@@ -339,9 +339,48 @@ static void innUpdateInternal() {
 // ================================================================ pause menu update (NO drawing!)
 static bool gShowControlsModal = false;
 
+// Sound Room uses the normal director (including the music preference), not
+// a second player on top of the game. Browsing is deliberately non-persistent.
+static Rectangle trackRow(int i) { return {35.f+(i/7)*224, 57.f+(i%7)*21, 214, 18}; }
+static const Rectangle soundBack{382,238,89,21};
+static void soundRoomUpdate() {
+    Vector2 m=getVirtualMouse(); bool click=IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_TAB) || (click && CheckCollisionPointRec(m,soundBack))) {
+        g.menuPage=4; playSoundIf(g.assets.cancel); return;
+    }
+    int sel=g.audition;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) sel=(sel+MUS_COUNT-1)%MUS_COUNT;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) sel=(sel+1)%MUS_COUNT;
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D))
+        sel=sel>=7 ? sel-7 : std::min(sel+7,(int)MUS_COUNT-1);
+    if (click) for (int i=0;i<MUS_COUNT;++i) if (CheckCollisionPointRec(m,trackRow(i))) sel=i;
+    if (sel!=g.audition) { g.audition=(MusicCue)sel; playSoundIf(g.assets.cursor); }
+}
+static void drawSoundRoom() {
+    DrawRectangle(0,0,VRES_W,VRES_H,Fade(BLACK,0.72f)); drawWindow({23,15,466,256});
+    drawText("SOUND ROOM",36,27,Color{255,231,166,255},16);
+    drawText("OpenRTP / 13 cues",301,31,Color{190,205,229,255},8);
+    for (int i=0;i<MUS_COUNT;++i) {
+        Rectangle r=trackRow(i); bool sel=g.audition==i; char n[4]; snprintf(n,sizeof(n),"%02d",i+1);
+        DrawRectangleRec(r,sel ? Color{64,80,122,255} : Color{26,37,74,230});
+        if (sel) DrawRectangle((int)r.x,(int)r.y,2,(int)r.height,Color{245,210,136,255});
+        drawText(n,r.x+7,r.y+5,Color{205,186,142,255},8);
+        drawText(cueTitle((MusicCue)i),r.x+32,r.y+5,sel?WHITE:Color{195,208,232,255},8);
+    }
+    Music m=g.assets.score[g.audition]; bool valid=IsMusicValid(m) && m.stream.buffer;
+    float time=valid ? GetMusicTimePlayed(m):0.f, len=valid ? GetMusicTimeLength(m):0.f;
+    char info[96]; snprintf(info,sizeof(info),"%s  %d:%02d / %d:%02d",cueTitle(g.audition),
+            (int)time/60,(int)time%60,(int)len/60,(int)len%60);
+    drawText(!valid?"No audio device or stream":g.musicOn?info:"Music is off in Options",37,212,WHITE,8);
+    drawBar(37,226,432,4,len>0?time/len:0,Color{223,189,123,255},Color{38,51,84,255});
+    drawText("Arrows or click to listen",37,245,Color{185,201,224,255},8);
+    drawButton("Back",soundBack,8,false);
+}
+
 void menuUpdate(float dt) {
     (void)dt;
     // Shop & Inn live as pages 5 and 6 of MODE_MENU
+    if (g.menuPage == 7) { soundRoomUpdate(); return; }
     if (g.menuPage == 5) { shopUpdateInternal(); return; }
     if (g.menuPage == 6) { innUpdateInternal(); return; }
 
@@ -557,7 +596,7 @@ void menuUpdate(float dt) {
 
     // ---- Page 4: Options & Save/Load
     if (g.menuPage == 4) {
-        const int NOPT = 7;
+        const int NOPT = 8;
         if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.optionsIndex = (g.optionsIndex + NOPT - 1) % NOPT; playSoundIf(g.assets.cursor); }
         if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.optionsIndex = (g.optionsIndex + 1) % NOPT; playSoundIf(g.assets.cursor); }
         auto act = [&](int idx) {
@@ -570,14 +609,12 @@ void menuUpdate(float dt) {
                     pushToast("Loaded saved adventure!");
                     g.mode = MODE_OVERWORLD;
                     overworldSnapCamera();
-                    syncModeMusic();
                 } else {
                     playSoundIf(g.assets.cancel);
                     pushToast("No valid save file found.");
                 }
             } else if (idx == 2) {
                 g.musicOn = !g.musicOn;
-                syncModeMusic();
                 playSoundIf(g.assets.confirm);
             } else if (idx == 3) {
                 g.waitBattle = !g.waitBattle;
@@ -589,6 +626,9 @@ void menuUpdate(float dt) {
                 gShowControlsModal = true;
                 playSoundIf(g.assets.confirm);
             } else if (idx == 6) {
+                g.audition = playingCue()==MUS_NONE ? MUS_VILLAGE : playingCue();
+                g.menuPage = 7; playSoundIf(g.assets.confirm);
+            } else if (idx == 7) {
                 returnToTitle();
             }
         };
@@ -670,7 +710,7 @@ static void drawShopPage() {
             }
         }
         if (count > SHOP_VISIBLE) {
-            char sc[32];
+            char sc[48];
             snprintf(sc, sizeof(sc), "%d-%d / %d", g.shopScroll + 1,
                      std::min(count, g.shopScroll + SHOP_VISIBLE), count);
             Vector2 ssz = measureText(sc, 8);
@@ -741,6 +781,7 @@ static void drawHeroPicker(const char* title, int sel) {
 }
 
 void drawMenuScreen() {
+    if (g.menuPage == 7) { drawSoundRoom(); return; }
     if (g.menuPage == 5) { drawShopPage(); return; }
     if (g.menuPage == 6) { drawInnPage(); return; }
 
@@ -940,22 +981,23 @@ void drawMenuScreen() {
     // ---- Page 4: Options & Save/Load
     else if (g.menuPage == 4) {
         drawText("OPTIONS & SAVE", 124, 20, Color{ 255, 232, 150, 255 }, 8);
-        const char* rows[7] = {
+        const char* rows[8] = {
             "Save Adventure to Disk",
             g.saveExists ? "Load Last Save" : "Load Last Save (none yet)",
             g.musicOn ? "Music: ON" : "Music: OFF",
             g.waitBattle ? "Battle Mode: WAIT (pauses on menus)" : "Battle Mode: ACTIVE (real-time ATB)",
             "Toggle Fullscreen (F11)",
             "Controls & Tips",
+            "Sound Room",
             "Return to Title Screen",
         };
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             Rectangle r{ 130, (float)(42 + i * 28), 346, 24 };
             bool sel = (i == g.optionsIndex);
             DrawRectangleRounded(r, 0.3f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 220 });
             DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
                                         sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
-            Color c = (i == 6) ? Color{ 255, 175, 175, 255 }
+            Color c = (i == 7) ? Color{ 255, 175, 175, 255 }
                                : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
             drawText(rows[i], r.x + 12, r.y + 8, c, 8);
         }

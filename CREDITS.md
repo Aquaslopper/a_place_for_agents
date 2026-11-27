@@ -1,66 +1,37 @@
 # Credits & licenses
 
-## OpenRTP pixel art
+## Soundtrack
 
-This game includes adapted artwork from [EasyRPG's OpenRTP](https://github.com/EasyRPG/RTP),
-revision `993d88cbc78c658d348bbfa74a3b424d393d27e5`. The original source sheets are
-in `assets/source/openrtp/`. `tools/import_openrtp.py` extracts, rearranges,
-composes and scales portions to fit this game. See the upstream
-[authors list](https://github.com/EasyRPG/RTP/blob/master/AUTHORS.md).
+The 13 in-game cues are recordings of compositions from [EasyRPG/OpenRTP](https://github.com/EasyRPG/RTP/tree/993d88cbc78c658d348bbfa74a3b424d393d27e5/Music). **Juan Manuel Nigretti** ([Good Game Audio](https://soundcloud.com/goodgameaudio)) wrote the twelve CC BY pieces in 2010; **[Someoneman](https://github.com/Someoneman)** wrote *Boss 3* (2022, CC0). See [the cue sheet](assets/audio/SCORE.txt) for every original title, its use, duration and license. The original MIDIs are included.
 
-- `ChipSet/Exterior.png` and `ChipSet/World.png`: Jason Perry / finalbossblues,
-  [Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles),
-  [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
-- `CharSet/Actor1.png`: Marina Navarro Travesset (base) and VictorSena (edits),
-  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Adapted here by
-  removing the background and rearranging/cropping the animation frames.
-  Sources: https://muerteatartajo.blogspot.com and
-  https://vashmaker.blogspot.com/p/works.html.
-- `FaceSet/Actor1.png`: Garakuta,
-  [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/),
-  http://garakutamaker.blog.fc2.com/. Cropped and resized for portraits.
-- `CharSet/Monster1.png`, `Monster2.png`, `Monster3.png`: MerchantShade (slime,
-  CC0); the source sheets also contain work by Garakuta, Jetrotal and Jason Perry
-  (CC0), and R.C.O. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
-  The game's whole bestiary — slime, imp, bat, hornet, wisp, wolf, skeleton,
-  ghost, orc, serpent, golem, night rider and the Slime King — is cropped, scaled
-  and, for battle, enlarged from these sheets. Sources:
-  https://merchant-shade.itch.io/, http://garakutamaker.blog.fc2.com/,
-  https://github.com/jetrotal and https://finalbossblues.itch.io/; R.C.O.
-  credited in the upstream authors list.
-- `CharSet/People1-5.png`, `CharSet/Animal.png`, `CharSet/Object1.png`,
-  `CharSet/Object2.png`: village folk, animals and the object set, same upstream
-  authors and licences as above; cropped and re-arranged into walking sheets and
-  objects (chests, barrels, kegs, ladders, fences).
-- `ChipSet/Interior.png`, `ChipSet/Dungeon.png`, `System.png`, `Royal.png`,
-  `Title/Title1.png`, `Title/Title2.png`, `GameOver/Game Over.png`,
-  `Panorama/Dawn2.png`, `Panorama/Night Sky1.png`, `Picture/Cloud.png`:
-  Jason Perry / finalbossblues and the EasyRTP contributors listed upstream;
-  `CC0 1.0` unless the upstream authors list says otherwise. Used for interiors,
-  the window skin, the title backdrop, the game-over plate and drifting clouds.
+`tools/render_score.py` renders these pieces offline with the **GeneralUser GS** instrument bank by **[S. Christian Collins](https://www.schristiancollins.com/generaluser.php)**, adds stereo echo, prepares loop/release tails and balances levels. The bank has its own license; it is not redistributed. The score is not covered by the original SFX's CC0 dedication.
 
-The remaining icons, effects and fallback art are generated in-repository by
-`tools/build_art.py` and `tools/art_*.py`. Music and sound effects are generated
-by `tools/gen_assets.py`. Generated original assets are CC0 by the repository's
-authors. The OpenRTP actor sheet and its derivatives retain the CC BY 4.0 terms
-above; this CC0 statement does not apply to them.
+## Pixel art
 
-## Engine
-- [raylib](https://github.com/raysan5/raylib) 5.5 — zlib/libpng license;
-  fetched at build time.
+Source: [OpenRTP, revision `993d88c`](https://github.com/EasyRPG/RTP/tree/993d88cbc78c658d348bbfa74a3b424d393d27e5). The [vendored authors list](assets/source/openrtp/AUTHORS.md) gives licenses, attribution links and individual frame credits. CC BY here means [CC BY 4.0 International](https://creativecommons.org/licenses/by/4.0/); CC0 means [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 
-## Font
-- **Press Start 2P** by CodeMan38 — SIL Open Font License 1.1.
-  Bundled at `assets/fonts/PressStart2P-Regular.ttf`; see `assets/fonts/OFL.txt`.
+| Source | Credit and use in this game |
+|---|---|
+| `ChipSet/{Exterior,Interior,Dungeon,World}.png` | **[Jason Perry / finalbossblues](https://finalbossblues.itch.io/openrtp-tiles)** (CC0). Cropped 16 px textures and complete objects; palette swaps, transition masks, planted scenery, new full-size building facades and battlefield compositions. |
+| `CharSet/Actor1.png` | **[Marina Navarro Travesset](https://muerteatartajo.blogspot.com)** (base) and **[VictorSena](https://vashmaker.blogspot.com/p/works.html)** (edits), CC BY. Color-keyed and reordered walking frames. |
+| `CharSet/People1–5.png`, `Animal.png` | **VictorSena** (CC BY); **[Garakuta](http://garakutamaker.blog.fc2.com/)** (CC0 animal frames). People3 includes **Easychar** work by **R.C.O.**, **Jason Perry** and **Marina Navarro Travesset**; see upstream frame credits. Villagers, keepers and animals were cropped and reordered; the child was resized. |
+| `CharSet/Monster1–3.png`, `Monster/Hornet.png` | **MerchantShade**, **Garakuta**, **Jetrotal**, **Jason Perry** (CC0 contributions); **VictorSena**, **R.C.O.** and **Orochii Zouveleki** (CC BY contributions). Field and battle frames were selected, keyed and scaled; the Slime King is a crowned adaptation of MerchantShade's slime. The wolf, bat, wisp and serpent are repository-drawn instead. |
+| `CharSet/Object1.png`, `Object2.png` | **Tom Lemmens**, **Blarumyrran** (original chest, CC0) and **Verdant_Jack** (Object2, CC0). Cropped object frames and building doors. |
+| `FaceSet/{Actor1,Actor2,People1,People2,Monster}.png` | **Garakuta**, CC0. Cropped character portraits. |
+| `Battle/{Arrow,Blow,Sword1}.png` | **Someoneman**, CC0. Green-keyed, trimmed combat-effect frames. |
+| `System/{System,Royal}.png` | **andwhyisit**, CC BY / OGA-BY. UI frame and gauge crops. |
+| `Title/{Title1,Title2}.png` | **Francisco de la Peña**, CC0. Resized title plates. |
+| `GameOver/Game Over.png` | **jetrotal**, CC0; **kou**, CC BY (koubit_001 font). Resized game-over plate. |
+| `Panorama/{Dawn2,Night Sky1}.png`, `Picture/Cloud.png` | **Tom Lemmens**, CC BY / OGA-BY (panoramas); **DonMiguel**, CC0 (cloud). Resized backgrounds and trimmed cloud sprite. |
 
-### World-generation references
+Additional original artwork and synthesized UI/combat sound effects in `tools/` are CC0 by the repository's authors. That dedication does **not** replace the licenses of any upstream material used in a composite.
 
-The [Open RPG Fantasy Tilesets page](https://finalbossblues.itch.io/openrtp-tiles)
-identifies the Exterior and World sheets as RPG Maker 2000/2003 chipsets with a
-16×16 tilebase. The [chipset template guide](https://www.deviantart.com/jojogape/art/RPG-Maker-2000-and-2003-Tileset-Template-v2-327699881)
-describes which regions contain animated water and grouped terrain, rather than
-independent repeatable tiles. The importer uses interior fills for repeating
-surfaces and whole upper-layer objects for props; it does not implement the
-original engine's full autotile system. Vegetation distribution uses clustered
-noise and local spacing, following the general biome-aware placement principles
-in [AutoBiomes](https://link.springer.com/article/10.1007/s00371-020-01920-7).
+## Visual references, not game assets
+
+- [Potos Village](https://www.snesmaps.com/maps/SecretOfMana/002bPotosVillageMap.html) and the [Pandora–Potos–Water Palace path](https://www.snesmaps.com/maps/SecretOfMana/003bPandoraPotosWaterPalacePathMap.html), *Secret of Mana*, via SNESMaps. The study was about **walking scale and layout**: roads meet doors and cross streams at specific places; vegetation frames clearings; banks and cliff faces continue across tiles. No map or graphics from that game are distributed here.
+- [Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles) and the [RM2k/3 chipset template guide](https://www.deviantart.com/jojogape/art/RPG-Maker-2000-and-2003-Tileset-Template-v2-327699881). Distinguish overworld symbols, full exterior objects, interior furnishings and terrain blocks. The field atlas is a new corner-mask implementation, not an emulator of the original autotiler.
+
+## Engine and font
+
+- [raylib](https://github.com/raysan5/raylib) 5.5 — zlib/libpng license; fetched at build time.
+- **Press Start 2P** by CodeMan38 — SIL Open Font License 1.1. See [OFL.txt](assets/fonts/OFL.txt).

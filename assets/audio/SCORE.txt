@@ -1,0 +1,60 @@
+A PLACE FOR AGENTS — SOUNDTRACK
+
+In game: Esc / Tab → Options → Sound Room. The titles on the left are
+in-game cue names; the MIDI filenames identify the original compositions.
+Durations are per pass, not counting repeats.
+
+Cue                   Ogg stem   Original MIDI        Seconds   Where it plays
+Overture              title      Opening 2.mid           91.8   title and intro
+Elmswick              village    Town 1.mid             157.8   village streets
+The Open Road         field      Field 1.mid             80.0   meadows and open country
+Amberwood             wood       Ending 2.mid            80.0   autumn and evergreen woods
+The Mirefen           fen        Dungeon 1.mid           66.2   marshes
+The Northern Pass     pass       Castle 1.mid           100.7   heath, snow, castle approach
+Sunscorch Flats       dunes      Vehicle 1.mid           76.8   desert
+By the Hearth         hearth     Sorrow.mid              96.7   cottage, shop and inn interiors
+Meadow Chapel         chapel     Church.mid             108.2   chapels
+Crossed Blades        battle     Battle 1.mid           134.0   ordinary combat
+The Slime King        boss       Boss 3.mid             123.8   boss combat
+Victory               victory    JFanfare 1.mid           7.2   victory; plays once
+Elegy                 gameover   Game Over 1.mid        107.9   defeat/game over; plays once
+
+Composition and source
+----------------------
+All listed MIDIs except Boss 3: Juan Manuel Nigretti, 2010.
+https://soundcloud.com/goodgameaudio
+Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+Boss 3: Someoneman, 2022. https://github.com/Someoneman
+CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/
+
+Source: EasyRPG/OpenRTP, revision 993d88cbc78c658d348bbfa74a3b424d393d27e5
+https://github.com/EasyRPG/RTP/tree/993d88cbc78c658d348bbfa74a3b424d393d27e5/Music
+The selected, unmodified MIDIs, upstream AUTHORS.md and COPYING are in
+assets/source/openrtp/. These are authored pieces, not procedurally composed
+loops. The CC0 dedication for this game's original art/SFX does not cover
+the CC BY music.
+
+Adaptation and instruments
+--------------------------
+The game assigns the compositions to scenes and gives them display names.
+tools/render_score.py renders their MIDI notes, tempo changes, program and
+controller events offline with TinySoundFont, adds a short stereo echo, wraps
+release tails for looping cues, balances levels, and encodes 32 kHz stereo
+Ogg Vorbis. Victory and Elegy keep their release tails instead of looping.
+
+Instruments: GeneralUser GS v1.471, by S. Christian Collins.
+https://www.schristiancollins.com/generaluser.php
+The GeneralUser GS SoundFont License v2.0 permits making music recordings;
+it is separate from the compositions' licenses. Consult the bank's license
+and sample-provenance note if substituting or redistributing a bank. The
+SoundFont itself is not bundled or needed to play the game.
+Bank used: GeneralUser.sf2, generaluser package 1.47.1,
+SHA-256 f45b6b4a68b6bf3d792fcbb6d7de24dc701a0f89c5900a21ef3aaece993b839a
+
+From the repository root, with mido, numpy, soundfile and tinysoundfont:
+  python3 tools/render_score.py /path/to/GeneralUser.sf2
+  python3 tools/render_score.py /path/to/GeneralUser.sf2 fen boss
+The second form renders only the named cues. Normal builds and the art/SFX
+generators use the checked-in score and do not re-render or replace it.

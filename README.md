@@ -8,9 +8,8 @@ gate and the world keeps generating — meadows, forests, rivers, lakes, frozen
 reaches, deserts, mires, lonely hills — and here and there another village with
 an inn to warm your bones and a shop that sells honest steel.
 
-Built with [raylib](https://github.com/raysan5/raylib). The art is adapted from
-**OpenRTP** RPG Maker-style tiles, characters and portraits (see
-[CREDITS.md](CREDITS.md)).
+Built with [raylib](https://github.com/raysan5/raylib), adapted **OpenRTP** pixel art
+and a **13-cue score**. See [credits](CREDITS.md) and the [soundtrack cue sheet](assets/audio/SCORE.txt).
 
 ![Elmswick, the village the game opens in](docs/screenshots/village.png)
 
@@ -34,19 +33,33 @@ of any CI run):
 | Mouse | Menus, shops, battles — everything is clickable too |
 | `F11` | Toggle fullscreen |
 
+### First walks out of Elmswick
+
+| From the well | What to look for |
+|---|---|
+| South between the kitchen gardens | Millbrook's two-lane plank bridge. On the far bank, follow the ochre woods east to the Standing Stones, or take the southwest trail to the wind-rippled Sunscorch Flats. |
+| West past the shop | Reed beds, willow pools and a causeway through the Mirefen to the Old Watchtower. |
+| North around the chapel | The road bends through Briarwood's conifers, crosses the heath and becomes a snow track on the approach to the Castle of Elm. |
+
+These routes exist on every seed. Outside the story sites, terrain, groves,
+settlements and landmarks follow the seed. For the music without the journey,
+open **Esc / Tab → Options → Sound Room** and choose a cue with the arrows or mouse.
+
 ## What's in it
 
 - **A village to start in.** Elmswick is hand-placed at the origin: a cobbled
   plaza with a working well, a shop and an inn either side of the road, a
   temple of the Light, six cottages with fences, gardens, torches and a campfire,
   plus ten-odd villagers, a farmer with a quest, a town dog and a signpost.
-- **An endless procedural world** — deterministic noise terrain (elevation,
-  moisture, temperature), seeded per run. Grassland, dark forest, sand, beach,
-  swamp, rock and snow biomes with matching props (broadleaf trees, conifers,
-  dead trees, snow pines, boulders, crystals, shrubs, toadstools, pebbles).
-  Vegetation grows in spaced groves with scattered wildflower patches;
-  paths and landmark clearings remain open. Named zones: *The Greenmere, The Frozenreach, The Sunscorch Flats, The Mirefen,
-  The Stonelands, The North Road, The Howling West, The Far Wilds.*
+- **Seven regional landscapes**: meadow, evergreen forest, autumn wood, fen,
+  heath, frozen highlands and dunes. A corner-mask atlas joins ground types,
+  layers cliff lips and riverbanks, and keeps animated water visible under bridges.
+  Regional plants and encounter pools carry through to the route's battle backdrop.
+- **Thirteen streamed pieces, about 20 minutes 31 seconds per pass.** Villages
+  have a theme distinct from the field; woods, marsh, pass and desert have travel
+  music. Homes and chapels have their own cues, as do ordinary and boss battles.
+  Menus and conversation keep the underlying music; after a fight the location
+  theme resumes instead of starting its first bar again.
 - **More villages out in the wilds** — deterministic per 96-tile sector, each
   named from a syllable table, laid out with plaza, roads, shop, inn, temple and
   wandering townsfolk. Interior scenes for shops, inns, temples and houses.
@@ -55,7 +68,7 @@ of any CI run):
   items / defend / flee, crits, elemental weaknesses, a shared ATB, spell
   schools (fire, storm, holy, physical) and per-class spell lists that unlock
   with levels.
-- **Thirteen monsters** taken from the OpenRTP monster sheets: slime, imp, bat,
+- **Thirteen monsters** drawn from OpenRTP and original pixel art: slime, imp, bat,
   hornet, wisp, wolf, skeleton, ghost, orc, serpent, golem, night rider — and the
   Slime King, who holds the Crown of Elm. They appear both as wandering field
   monsters (walk into one to fight it) and in random encounters.
@@ -70,16 +83,15 @@ of any CI run):
   drifting clouds, a slow day/night wash, screen shake, floating damage numbers.
 - **Save & load** — checksummed binary save (`aplaceforagents_save.sav` next to
   the binary), title-screen *Continue*, autosave slot in the options page.
-- **Dialog and portraits** — every named NPC has an OpenRTP face, a typewriter
-  dialog box, and the shop / inn / temple flows live inside it.
+- **Dialog and portraits** — illustrated conversations, typewriter text, and
+  shop / inn / temple interactions inside the buildings.
 
 ### A look at it
 
 | | |
 |---|---|
-| ![Autumn dialog](docs/screenshots/dialog.png) | ![Mira's Sundries](docs/screenshots/shop.png) |
-| ![ATB battle](docs/screenshots/battle.png) | ![The wilds](docs/screenshots/wilds.png) |
-| ![Title screen](docs/screenshots/title.png) | |
+| ![Millbrook bridge and kitchen gardens](docs/screenshots/millbrook.png) | ![The Amberwood trail](docs/screenshots/wilds.png) |
+| ![Wolf and wisp on the Frozenreach battlefield](docs/screenshots/battle.png) | ![Mira's Sundries interior](docs/screenshots/sundries.png) |
 
 ## Build from source
 
@@ -98,21 +110,31 @@ The game is drawn into a 512×288 virtual framebuffer and letterboxed to whateve
 window size you give it, with integer scaling when there's room, so the pixels
 stay crisp.
 
-The build is the primary CI check. A headless world-generation regression test
-can also be run locally; see [tests/README.md](tests/README.md).
+**Project policy: no tests.** Do not add or run tests. CI builds and packages the game without a test step.
 
 ## Regenerating the assets
 
+All runtime assets are checked in. Playing or building the game needs no Python,
+MIDI synthesizer, instrument bank or asset download.
+
 ```bash
-python3 tools/build_art.py    # needs: pillow, numpy
-python3 tools/gen_assets.py   # needs: pillow, numpy, soundfile
+python3 tools/build_art.py     # art only: Pillow, NumPy
+python3 tools/gen_assets.py    # art + short sound effects: also needs soundfile
 ```
 
-The original OpenRTP source sheets are vendored under `assets/source/openrtp/`.
-`tools/build_art.py` generates the remaining art and then runs
-`tools/import_openrtp.py`, which adapts the source sheets with their magenta and
-cyan colour keys (terrain tiles, objects, chests, buildings, walking sprites,
-battle sprites and portraits). The outputs are committed to git.
+Neither command touches the score. To render the music explicitly, install
+`mido`, `numpy`, `soundfile` and `tinysoundfont`, then run:
+
+```bash
+python3 tools/render_score.py /path/to/GeneralUser.sf2          # whole score
+python3 tools/render_score.py /path/to/GeneralUser.sf2 village  # one cue
+```
+
+See [SCORE.txt](assets/audio/SCORE.txt) for the instrument-bank version and
+composition credits. `assets/source/openrtp/` holds the source sheets and MIDIs.
+The importer builds the walking-scale terrain atlas, objects, facades and
+battle horizons; it does not enlarge continent-map town icons into houses.
+For the reference maps and the decisions they informed, see [Visual references](CREDITS.md#visual-references-not-game-assets).
 
 ## Layout
 
@@ -127,6 +149,7 @@ src/render.cpp    the field renderer, HUD, title, intro, game-over
 src/dialog.cpp    dialog boxes, shop, inn, pause menu
 src/room.cpp      interior scenes
 src/battle.cpp    ATB battle (update + draw)
+src/music.cpp     scene selection, streaming, crossfades and resume
 src/main.cpp      window, virtual framebuffer, mode loop
 tools/            asset generation + the OpenRTP importer
 assets/           runtime art & audio (committed)

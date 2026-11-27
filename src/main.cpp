@@ -26,7 +26,6 @@ static void titleUpdate(float dt) {
                 g.fade = 1.0f; g.fadeDir = -1;
                 overworldSnapCamera();
                 playSoundIf(g.assets.confirm);
-                syncModeMusic();
             } else {
                 playSoundIf(g.assets.cancel);
                 pushToast("No save file found.");
@@ -62,7 +61,6 @@ static void introUpdate(float dt) {
         g.fade = 1.0f; g.fadeDir = -1;
         overworldSnapCamera();
         playSoundIf(g.assets.confirm);
-        syncModeMusic();
     }
 }
 
@@ -71,18 +69,6 @@ static void gameOverUpdate() {
         || IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         returnToTitle();
     }
-}
-
-static void updateMusicStreams() {
-    if (!g.musicOn) return;
-    auto tick = [](Music& m) {
-        if (m.frameCount > 0 && IsMusicStreamPlaying(m)) UpdateMusicStream(m);
-    };
-    tick(g.assets.title);
-    tick(g.assets.field);
-    tick(g.assets.battle);
-    tick(g.assets.victory);
-    tick(g.assets.gameover);
 }
 
 int main() {
@@ -96,12 +82,9 @@ int main() {
     newGameState(1337u);
     g.mode = MODE_TITLE;
     refreshSaveExists();
-    syncModeMusic();
 
     g.rt = LoadRenderTexture(VRES_W, VRES_H);
     SetTextureFilter(g.rt.texture, TEXTURE_FILTER_POINT);
-
-    Mode prevMode = g.mode;
 
     while (!WindowShouldClose() && !g.quitRequested) {
         float dt = std::min(0.05f, GetFrameTime());
@@ -135,11 +118,7 @@ int main() {
             case MODE_GAMEOVER:  gameOverUpdate(); break;
         }
 
-        if (g.mode != prevMode) {
-            prevMode = g.mode;
-            syncModeMusic();
-        }
-        updateMusicStreams();
+        updateScore(dt);
 
         // ---- render to crisp 512x288 virtual framebuffer
         BeginTextureMode(g.rt);
@@ -193,6 +172,7 @@ int main() {
     }
 
     UnloadRenderTexture(g.rt);
+    unloadScore();
     CloseAudioDevice();
     CloseWindow();
     return 0;

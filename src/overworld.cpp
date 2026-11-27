@@ -430,7 +430,8 @@ static void interactWithNearest() {
                 std::vector<DialogLine> lines;
                 if (g.village.startVillage) {
                     lines.push_back({ -1, "", "ELMSWICK — 'Where the meadow begins.'" });
-                    lines.push_back({ -1, "", "North: Temple & the North Road to Castle of Elm.\nSouth: Meadow. Southeast: Standing Stones. West: Old Watchtower." });
+                    lines.push_back({ -1, "", "North past the chapel: Briarwood and the castle. West past the shop: the marsh and Old Watchtower." });
+                    lines.push_back({ -1, "", "South across Millbrook: east for the Standing Stones, southwest for the Sunscorch Flats." });
                 } else {
                     lines.push_back({ -1, "", g.village.name + " — A quiet hearth in the wilds." });
                     lines.push_back({ -1, "", "Rest at the inn, stock up at the shop, and keep the Light close." });
