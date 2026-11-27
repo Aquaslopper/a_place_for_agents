@@ -165,6 +165,7 @@ struct Assets {
     Texture2D fence{}, fencePost{}, fenceGate{}, ladder{};
     Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{}, tent{};
     Texture2D barrel{}, table{}, longtable{}, counter{}, lantern{}, candle{}, keg{}, plate{}, shelf{};
+    Texture2D forgeHearth{}, forgeAnvil{};
     Texture2D mailbox{}, noticeboard{};
     Texture2D chestClosed{}, chestOpen{}, stump{}, bed{};
     Texture2D cloud{};

@@ -73,7 +73,7 @@ static const ItemDef ITEMS[IT_COUNT] = {
     { "Star Metal",   "Ore from the deep vault. The forge wants it.",0, IK_KEY, 0, ICON_STAR, false, KM_ANY },
 };
 const ItemDef& itemDef(int id) {
-    static const ItemDef none{ "Nothing", "", 0, IK_KEY, 0, ICON_GEM, false };
+    static const ItemDef none{ "Nothing", "", 0, IK_KEY, 0, ICON_GEM, false, KM_ANY };
     if (id < 0 || id >= IT_COUNT) return none;
     return ITEMS[id];
 }
@@ -435,6 +435,8 @@ bool loadAllAssets() {
     a.tower = loadTex(d, "sprites/tower.png");
     a.gate = loadTex(d, "sprites/gate.png");
     a.smithy = loadTex(d, "sprites/smithy.png");
+    a.forgeHearth = loadTex(d, "sprites/forge_hearth.png");
+    a.forgeAnvil = loadTex(d, "sprites/forge_anvil.png");
     a.caveMouth = loadTex(d, "sprites/cave_mouth.png");
     a.stairDown = loadTex(d, "sprites/stair_down.png");
     a.stairUp = loadTex(d, "sprites/stair_up.png");

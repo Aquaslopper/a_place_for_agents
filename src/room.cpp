@@ -6,7 +6,7 @@
 enum RoomPropTex {
     RP_COUNTER = 0, RP_SHELF, RP_TABLE, RP_LONGTABLE, RP_BED, RP_BARREL, RP_KEG,
     RP_LANTERN, RP_CANDLE, RP_PLATE, RP_STATUE, RP_PILLAR, RP_PLANT,
-    RP_URN, RP_STOOL
+    RP_URN, RP_STOOL, RP_FORGE_HEARTH, RP_ANVIL
 };
 
 static Texture2D* roomPropTexture(int tex) {
@@ -26,6 +26,8 @@ static Texture2D* roomPropTexture(int tex) {
         case RP_PLANT:     return &g.assets.plant;
         case RP_URN:       return &g.assets.urn;
         case RP_STOOL:     return &g.assets.stoolTex;
+        case RP_FORGE_HEARTH: return &g.assets.forgeHearth;
+        case RP_ANVIL: return &g.assets.forgeAnvil;
         default:           return &g.assets.barrel;
     }
 }
@@ -140,25 +142,18 @@ void roomBuild(Room& room, const Building& b, const Village& v) {
         g.roomNpcName = v.startVillage ? "Aldwin the Smith" : "Village Smith";
         room.npcX = room.w * 0.5f;
         room.npcY = 2.7f;
-        // Anvil work counter along the back wall
-        for (int x = 4; x <= room.w - 5; x++) addP(RP_COUNTER, x + 0.5f, 4.2f, true, 1.0f, 0.75f);
-        addP(RP_SHELF, 3.3f, 1.8f, true, 2.6f, 0.85f);
-        addP(RP_SHELF, room.w - 3.3f, 1.8f, true, 2.6f, 0.85f);
-        // The forge hearth and its glow
-        addP(RP_PLATE, 4.6f, 3.85f, false, 0.5f, 0.4f);
-        addP(RP_CANDLE, 4.6f, 3.6f, false, 0.45f, 0.45f);
-        addP(RP_BARREL, 2.2f, 5.6f);
-        addP(RP_BARREL, 3.2f, 5.6f);
-        addP(RP_KEG,    room.w - 2.2f, 5.6f);
-        addP(RP_LONGTABLE, room.w * 0.5f, 7.2f, true, 2.7f, 0.9f);
-        addP(RP_PLATE, room.w * 0.5f - 0.9f, 6.85f, false, 0.4f, 0.4f);
-        addP(RP_PLATE, room.w * 0.5f + 0.9f, 6.85f, false, 0.4f, 0.4f);
-        addP(RP_STOOL, room.w * 0.5f - 1.6f, 7.95f, false, 0.6f, 0.6f);
-        addP(RP_STOOL, room.w * 0.5f + 1.6f, 7.95f, false, 0.6f, 0.6f);
-        addP(RP_PILLAR, 2.4f, 3.4f, true, 0.8f, 0.8f);
-        addP(RP_PILLAR, room.w - 2.4f, 3.4f, true, 0.8f, 0.8f);
-        addP(RP_URN, 2.0f, room.h - 2.5f);
-        addP(RP_PLANT, room.w - 2.0f, room.h - 2.5f);
+        // A working smithy, not a tavern table with plates and a candle.
+        // Hearth left, stock right, clear counter and central visitor aisle.
+        addP(RP_FORGE_HEARTH, 3.2f, 3.2f, true, 2.7f, 1.4f);
+        addP(RP_ANVIL, 3.5f, 6.0f, true, 1.5f, 0.9f);
+        addP(RP_SHELF, 11.6f, 1.8f, true, 2.6f, 0.85f);
+        for (int x = 6; x <= 9; ++x) addP(RP_COUNTER, x + 0.5f, 4.2f, true, 1.0f, 0.75f);
+        addP(RP_BARREL, 11.8f, 5.8f);
+        addP(RP_BARREL, 12.8f, 5.8f);
+        addP(RP_KEG, 2.1f, 7.7f);
+        addP(RP_TABLE, 11.5f, 8.0f, true, 1.3f, 0.9f);
+        addP(RP_LANTERN, 11.5f, 7.65f, false, 0.4f, 0.4f);
+
     } else {
         room.kind = ROOM_HOUSE;
         static const char* kCottageNames[5] = {
@@ -461,7 +456,7 @@ void roomDraw() {
     DrawRectangleLines((int)ox - 2, (int)oy - 2, r.w * TILE + 4, r.h * TILE + 4, Color{ 86, 102, 148, 255 });
 
     bool isHall = (r.title.find("Hall") != std::string::npos);
-    Texture2D& floorTex = (r.kind == ROOM_TEMPLE) ? g.assets.stoneFloor
+    Texture2D& floorTex = (r.kind == ROOM_TEMPLE || r.kind == ROOM_FORGE) ? g.assets.stoneFloor
                         : ((r.kind == ROOM_SHOP || isHall) ? g.assets.tileFloor : g.assets.plankFloor);
     Texture2D& wallTex = g.assets.brickFloor[(r.kind == ROOM_TEMPLE || isHall) ? 1 : 0];
 
@@ -527,6 +522,11 @@ void roomDraw() {
             if (!t || t->id == 0) continue;
             float cx = ox + p.x * TILE;
             float fy = oy + (p.y + 0.45f) * TILE;
+            if (p.tex == RP_FORGE_HEARTH) {
+                float flicker = 0.8f + sinf(g.totalTime * 7.0f) * 0.12f + sinf(g.totalTime * 11.0f) * 0.08f;
+                DrawCircleGradient((int)cx, (int)fy - 9, 34,
+                                   Fade(Color{245, 154, 73, 255}, flicker * 0.22f), BLANK);
+            }
             DrawTexturePro(*t, { 0, 0, (float)t->width, (float)t->height },
                            { floorf(cx - t->width * 0.5f), floorf(fy - t->height), (float)t->width, (float)t->height },
                            { 0, 0 }, 0.0f, WHITE);

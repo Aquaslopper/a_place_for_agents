@@ -47,6 +47,7 @@ struct Dungeon {
     int zoneBase = 1;
     std::string name;
     DunFloor F;
+    std::unordered_map<int, std::vector<uint8_t>> explored;
     float px = 0, py = 0;               // tile units
     int facing = 0; bool sideFlip = false;
     float animT = 0; bool moving = false;
@@ -55,6 +56,7 @@ struct Dungeon {
     float camX = 0, camY = 0;
     std::vector<std::pair<int, int>> path;
     bool pendingInteract = false;
+    uint64_t pendingChestId = 0;
     float clickFlashT = 0, clickFlashX = 0, clickFlashY = 0;
 };
 Dungeon D;
@@ -195,6 +197,16 @@ int rollDungeonLoot(uint32_t pick, bool vault) {
 
 // ================================================================ generation
 void addProp(DunFloor& f, int tex, int tx, int ty, float w = 0.85f, float h = 0.75f) {
+    if (!cellOpenIn(f, tx, ty)) return;
+    if ((tx == f.entryTx && ty == f.entryTy) || (tx == f.downTx && ty == f.downTy)) return;
+    for (const auto& other : f.props)
+        if (fabsf(other.x - (tx + 0.5f)) < 1.0f && fabsf(other.y - (ty + 0.5f)) < 1.0f) return;
+    // Keep furniture away from doorways and narrow corridor mouths.
+    if (dunPropSolid(tex)) {
+        for (int y = ty - 1; y <= ty + 1; ++y)
+            for (int x = tx - 1; x <= tx + 1; ++x)
+                if (!cellOpenIn(f, x, y)) return;
+    }
     DunProp p;
     p.tex = tex;
     p.x = tx + 0.5f; p.y = ty + 0.5f;
@@ -398,6 +410,41 @@ void generateFloor() {
         }
     }
 
+    // Validate the dressed floor using the SAME body clearance as movement.
+    // If a furnishing cuts a route, remove it; scenery must never gate stairs
+    // or the quest vault. The geometry and decisions remain seed-only.
+    auto allFloorReachable = [&]() {
+        std::vector<uint8_t> seen(F.tiles.size(), 0);
+        std::vector<int> q{dIdx(F.entryTx, F.entryTy, F.w)};
+        seen[q.front()] = 1;
+        for (size_t i = 0; i < q.size(); ++i) {
+            int x = q[i] % F.w, y = q[i] / F.w;
+            for (const auto& dir : dirs) {
+                int nx = x + dir[0], ny = y + dir[1];
+                if (!cellOpen(nx, ny) || dunBlocked(nx + 0.5f, ny + 0.5f, 0.28f)) continue;
+                int idx = dIdx(nx, ny, F.w);
+                if (!seen[idx]) { seen[idx] = 1; q.push_back(idx); }
+            }
+        }
+        for (int y = 0; y < F.h; ++y)
+            for (int x = 0; x < F.w; ++x)
+                if (cellOpen(x, y) && !dunBlocked(x + 0.5f, y + 0.5f, 0.28f) &&
+                    !seen[dIdx(x, y, F.w)]) return false;
+        return true;
+    };
+    while (!allFloorReachable()) {
+        auto it = std::find_if(F.props.rbegin(), F.props.rend(),
+                               [](const DunProp& p) { return p.solid; });
+        if (it == F.props.rend()) break;
+        F.props.erase(std::next(it).base());
+    }
+    // The farthest tile is a reserved objective, even on the vault floor.
+    int objectiveX = farIdx % F.w, objectiveY = farIdx / F.w;
+    F.props.erase(std::remove_if(F.props.begin(), F.props.end(), [&](const DunProp& p) {
+        return p.solid && fabsf(p.x - (objectiveX + 0.5f)) < p.w * 0.45f + 0.28f &&
+               fabsf(p.y - (objectiveY + 0.5f)) < p.h * 0.42f + 0.28f;
+    }), F.props.end());
+
     // --- treasure: dead ends first (best rewards off the beaten path)
     std::vector<std::pair<int, int>> deadEnds;
     for (int y = 1; y < F.h - 1; y++) {
@@ -442,6 +489,8 @@ void generateFloor() {
     // The deep vault on the final floor claims the farthest chamber FIRST,
     // so the story treasure can never be crowded out of its own hoard.
     int guard = 0;
+    int placedMobs = 0;
+    std::unordered_set<uint64_t> mobSites;
     if (D.floor == D.floors - 1) {
         int vx = F.entryTx, vy = F.entryTy;
         int farDist = -1;
@@ -457,11 +506,12 @@ void generateFloor() {
         for (int k = 0; k < 2; k++) {          // two guards for the hoard
             int gx = vx + (k == 0 ? -1 : 1), gy = vy + 1;
             if (!cellOpen(gx, gy)) { gx = vx; gy = vy - 1; }
-            if (!cellOpen(gx, gy)) continue;
+            if (!cellOpen(gx, gy) || dunBlocked(gx + 0.5f, gy + 0.5f, 0.28f)) continue;
             // Draw first, then consult the kill log — a dead guard must not
             // shift the rng stream the rest of the floor is built from.
             EnemyKind kind = pickDungeonEnemy(rng, D.zoneBase + D.floor * 2 + 2);
             float phase = rng.f() * 6.28f;
+            ++placedMobs;
             if (g.defeatedMonsters.count(mobIdAt(gx, gy, D.floor, 90 + k))) continue;
             DunMob m;
             m.id = mobIdAt(gx, gy, D.floor, 90 + k);
@@ -484,11 +534,11 @@ void generateFloor() {
     // --- roaming inhabitants
     int mobCount = std::min(3 + D.floor, 6);
     guard = 0;
-    while ((int)F.mobs.size() < mobCount && guard++ < 60) {
+    while (placedMobs < mobCount && guard++ < 60) {
         const Room& r = rooms[(int)(rng.next() % (uint32_t)rooms.size())];
         int mx = rng.range(r.x, r.x + r.w - 1);
         int my = rng.range(r.y, r.y + r.h - 1);
-        if (!cellOpen(mx, my)) continue;
+        if (!cellOpen(mx, my) || dunBlocked(mx + 0.5f, my + 0.5f, 0.28f)) continue;
         if (mx == F.entryTx && my == F.entryTy) continue;
         if (mx == F.downTx && my == F.downTy) continue;
         int ddx = mx - F.entryTx, ddy = my - F.entryTy;
@@ -500,6 +550,8 @@ void generateFloor() {
         EnemyKind kind = pickDungeonEnemy(rng, D.zoneBase + D.floor * 2);
         float phase = rng.f() * 6.28f;
         uint64_t id = mobIdAt(mx, my, D.floor, 0);
+        if (!mobSites.insert(id).second) continue;
+        ++placedMobs;
         if (g.defeatedMonsters.count(id)) continue;
         DunMob m;
         m.id = id;
@@ -515,7 +567,7 @@ void generateFloor() {
 // ================================================================ pathfinding
 bool dunFindPath(int sx, int sy, int tx, int ty, std::vector<std::pair<int, int>>& out) {
     out.clear();
-    if (!cellOpen(tx, ty) || !cellOpen(sx, sy)) return false;
+    if (!cellOpen(tx, ty) || !cellOpen(sx, sy) || dunBlocked(tx + 0.5f, ty + 0.5f, 0.28f)) return false;
     int w = D.F.w, h = D.F.h;
     std::vector<int> prev((size_t)w * h, -1);
     std::vector<int> queue;
@@ -528,7 +580,7 @@ bool dunFindPath(int sx, int sy, int tx, int ty, std::vector<std::pair<int, int>
         int x = idx % w, y = idx / w;
         for (auto& d : dirs) {
             int nx = x + d[0], ny = y + d[1];
-            if (!cellOpen(nx, ny)) continue;
+            if (!cellOpen(nx, ny) || dunBlocked(nx + 0.5f, ny + 0.5f, 0.28f)) continue;
             int nidx = dIdx(nx, ny, w);
             if (prev[nidx] >= 0) continue;
             prev[nidx] = idx;
@@ -546,12 +598,39 @@ bool dunFindPath(int sx, int sy, int tx, int ty, std::vector<std::pair<int, int>
 }
 
 // ================================================================ transitions
-void generateAndEnterFloor() {
+void revealDungeon() {
+    auto& seen = D.explored[D.floor];
+    seen.resize(D.F.tiles.size(), 0);
+    int px = (int)floorf(D.px), py = (int)floorf(D.py);
+    for (int y = py - 6; y <= py + 6; ++y)
+        for (int x = px - 6; x <= px + 6; ++x) {
+            int dx = x - px, dy = y - py;
+            if (!inBounds(x, y) || dx * dx + dy * dy > 36) continue;
+            // Reveal only what the lantern can see, not rooms through walls.
+            int steps = std::max(abs(dx), abs(dy));
+            bool visible = true;
+            for (int i = 1; i < steps; ++i) {
+                int rx = (int)roundf(px + dx * (float)i / steps);
+                int ry = (int)roundf(py + dy * (float)i / steps);
+                if (!cellOpen(rx, ry)) { visible = false; break; }
+            }
+            if (visible) seen[dIdx(x, y, D.F.w)] = 1;
+        }
+}
+
+void generateAndEnterFloor(bool fromBelow = false) {
     generateFloor();
     D.px = D.F.entryTx + 0.5f;
     D.py = D.F.entryTy + 0.5f;
+    if (fromBelow && D.F.downTx >= 0) {
+        D.px = D.F.downTx + 0.5f;
+        D.py = D.F.downTy + 0.5f;
+    }
+    revealDungeon();
     D.facing = 0; D.sideFlip = false;
     D.path.clear();
+    D.pendingInteract = false;
+    D.clickFlashT = 0;
     D.stepDist = 0;
     // Snap the camera onto the new floor.
     float tx = D.px * TILE - g.vw * 0.5f;
@@ -626,20 +705,19 @@ static void giveChestLoot(const DunChest& c) {
     }
 }
 
-static void dungeonInteract(bool silent) {
+static void dungeonInteract(bool silent, uint64_t chestId = 0) {
     // 1. chests
     for (const auto& c : D.F.chests) {
+        if (chestId && c.id != chestId) continue;
         float dx = (c.tx + 0.5f) - D.px, dy = (c.ty + 0.5f) - D.py;
         if (dx * dx + dy * dy > 1.7f * 1.7f) continue;
-        if (g.openedChests.count(c.id)) {
-            if (!silent) pushToast("The chest is empty.");
-            return;
-        }
+        if (g.openedChests.count(c.id)) continue;
         g.openedChests.insert(c.id);
         giveChestLoot(c);
         playSoundIf(g.assets.treasure);
         return;
     }
+    if (chestId) return; // a targeted click must never activate nearby stairs
     // 2. stairs down
     if (D.F.downTx >= 0) {
         float dx = (D.F.downTx + 0.5f) - D.px, dy = (D.F.downTy + 0.5f) - D.py;
@@ -663,12 +741,7 @@ static void dungeonInteract(bool silent) {
             } else {
                 int target = D.floor - 1;
                 D.floor = target;
-                generateAndEnterFloor();
-                // reappear at the descent you took
-                if (D.F.downTx >= 0) {
-                    D.px = D.F.downTx + 0.5f;
-                    D.py = D.F.downTy + 0.5f;
-                }
+                generateAndEnterFloor(true);
                 char buf[64];
                 snprintf(buf, sizeof(buf), "%s — B%d", D.name.c_str(), D.floor + 1);
                 pushToast(buf);
@@ -686,8 +759,8 @@ const char* dungeonPrompt() {
     static char buf[96];
     for (const auto& c : D.F.chests) {
         float dx = (c.tx + 0.5f) - D.px, dy = (c.ty + 0.5f) - D.py;
-        if (dx * dx + dy * dy < 1.7f * 1.7f)
-            return g.openedChests.count(c.id) ? "SPACE: empty chest" : "SPACE: open chest";
+        if (dx * dx + dy * dy < 1.7f * 1.7f && !g.openedChests.count(c.id))
+            return "SPACE: open chest";
     }
     if (D.F.downTx >= 0) {
         float dx = (D.F.downTx + 0.5f) - D.px, dy = (D.F.downTy + 0.5f) - D.py;
@@ -719,16 +792,18 @@ static void updateDungeonCamera(float dt) {
     if (!std::isfinite(D.camY)) D.camY = targetY;
 }
 
-static void dungeonStartBattle(EnemyKind primary) {
+static void dungeonStartBattle(EnemyKind primary, uint64_t monsterId = 0) {
     Rng rng(hash2i(D.stepCounter, g.defeatedCount, D.seed ^ 0xBAD1u));
     std::vector<EnemyKind> group;
     group.push_back(primary);
     int zl = D.zoneBase + D.floor * 2;
     if (zl >= 3 && rng.chance(55)) group.push_back(pickDungeonEnemy(rng, zl));
     if (zl >= 6 && rng.chance(35)) group.push_back(pickDungeonEnemy(rng, zl));
-    battleStart(group, zl);
+    battleStart(group, zl, monsterId);
+    D.encounterGrace = 3.0f;
     g.encounterGrace = 3.0f;
     D.path.clear();
+    D.pendingInteract = false;
 }
 
 static void dungeonStepPath(float dt) {
@@ -744,7 +819,7 @@ static void dungeonStepPath(float dt) {
     } else if (dist > 0.01f) {
         D.facing = dy > 0 ? 0 : 1;
     }
-    if (dist <= stepLen || dist < 0.001f) {
+    if ((dist <= stepLen || dist < 0.001f) && !dunBlocked(cx, cy, 0.28f)) {
         D.px = cx; D.py = cy;
         D.path.erase(D.path.begin());
         D.animT += dt; D.moving = true;
@@ -752,7 +827,7 @@ static void dungeonStepPath(float dt) {
     }
     float nx = D.px + dx / dist * stepLen;
     float ny = D.py + dy / dist * stepLen;
-    if (!dunBlocked(nx, ny, 0.26f)) {
+    if (!dunBlocked(nx, ny, 0.28f)) {
         D.px = nx; D.py = ny;
         D.moving = true;
         D.animT += dt;
@@ -768,6 +843,9 @@ static void dungeonClickMove() {
     Vector2 m = getVirtualMouse();
     if (m.x < 0 || m.x >= g.vw || m.y < 0 || m.y >= g.vh) return;
     if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
+    // HUD panels consume clicks instead of moving to hidden world tiles.
+    if (m.y < 27 || m.y >= g.vh - 62 ||
+        (m.x >= g.vw - D.F.w * 2 - 15 && m.y >= 27 && m.y <= 42 + D.F.h * 2)) return;
     float wx = (m.x + D.camX) / TILE;
     float wy = (m.y + D.camY) / TILE;
     int tx = (int)floorf(wx), ty = (int)floorf(wy);
@@ -775,26 +853,28 @@ static void dungeonClickMove() {
     for (size_t i = 0; i < D.F.chests.size(); i++) {
         const DunChest& c = D.F.chests[i];
         if (c.tx == tx && c.ty == ty) {
-            int sx = c.tx, sy = c.ty + 1;
-            if (!cellOpen(sx, sy)) { sx = c.tx; sy = c.ty - 1; }
-            if (!cellOpen(sx, sy)) { sx = c.tx + 1; sy = c.ty; }
-            if (!cellOpen(sx, sy)) { sx = c.tx - 1; sy = c.ty; }
-            if (sx == (int)floorf(D.px) && sy == (int)floorf(D.py)) {
-                dungeonInteract(true);          // already standing there
+            D.path.clear();
+            D.pendingInteract = false;
+            float dx = c.tx + 0.5f - D.px, dy = c.ty + 0.5f - D.py;
+            if (dx * dx + dy * dy <= 1.7f * 1.7f) {
+                dungeonInteract(true, c.id);
                 return;
             }
-            std::vector<std::pair<int, int>> p;
-            if (dunFindPath((int)floorf(D.px), (int)floorf(D.py), sx, sy, p)) {
-                D.path = p;
+            // Try every approach and take the shortest reachable one, rather
+            // than picking the first floor cell (which may contain furniture).
+            const int dirs[4][2] = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
+            for (const auto& dir : dirs) {
+                std::vector<std::pair<int, int>> path;
+                if (dunFindPath((int)floorf(D.px), (int)floorf(D.py),
+                                c.tx + dir[0], c.ty + dir[1], path) &&
+                    (D.path.empty() || path.size() < D.path.size())) D.path = std::move(path);
+            }
+            if (!D.path.empty()) {
                 D.pendingInteract = true;
+                D.pendingChestId = c.id;
                 D.clickFlashT = 0.35f;
                 D.clickFlashX = c.tx + 0.5f; D.clickFlashY = c.ty + 0.5f;
-            } else if (!p.empty()) {
-                D.path = p;
-                D.pendingInteract = true;
-            } else {
-                pulseBlocked();
-            }
+            } else pulseBlocked();
             return;
         }
     }
@@ -819,6 +899,10 @@ void dungeonUpdate(float dt) {
     if (g.blockedFx > 0) g.blockedFx = std::max(0.0f, g.blockedFx - dt * 2.0f);
     if (g.shakeT > 0) g.shakeT = std::max(0.0f, g.shakeT - dt);
     if (!D.active) return;
+    g.encounterGrace = std::max(0.0f, g.encounterGrace - dt);
+    D.clickFlashT = std::max(0.0f, D.clickFlashT - dt);
+    D.F.mobs.erase(std::remove_if(D.F.mobs.begin(), D.F.mobs.end(),
+        [](const DunMob& m) { return g.defeatedMonsters.count(m.id) != 0; }), D.F.mobs.end());
 
     int kx = 0, ky = 0;
     if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) kx -= 1;
@@ -854,9 +938,12 @@ void dungeonUpdate(float dt) {
         dungeonStepPath(dt);
         if (D.path.empty() && D.pendingInteract) {
             D.pendingInteract = false;
-            dungeonInteract(true);
+            dungeonInteract(true, D.pendingChestId);
+            return; // interaction can replace the floor or enter a dialogue
         }
     }
+
+    revealDungeon();
 
     // wandering residents
     for (auto& m : D.F.mobs) {
@@ -868,7 +955,7 @@ void dungeonUpdate(float dt) {
         if (g.encounterGrace > 0.0f) continue;
         float dx = D.px - m.x, dy = D.py - m.y;
         if (dx * dx + dy * dy < 0.72f * 0.72f) {
-            dungeonStartBattle(m.kind);
+            dungeonStartBattle(m.kind, m.id);
             return;
         }
     }
@@ -877,7 +964,7 @@ void dungeonUpdate(float dt) {
     if (D.moving) {
         D.stepDist += dt * 4.4f;
         if (D.encounterGrace > 0) D.encounterGrace = std::max(0.0f, D.encounterGrace - dt);
-        else if (D.stepDist >= 5.0f) {
+        else if (g.encounterGrace <= 0 && D.stepDist >= 5.0f) {
             D.stepDist -= 5.0f;
             D.stepCounter++;
             int zl = D.zoneBase + D.floor * 2;
@@ -906,6 +993,8 @@ void dungeonUpdate(float dt) {
         return;
     }
     if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ENTER)) {
+        D.path.clear();
+        D.pendingInteract = false;
         dungeonInteract(false);
         return;
     }
@@ -963,6 +1052,14 @@ void dungeonDraw() {
                 DrawRectangle((int)sx, (int)sy, TILE, TILE, Color{ 6, 6, 10, 255 });
             }
         }
+    }
+
+    // Sconces are fixtures, not invisible light sources.
+    for (const auto& sc : D.F.sconces) {
+        if (!g.assets.torch.id) break;
+        float cx = (sc.first + 0.5f) * TILE - camX;
+        float fy = (sc.second + 1.0f) * TILE - camY;
+        texFootLocal(g.assets.torch, cx, fy);
     }
 
     // --- stair decals (drawn on the floor, revealed by torchlight)
@@ -1097,7 +1194,49 @@ void dungeonDraw() {
     drawWindow({ floorf(g.vw * 0.5f - tw * 0.5f), 5.0f, tw, 21.0f });
     drawTextCentered(header, g.vw * 0.5f, 12.0f, Color{ 255, 236, 176, 255 }, 8);
 
+    // Survey map: discovered passages persist while revisiting this cavern.
+    const int mapX = g.vw - D.F.w * 2 - 11, mapY = 38;
+    drawWindow({(float)mapX - 4, (float)mapY - 11, (float)D.F.w * 2 + 8, (float)D.F.h * 2 + 15});
+    drawText("SURVEY", (float)mapX, (float)mapY - 7, Color{176, 192, 221, 255}, 8);
+    auto found = D.explored.find(D.floor);
+    if (found != D.explored.end()) {
+        const auto& seen = found->second;
+        auto known = [&](int x, int y) {
+            return inBounds(x, y) && seen[dIdx(x, y, D.F.w)] != 0;
+        };
+        for (int y = 0; y < D.F.h; ++y)
+            for (int x = 0; x < D.F.w; ++x)
+                if (known(x, y)) DrawRectangle(mapX + x * 2, mapY + y * 2, 2, 2,
+                    cellOpen(x, y) ? Color{97, 108, 133, 255} : Color{34, 40, 61, 255});
+        auto marker = [&](int x, int y, Color color) {
+            if (known(x, y)) DrawRectangle(mapX + x * 2, mapY + y * 2, 3, 3, color);
+        };
+        marker(D.F.entryTx, D.F.entryTy, Color{112, 220, 195, 255});
+        marker(D.F.downTx, D.F.downTy, Color{125, 171, 255, 255});
+        for (const auto& chest : D.F.chests)
+            if (!g.openedChests.count(chest.id)) marker(chest.tx, chest.ty, Color{255, 211, 115, 255});
+        marker((int)floorf(D.px), (int)floorf(D.py), WHITE);
+    }
+
     if (g.mode == MODE_DUNGEON) {
+        // Compact field vitals remain visible between encounters.
+        int left = (g.vw - 338) / 2, top = g.vh - 59;
+        drawWindow({(float)left, (float)top, 338, 32});
+        for (int i = 0; i < 3; ++i) {
+            const Hero& hero = g.party[i];
+            float x = (float)left + 7 + i * 110;
+            drawText(heroName(hero.klass), x, (float)top + 5,
+                     hero.ko ? Color{255, 127, 127, 255} : WHITE, 8);
+            if (hero.ko || hero.poisoned)
+                drawText(hero.ko ? "KO" : "PSN", x + 76, (float)top + 5,
+                         Color{224, 156, 218, 255}, 8);
+            drawText("HP", x, (float)top + 18, Color{167, 203, 180, 255}, 8);
+            drawBar(x + 20, (float)top + 18, 43, 5, (float)hero.hp / std::max(1, hero.maxHp),
+                    Color{101, 214, 146, 255}, Color{22, 30, 45, 255});
+            drawText("MP", x + 67, (float)top + 18, Color{157, 186, 223, 255}, 8);
+            drawBar(x + 87, (float)top + 18, 14, 5, (float)hero.mp / std::max(1, hero.maxMp),
+                    Color{111, 163, 246, 255}, Color{22, 30, 45, 255});
+        }
         const char* hint = dungeonPrompt();
         if (!hint) hint = "ESC: menu";
         float hw = measureText(hint, 8).x + 20.0f;
