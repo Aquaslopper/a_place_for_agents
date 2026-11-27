@@ -9,6 +9,7 @@
 #include <string>
 #include <algorithm>
 #include <set>
+#include <deque>
 
 // ================================================================ hashing
 uint32_t hash2i(int x, int y, uint32_t seed) {
@@ -44,6 +45,28 @@ float fbm(float x, float y, uint32_t seed, int octaves) {
 }
 
 // ================================================================ terrain
+// Wild ways (defined after cellWalkable): the endless lattice of crossings that
+// keeps the terrain from fencing the world into rooms.
+// The decided way cells for the current seed, and which sectors have been
+// surveyed. Both are process state, pure functions of the seed, so a reloaded
+// save and a fresh walk always agree on where the ways run.
+static std::unordered_set<uint64_t> gWayCells;
+static std::unordered_set<int64_t> gWaySectorsDone;
+static uint32_t                    gWaySeed = 0;
+static uint32_t                    gWayEpoch = 1;   // bumped whenever ways are added
+
+static inline uint64_t wayKey(int tx, int ty) {
+    return ((uint64_t)(uint32_t)tx << 32) | (uint32_t)ty;
+}
+// A sector's identity. Exact, not a hash: a collision here would silently skip
+// a survey and leave its dell sealed, which is the whole bug this fixes.
+static inline int64_t waySectorIndex(int sx, int sy) {
+    return ((int64_t)(sx + 100000) << 32) | (uint32_t)(sy + 100000);
+}
+
+static bool onWildWay(int tx, int ty);
+static GroundKind wayGroundKind(int tx, int ty, GroundKind natural);
+
 static float elevationAt(float x, float y, uint32_t seed) {
     float e = fbm(x * 0.016f, y * 0.016f, seed ^ 0x1eafu, 5);
     return (e - 0.5f) * 1.4f + 0.5f;
@@ -400,20 +423,402 @@ static GroundTile generateGround(int tx, int ty) {
     } else if ((out.kind == G_HEATH || out.kind == G_BEACH || out.kind == G_SAND) && d < 0.08f) {
         out.deco = 3; // pebbles
     }
+
+    // A wild way runs through here: the cut is trodden, and nothing grows back
+    // over it. Only consultable once the survey for this sector has run.
+    if (onWildWay(tx, ty)) {
+        out.kind = wayGroundKind(tx, ty, out.kind);
+        out.deco = 0;
+    }
     return out;
 }
 
 GroundTile sampleGround(int tx, int ty) {
-    struct Entry { int x = 0, y = 0; uint32_t seed = 0; bool valid = false; GroundTile tile; };
+    struct Entry { int x = 0, y = 0; uint32_t seed = 0, epoch = 0; bool valid = false; GroundTile tile; };
     static Entry cache[8192];
     Entry& c = cache[((uint32_t)ty * 131u + (uint32_t)tx) & 8191];
-    if (!c.valid || c.x != tx || c.y != ty || c.seed != g.worldSeed)
-        c = { tx, ty, g.worldSeed, true, generateGround(tx, ty) };
+    if (!c.valid || c.x != tx || c.y != ty || c.seed != g.worldSeed || c.epoch != gWayEpoch)
+        c = { tx, ty, g.worldSeed, gWayEpoch, true, generateGround(tx, ty) };
     return c.tile;
 }
 
 static bool groundWalkable(GroundKind k) {
     return k != G_WATER && k != G_DEEP && k != G_ROCK;
+}
+
+// ================================================================ wild ways
+// The world is endless, but cliffs, rivers and shoulder-to-shoulder woods were
+// quietly fencing it into rooms: a crag three tiles deep, a packed conifer wood,
+// a salt marsh, and behind them a sunlit dell that nothing could reach. This
+// survey fixes that from the terrain's side, for the whole world and from the
+// seed alone.
+//
+// A door belongs to an EDGE of a 64-tile sector, and both sectors that share
+// that edge compute it with the same call, so they always name the same tile.
+// Inside a sector, its four doors and one meeting stone are joined by the
+// cheapest route: open ground is free, crag, water and wood cost a cut (the
+// route grades a trodden crossing through them), authored ground is impassable.
+// Every sector connects its own doors to each other, so the whole world is one
+// connected lattice of ways by construction — an endless grid of crossings
+// hidden inside the terrain, invisible until a wall stops you and you find the
+// cut through it. A dell the ways cannot reach gets a short cut to the sector's
+// heart, so every glade is a find and no place is a room without a door.
+//
+// The survey is per-sector and on demand — there is no ready-wave at load, only
+// the sectors you stand in and are about to enter are worked out — and it is a
+// pure function of the seed, so the renderer, the collision test, the click-to-
+// walk pathfinder and a reloaded save always agree on where the ways run.
+constexpr int WAY_SECTOR = 64;
+constexpr int WAY_MIN = 12, WAY_MAX = 51;       // door offsets inside a sector
+static const int d8Static[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
+
+// A tile the survey may cut through. Crag, water, ice and wood are the whole
+// point — a crossing is the cut in them — so only authored ground is refused:
+// roofs, paving, soil, a landmark's own stones, a dungeon mouth, the road, or a
+// scripted story site.
+static bool wayCarvable(int tx, int ty) {
+    switch (sampleGround(tx, ty).kind) {
+        case G_COBBLE: case G_FLOOR: case G_SOIL:
+        case G_BRIDGE_NS: case G_BRIDGE_EW: case G_DIRT:
+            return false;
+        default: break;
+    }
+    if (nearSpecialSite(tx, ty)) return false;
+    if (nearTrail(tx, ty, 1)) return false;              // the authored roads stay theirs
+    if (tx * tx + ty * ty < 34 * 34) return false;        // Elmswick's meadow stays hand-set
+    if (g.villageLoaded && abs(tx - g.village.cx) <= 19 && abs(ty - g.village.cy) <= 19) return false;
+    Landmark lm;
+    if (landmarkNear(tx, ty, lm) && abs(tx - lm.tx) <= 7 && abs(ty - lm.ty) <= 7) return false;
+    int cx, cy;
+    if (startCavernSite(cx, cy) && abs(tx - cx) <= 7 && abs(ty - cy) <= 7) return false;
+    return true;
+}
+
+static bool wayGroundOpen(int tx, int ty) {
+    GroundKind k = sampleGround(tx, ty).kind;
+    return k != G_WATER && k != G_DEEP && k != G_ROCK;
+}
+
+// Trees, rocks and the rest of the prop layer are solids a survey must route
+// around or cut down; the rest is scenery.
+static bool wayPropSolid(PropKind p) {
+    switch (p) {
+        case P_TREE0: case P_TREE1: case P_TREE2: case P_PINE0: case P_PINE1: case P_PINE2:
+        case P_DEADTREE: case P_TREE_SNOW: case P_ROCK0: case P_ROCK1: case P_ROCK2:
+        case P_BOULDER: case P_CRYSTAL: case P_STUMP:
+        case P_AMBER_OAK: case P_COPPER_OAK: case P_WILLOW:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// The survey's own walkable judgement. It matches cellWalkable() everywhere it
+// can be consulted without recursing, because a way may only be opened where
+// this says a body could stand.
+static bool landmarkCellBlocked(int tx, int ty);   // defined with the landmark pass below
+static bool wayStandable(int tx, int ty) {
+    if (!wayGroundOpen(tx, ty)) return false;
+    if (wayPropSolid(propAt(tx, ty))) return false;
+    if (landmarkCellBlocked(tx, ty)) return false;
+    return true;
+}
+
+// A way is only ever stamped where it had to cut. Ground a body can already
+// stand on stays exactly as the seed made it, so the wilds keep their look and
+// the survey's whole visible footprint is the cuts through real walls.
+static void wayCarve(int tx, int ty) {
+    gWayCells.insert(wayKey(tx, ty));
+}
+
+// Step `(xa,ya) -> (xb,yb)` as part of a route: grade the far tile if it is a
+// wall, and where the step is diagonal also open one shoulder, because the game
+// will not cut a corner through a wall.
+static void wayRecordStep(int xa, int ya, int xb, int yb) {
+    if (!wayStandable(xb, yb) && wayCarvable(xb, yb)) wayCarve(xb, yb);
+    if (xa == xb || ya == yb) return;
+    int c1x = xb, c1y = ya, c2x = xa, c2y = yb;
+    if (wayStandable(c1x, c1y) || wayStandable(c2x, c2y)) return;
+    if (wayCarvable(c1x, c1y)) wayCarve(c1x, c1y);
+    else if (wayCarvable(c2x, c2y)) wayCarve(c2x, c2y);
+}
+
+// The opening in a sector's north edge (row sy*64). Both the sector above and
+// the sector below call this with the same arguments and get the same tile; if
+// the edge is walled there, the tile is cut so the pair really is walkable.
+static int wayEdgeOpeningX(int sx, int sy) {
+    int edgeX = sx * WAY_SECTOR, edgeY = sy * WAY_SECTOR;
+    int base = edgeX + WAY_MIN +
+               (int)(hash2i(sx, sy, g.worldSeed ^ 0x3d0du) % (uint32_t)(WAY_MAX - WAY_MIN));
+    for (int k = 0; k <= 20; k++) {
+        for (int sgn = (k == 0 ? 1 : -1); sgn <= 1; sgn += 2) {
+            int x = base + sgn * k;
+            if (x < edgeX || x >= edgeX + WAY_SECTOR) continue;
+            if (wayStandable(x, edgeY)) return x;
+            if (wayCarvable(x, edgeY)) { wayCarve(x, edgeY); return x; }
+        }
+    }
+    return base;
+}
+
+// The opening in a sector's west edge (column sx*64), shared with the sector
+// to the left in the same way.
+static int wayEdgeOpeningY(int sx, int sy) {
+    int edgeX = sx * WAY_SECTOR, edgeY = sy * WAY_SECTOR;
+    int base = edgeY + WAY_MIN +
+               (int)(hash2i(sx, sy, g.worldSeed ^ 0x9e11u) % (uint32_t)(WAY_MAX - WAY_MIN));
+    for (int k = 0; k <= 20; k++) {
+        for (int sgn = (k == 0 ? 1 : -1); sgn <= 1; sgn += 2) {
+            int y = base + sgn * k;
+            if (y < edgeY || y >= edgeY + WAY_SECTOR) continue;
+            if (wayStandable(edgeX, y)) return y;
+            if (wayCarvable(edgeX, y)) { wayCarve(edgeX, y); return y; }
+        }
+    }
+    return base;
+}
+
+struct WaySurveyScratch {
+    std::vector<int> cost, prev;
+    size_t at(int x, int y, int x0, int y0) const {
+        return (size_t)(y - y0) * WAY_SECTOR + (size_t)(x - x0);
+    }
+};
+
+// One sector's survey. Its five way-points — the openings on its four edges and
+// a meeting stone inside — are joined pairwise by the cheapest route, which is
+// what makes the lattice connected and the world walkable forever.
+static void wildWaySurveySector(int sx, int sy) {
+    const int x0 = sx * WAY_SECTOR, y0 = sy * WAY_SECTOR;
+    constexpr int N = WAY_SECTOR;
+    constexpr int INF = 1 << 28;
+    auto at = [&](int x, int y) { return (size_t)(y - y0) * N + (size_t)(x - x0); };
+
+    const int doors[5][2] = {
+        { wayEdgeOpeningX(sx, sy), y0 },                    // north edge
+        { x0 + N - 1, wayEdgeOpeningY(sx + 1, sy) },        // east edge (the next sector's west edge)
+        { wayEdgeOpeningX(sx, sy + 1), y0 + N - 1 },        // south edge (the next sector's north edge)
+        { x0, wayEdgeOpeningY(sx, sy) },                    // west edge
+        { x0 + 10 + (int)(hash2i(sx * 3 + 1, sy * 5 + 2, g.worldSeed ^ 0x51b7u) % (uint32_t)(N - 20)),
+          y0 + 10 + (int)(hash2i(sx * 7 + 4, sy * 3 + 9, g.worldSeed ^ 0x2ad3u) % (uint32_t)(N - 20)) },
+    };
+
+    // An edge opening is carved on the shared edge line; the tile just inside it
+    // must be walkable too, or the opening leads nowhere. Both sides of every
+    // shared edge do this for their own inner tile, so a door is a door on both
+    // faces of the wall.
+    {
+        // A short trodden stub leading in from each opening, so the door is
+        // joined to the sector's interior and never a doorway into its own wall.
+        const int inDir[4][2] = { { 0, 1 }, { -1, 0 }, { 0, -1 }, { 1, 0 } };
+        for (int d = 0; d < 4; d++) {
+            for (int k = 0; k < 3; k++) {
+                int cx = doors[d][0] + inDir[d][0] * k;
+                int cy = doors[d][1] + inDir[d][1] * k;
+                if (cx < x0 || cx >= x0 + N || cy < y0 || cy >= y0 + N) continue;
+                if (wayStandable(cx, cy) && wayGroundOpen(cx, cy)) continue;
+                if (wayCarvable(cx, cy)) wayCarve(cx, cy);
+            }
+        }
+    }
+
+    std::vector<int> cost((size_t)N * N, INF);
+    std::vector<int> prev((size_t)N * N, -1);
+    using Node = std::pair<int, int>;
+
+    auto route = [&](int fx, int fy, int tx, int ty) {
+        if (fx < x0 || fx >= x0 + N || fy < y0 || fy >= y0 + N) return;
+        if (tx < x0 || tx >= x0 + N || ty < y0 || ty >= y0 + N) return;
+        std::fill(cost.begin(), cost.end(), INF);
+        std::fill(prev.begin(), prev.end(), -1);
+        std::priority_queue<Node, std::vector<Node>, std::greater<Node>> open;
+        cost[at(fx, fy)] = 0;
+        open.push({ 0, (int)at(fx, fy) });
+        int expanded = 0;
+        while (!open.empty() && expanded < N * N) {
+            auto [c, i] = open.top(); open.pop();
+            if (c != cost[(size_t)i]) continue;
+            expanded++;
+            int x = (int)((size_t)i % N) + x0, y = (int)((size_t)i / N) + y0;
+            if (x == tx && y == ty) break;
+            for (auto& d : d8Static) {
+                int nx = x + d[0], ny = y + d[1];
+                if (nx < x0 || nx >= x0 + N || ny < y0 || ny >= y0 + N) continue;
+                bool stand = wayStandable(nx, ny);
+                if (!stand && !wayCarvable(nx, ny)) continue;
+                // Open ground is cheap; a stand of trees is a worn track waiting
+                // to be cut (a groove through a wood is a pleasant thing to find);
+                // crag costs more and open water most, so ways prefer the
+                // shallowest wall available while still being willing to cut one.
+                // Without this a dense grove's staggered tree lattice was a wall
+                // that only a diagonal step could cross — and the game does not
+                // allow diagonal steps through walls.
+                bool wooded = wayGroundOpen(nx, ny) && wayPropSolid(propAt(nx, ny));
+                int step = stand ? 2 : (wooded ? 4 : (wayGroundOpen(nx, ny) ? 9 : 12));
+                if (d[0] && d[1]) step += 1;
+                size_t j = at(nx, ny);
+                if (c + step >= cost[j]) continue;
+                cost[j] = c + step;
+                prev[j] = (int)i;
+                open.push({ c + step, (int)j });
+            }
+        }
+        if (cost[at(tx, ty)] >= INF) return;
+        std::vector<int> chain;
+        for (int i = (int)at(tx, ty); i >= 0 && chain.size() < (size_t)N * N; i = prev[(size_t)i]) {
+            chain.push_back(i);
+            if (i == (int)at(fx, fy)) break;
+        }
+        std::reverse(chain.begin(), chain.end());
+        for (size_t k = 1; k < chain.size(); k++) {
+            int p = chain[k - 1], c = chain[k];
+            wayRecordStep((int)((size_t)p % N) + x0, (int)((size_t)p / N) + y0,
+                          (int)((size_t)c % N) + x0, (int)((size_t)c / N) + y0);
+        }
+    };
+
+    for (int d = 0; d < 4; d++) route(doors[d][0], doors[d][1], doors[4][0], doors[4][1]);
+
+    // ---- pockets ------------------------------------------------------------
+    // A dell behind a crag is a find, never a room with no door. Flood the open
+    // ground of a 3-sector window around this sector from the ways in it; any
+    // pocket of a dozen tiles or more that the ways cannot reach gets a short
+    // cut to the nearest way. Pockets are judged whole (a pocket is only acted
+    // on when its own bounding box sits inside the window), so two sectors never
+    // half-open the same dell, and a pocket a player is walking toward is always
+    // opened by one of the sectors their approach touches.
+    constexpr int WAY_MARGIN = 16;
+    const int wx0 = x0 - WAY_MARGIN, wy0 = y0 - WAY_MARGIN;
+    const int ww = WAY_SECTOR + 2 * WAY_MARGIN;
+    auto wat = [&](int x, int y) { return (size_t)(y - wy0) * ww + (size_t)(x - wx0); };
+    auto inWin = [&](int x, int y) { return x >= wx0 && x < wx0 + ww && y >= wy0 && y < wy0 + ww; };
+    // Standability is asked nine times per cell by the flood, and each ask costs
+    // a prop query. Decide it once per window cell, then flood the bitmap.
+    std::vector<uint8_t> standBit((size_t)ww * ww, 0);
+    for (int y = wy0; y < wy0 + ww; y++)
+        for (int x = wx0; x < wx0 + ww; x++)
+            standBit[wat(x, y)] = (wayGroundOpen(x, y) && !wayPropSolid(propAt(x, y))) ? 1 : 0;
+    auto standNow = [&](int x, int y) {
+        if (!inWin(x, y)) return false;
+        if (standBit[wat(x, y)]) return true;
+        return gWayCells.count(wayKey(x, y)) != 0;          // a recorded cut is walkable by construction
+    };
+    std::vector<uint8_t> reached((size_t)ww * ww, 0);
+    std::vector<int> fq;
+    for (int y = wy0; y < wy0 + ww; y++)
+        for (int x = wx0; x < wx0 + ww; x++) {
+            if (!gWayCells.count(wayKey(x, y))) continue;
+            size_t i = wat(x, y);
+            if (reached[i]) continue;
+            reached[i] = 1;
+            fq.push_back((int)i);
+        }
+    for (size_t k = 0; k < fq.size(); k++) {
+        int x = (int)((size_t)fq[k] % ww) + wx0, y = (int)((size_t)fq[k] / ww) + wy0;
+        for (auto& d : d8Static) {
+            int nx = x + d[0], ny = y + d[1];
+            if (!inWin(nx, ny)) continue;
+            size_t j = wat(nx, ny);
+            if (reached[j] || !standNow(nx, ny)) continue;
+            reached[j] = 1;
+            fq.push_back((int)j);
+        }
+    }
+    // The window's ways can have opened a good deal on their own; a pocket only
+    // needs a cut when it is big by itself, so the threshold here is the one the
+    // ladder of tests settled on: twelve tiles of open ground with no way into
+    // them is a room without a door, and it gets one.
+    int adopted = 0;
+    for (int y = wy0; y < wy0 + ww && adopted < 8; y++)
+        for (int x = wx0; x < wx0 + ww && adopted < 8; x++) {
+            size_t start2 = wat(x, y);
+            if (reached[start2] || !standNow(x, y)) continue;
+            std::vector<int> pocket, pq;
+            pq.push_back((int)start2);
+            reached[start2] = 1;
+            int minX = x, maxX = x, minY = y, maxY = y;
+            for (size_t head = 0; head < pq.size(); head++) {
+                int px = (int)((size_t)pq[head] % ww) + wx0, py = (int)((size_t)pq[head] / ww) + wy0;
+                pocket.push_back(pq[head]);
+                minX = std::min(minX, px); maxX = std::max(maxX, px);
+                minY = std::min(minY, py); maxY = std::max(maxY, py);
+                for (auto& d : d8Static) {
+                    int nx = px + d[0], ny = py + d[1];
+                    if (!inWin(nx, ny)) continue;
+                    size_t j = wat(nx, ny);
+                    if (reached[j] || !standNow(nx, ny)) continue;
+                    reached[j] = 1;
+                    pq.push_back((int)j);
+                }
+            }
+            if (pocket.size() < 12) continue;
+            if (minX <= wx0 || minY <= wy0 || maxX >= wx0 + ww - 1 || maxY >= wy0 + ww - 1) continue;
+            if (abs(x - x0) >= WAY_SECTOR || abs(y - y0) >= WAY_SECTOR) continue;
+            std::pair<int, int> from = { x, y }, to = { x, y };
+            int bestD = 1 << 28;
+            for (int k : pocket) {
+                int px = (int)((size_t)k % ww) + wx0, py = (int)((size_t)k / ww) + wy0;
+                for (int r = 1; r <= 24 && r * r < bestD; r++)
+                    for (int dy = -r; dy <= r; dy++)
+                        for (int dx = -r; dx <= r; dx++) {
+                            if (std::max(abs(dx), abs(dy)) != r) continue;
+                            int nx = px + dx, ny = py + dy;
+                            if (!inWin(nx, ny) || !gWayCells.count(wayKey(nx, ny))) continue;
+                            int d2 = dx * dx + dy * dy;
+                            if (d2 < bestD) { bestD = d2; from = { px, py }; to = { nx, ny }; }
+                        }
+            }
+            if (bestD == (1 << 28)) continue;
+            route(from.first, from.second, to.first, to.second);
+            adopted++;
+            for (int k : pocket) {
+                int px = (int)((size_t)k % ww) + wx0, py = (int)((size_t)k / ww) + wy0;
+                for (auto& d : d8Static) {
+                    int nx = px + d[0], ny = py + d[1];
+                    if (!inWin(nx, ny)) continue;
+                    size_t j = wat(nx, ny);
+                    if (reached[j] || !standNow(nx, ny)) continue;
+                    reached[j] = 1;
+                }
+            }
+        }
+
+    gWayEpoch++;
+}
+
+// True when the ways of the seed's surveyed sectors include this cell.
+static bool onWildWay(int tx, int ty) {
+    if (gWaySeed != g.worldSeed) return false;
+    return gWayCells.count(wayKey(tx, ty)) != 0;
+}
+
+// Survey the sectors the party stands in and is about to enter. Cheap: nine
+// sectors of a 64x64 Dijkstra, once each per seed and never again.
+static void wildWayEnsureFor(int sx, int sy) {
+    if (gWaySeed != g.worldSeed) {
+        gWayCells.clear();
+        gWaySectorsDone.clear();
+        gWaySeed = g.worldSeed;
+        gWayEpoch++;
+    }
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+            int cx = sx + dx, cy = sy + dy;
+            int64_t key = waySectorIndex(cx, cy);
+            if (gWaySectorsDone.count(key)) continue;
+            gWaySectorsDone.insert(key);
+            wildWaySurveySector(cx, cy);
+        }
+}
+
+// Ground a way runs over is trodden: the survey's cuts are DIRT, the same worn
+// surface as the roads, so no undergrowth grows back over the cut.
+static GroundKind wayGroundKind(int tx, int ty, GroundKind natural) {
+    if (!onWildWay(tx, ty)) return natural;
+    if (natural == G_COBBLE || natural == G_FLOOR || natural == G_SOIL ||
+        natural == G_BRIDGE_NS || natural == G_BRIDGE_EW || natural == G_DIRT)
+        return natural;
+    return G_DIRT;
 }
 
 bool villageDecoSolid(int kind) {
@@ -610,6 +1015,10 @@ static bool landmarkCellBlocked(int tx, int ty) {
 }
 
 bool cellWalkable(int tx, int ty) {
+    // The world is endless, so the terrain's ways must exist before anything is
+    // judged blocked. Three sectors are surveyed on first touch of a region and
+    // cached; the survey only ever opens a way, never closes one.
+    wildWayEnsureFor((int)floorf((float)tx / WAY_SECTOR), (int)floorf((float)ty / WAY_SECTOR));
     if (g.villageLoaded) {
         for (const auto& rc : g.village.rocks) {
             if (rc.first == tx && rc.second == ty) return false;
@@ -692,9 +1101,32 @@ static bool coniferSlot(int tx, int ty, float grove, float hf) {
     return false;
 }
 
+static PropKind propAtUncached(int tx, int ty);
+
+// propAt is a pure function of the seed and the loaded village, but it costs a
+// few microseconds (landmark and cavern surveys, two noise fields, the trail
+// pass) and the terrain survey asks it again and again for the same tiles. A
+// small direct-mapped cache keeps the survey cheap enough to run while walking.
+struct PropCacheEntry { int x = -1, y = -1; uint32_t seed = 0; uint64_t village = ~0ull; PropKind kind = P_NONE; };
+static PropCacheEntry gPropCache[1 << 14];
+static uint64_t gPropCacheVillage() { return g.villageLoaded ? g.villageKey : ~0ull; }
+
 PropKind propAt(int tx, int ty) {
+    PropCacheEntry& c = gPropCache[((uint32_t)tx * 73856093u ^ (uint32_t)ty * 19349663u) & ((1u << 14) - 1)];
+    uint64_t vk = gPropCacheVillage();
+    if (c.x == tx && c.y == ty && c.seed == g.worldSeed && c.village == vk) return c.kind;
+    PropKind k = propAtUncached(tx, ty);
+    c = { tx, ty, g.worldSeed, vk, k };
+    return k;
+}
+
+static PropKind propAtUncached(int tx, int ty) {
     if (g.villageLoaded && (inVillage((float)tx + 0.5f, (float)ty + 0.5f) || inCommons((float)tx + 0.5f, (float)ty + 0.5f)))
         return P_NONE;
+
+    // A wild way is a worn line through the terrain: keep it trodden, never
+    // walled by a tree or boulder that happens to fall on it.
+    if (onWildWay(tx, ty)) return P_NONE;
 
     // Sacred ring of ancient amber oaks framing the Standing Stones glade
     {
@@ -2073,8 +2505,12 @@ void nearestWalkable(int tx, int ty, int& outTx, int& outTy) {
 
 namespace {
 struct NavOpen { int x, y; float f; bool operator>(const NavOpen& o) const { return f > o.f; } };
-constexpr int NAV_MAX_EXPAND = 9000;
-constexpr int NAV_MAX_RADIUS = 44;
+// Click-to-walk is not a leash. The old search gave up at 44 tiles in each
+// direction and 9000 expanded cells, so clicking a landmark across the meadow
+// simply stopped half-way — "the map has an edge" from the player's side. The
+// search may now range as far as the click demands, at the cost of walking.
+constexpr int NAV_MAX_EXPAND = 60000;
+constexpr int NAV_MAX_RADIUS = 160;
 inline uint64_t navKey(int x, int y) { return ((uint64_t)(uint32_t)x << 32) | (uint32_t)y; }
 }
 
