@@ -289,7 +289,6 @@ static GroundTile generateGround(int tx, int ty) {
         else if (!keepClearForTownOrRoad && ((ridge > 0.62f && shelf > 0.50f) || patch > 0.70f)) out.kind = G_ROCK;
     } else if (out.biome == BI_FEN) {
         if (patch < 0.24f || e < 0.29f) out.kind = G_WATER;
-        else if (!keepClearForTownOrRoad && ridge > 0.67f && shelf > 0.57f) out.kind = G_ROCK;
         else if (canopy > 0.48f) out.kind = G_GRASS_DARK;
     } else if (e < 0.325f) {
         out.kind = e < 0.265f ? G_DEEP : G_WATER;
@@ -394,19 +393,10 @@ static GroundTile generateGround(int tx, int ty) {
         else if (patch > 0.54f && d < 0.16f) out.deco = 2;
         else if (d < 0.14f) out.deco = 1;
     } else if (out.kind == G_AMBER || out.kind == G_LEAVES) {
-        if (d < 0.11f) out.deco = 1;
-        else if (d < 0.15f) out.deco = 3;
-    } else if (out.kind == G_SWAMP) {
-        if (d < 0.08f) out.deco = 1;
-        else if (d < 0.13f) out.deco = 3;
-    } else if (out.kind == G_SNOW) {
-        if (d < 0.06f) out.deco = 3;
+        if (d < 0.10f) out.deco = 1;
     } else if (out.kind == G_WATER && (out.biome == BI_FEN || bank < 2.2f) && d < 0.16f) {
         out.deco = 4; // water lilies
-    } else if (out.kind == G_SAND || out.kind == G_RIPPLES) {
-        if (d < 0.055f) out.deco = 1; // desert grass tufts
-        else if (d < 0.125f) out.deco = 3; // desert stones
-    } else if ((out.kind == G_HEATH || out.kind == G_BEACH) && d < 0.08f) {
+    } else if ((out.kind == G_HEATH || out.kind == G_BEACH || out.kind == G_SAND) && d < 0.08f) {
         out.deco = 3; // pebbles
     }
     return out;
@@ -776,32 +766,25 @@ PropKind propAt(int tx, int ty) {
                 if (broadleafSlot(tx, ty, grove, hf)) return (h % 4) ? P_AMBER_OAK : P_COPPER_OAK;
                 if (hf < 0.06f) return P_MUSHROOM;
                 if (hf > 0.965f) return P_STUMP;
-                if (hf > 0.945f) return P_BUSH;
             } else if (grove > 0.34f) {
-                if (hf < 0.12f) return ((h >> 4) & 1) ? P_BUSH : P_BUSH_PLAIN;
+                if (hf < 0.13f) return P_BUSH_PLAIN;
                 if (hf > 0.955f) return P_MUSHROOM;
-                if (hf > 0.935f) return (PropKind)(P_ROCK0 + (h % 3));
+                if (hf > 0.935f && hf <= 0.955f) return P_ROCK1;
             } else {
                 if (hf < 0.006f && broadleafSlot(tx, ty, 0.5f, 0.1f)) return P_AMBER_OAK;
-                if (hf > 0.992f) return (PropKind)(P_ROCK0 + (h % 3));
-                if (hf > 0.985f) return P_BUSH;
-                if (hf > 0.979f) return P_STUMP;
+                if (hf > 0.990f) return P_STUMP;
             }
             break;
         }
         case G_SNOW: {
             if (grove > 0.47f) {
-                if (coniferSlot(tx, ty, grove, hf)) return ((h >> 3) % 4 == 0) ? P_PINE2 : P_TREE_SNOW;
-                if (hf > 0.96f) return (h & 1) ? P_ROCK2 : P_ROCK0;
-                if (hf < 0.025f) return P_STUMP;
+                if (coniferSlot(tx, ty, grove, hf)) return P_TREE_SNOW;
+                if (hf > 0.96f) return P_ROCK2;
             } else if (grove > 0.38f) {
-                if (hf < 0.065f) return (h & 1) ? P_ROCK2 : P_ROCK0;
+                if (hf < 0.07f) return P_ROCK2;
                 if (hf > 0.975f) return P_CRYSTAL;
-                if (hf > 0.955f) return P_BUSH_PLAIN;
-            } else {
-                if (hf > 0.992f) return P_CRYSTAL;
-                if (hf > 0.985f) return P_ROCK0;
-                if (hf < 0.006f) return P_STUMP;
+            } else if (hf > 0.991f) {
+                return P_CRYSTAL;
             }
             break;
         }
@@ -819,24 +802,17 @@ PropKind propAt(int tx, int ty) {
         }
         case G_ROCK:
             if (hf < 0.055f) return P_BOULDER;
-            if (hf < 0.085f) return (PropKind)(P_ROCK0 + (h % 3));
             if (hf > 0.985f) return P_CRYSTAL;
             break;
         case G_SAND:
         case G_RIPPLES:
-            if (grove > 0.48f && hf < 0.085f) return ((h >> 2) % 4 == 0) ? P_DEADTREE : P_YUCCA;
-            if (hf > 0.982f) return (PropKind)(P_ROCK0 + (h % 3));
-            if (hf > 0.974f) return P_CRYSTAL;
-            if (hf < 0.008f) return P_STUMP;
+            if (grove > 0.48f && hf < 0.09f) return P_YUCCA;
+            if (hf > 0.984f) return P_ROCK1;
             break;
         case G_SWAMP:
             if (grove > 0.46f && broadleafSlot(tx, ty, grove, hf)) return (h % 3) ? P_WILLOW : P_DEADTREE;
-            if (hf < 0.11f + grove * 0.09f) return P_REEDS;
-            if (hf > 0.986f) return P_BOULDER;
-            if (hf > 0.974f) return (h & 1) ? P_ROCK0 : P_ROCK1;
-            if (hf > 0.962f) return P_MUSHROOM;
-            if (hf > 0.952f) return P_STUMP;
-            if (hf > 0.942f) return P_BUSH_PLAIN;
+            if (hf < 0.12f + grove * 0.10f) return P_REEDS;
+            if (hf > 0.985f) return P_MUSHROOM;
             break;
         default: break;
     }
@@ -1923,8 +1899,8 @@ bool inBossArena(float x, float y) {
 
 // ================================================================ field monsters
 EnemyKind rollBiomeEnemy(int tx, int ty, int zoneLevel) {
-    // The six-entry local pools mix classic cast members with regional wildlife
-    // and lower-tier creatures matched to each biome.
+    // The six-entry local pools now mix the original cast with OpenRTP's
+    // previously unused wildlife and lower-tier creatures.
     static const EnemyKind common[BI_COUNT][6] = {
         { EN_SLIME, EN_SLIME, EN_IMP, EN_BAT, EN_GOBLIN, EN_BANDIT },
         { EN_BAT, EN_IMP, EN_WOLF, EN_BAT, EN_FAERIE, EN_GOBLIN },

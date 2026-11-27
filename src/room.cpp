@@ -536,13 +536,17 @@ void roomDraw() {
             float cx = ox + r.npcX * TILE;
             float fy = oy + (r.npcY + 0.35f) * TILE;
             DrawEllipse((int)cx, (int)fy - 1, 5.5f, 2.5f, Fade(BLACK, 0.25f));
-            drawCharFrame(s, 0, false, false, 0.0f, cx, fy);
+            DrawTexturePro(s, { 0, 0, 24, 32 }, { floorf(cx - 12.0f), floorf(fy - 32.0f), 24, 32 }, { 0, 0 }, 0.0f, WHITE);
         } else {
             Texture2D& sheet = g.assets.heroWalk[std::max(0, std::min(2, g.party[0].klass))];
+            int row = (g.roomFacing == 0) ? 0 : (g.roomFacing == 1 ? 1 : 2);
+            int frame = g.roomMoving ? (1 + ((int)(g.roomAnimT * 7.0f) & 1)) : 0;
             float cx = ox + g.roomPx * TILE;
             float fy = oy + (g.roomPy + 0.35f) * TILE;
             DrawEllipse((int)cx, (int)fy - 1, 5.5f, 2.5f, Fade(BLACK, 0.28f));
-            drawCharFrame(sheet, g.roomFacing, g.roomSideFlip, g.roomMoving, g.roomAnimT, cx, fy);
+            Rectangle src{ (float)(frame * 24), (float)(row * 32), 24, 32 };
+            if (g.roomFacing == 2 && g.roomSideFlip) src.width = -24;
+            DrawTexturePro(sheet, src, { floorf(cx - 12.0f), floorf(fy - 32.0f), 24, 32 }, { 0, 0 }, 0.0f, WHITE);
         }
     }
 

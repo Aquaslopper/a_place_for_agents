@@ -239,7 +239,7 @@ static const EnemyDef ENEMIES[EN_COUNT] = {
     { "Golem",        150, 27, 20,  5, 190, 150, 1 << SCH_STORM,  IT_ELIXIR,      10, 4 },
     { "Night Rider",  190, 33, 16, 15, 260, 220, 1 << SCH_HOLY,   IT_HIPOTION,    25, 4 },
     { "Slime King",   420, 36, 16, 11, 900, 800, 1 << SCH_FIRE,   IT_CROWN,      100, 5 },
-    // Extended bestiary roster, introduced at the matching field-zone tier.
+    // OpenRTP additions, introduced at the matching field-zone tier.
     { "Bandit",        54, 15,  6, 12,  45,  38, 1 << SCH_FIRE,   IT_SMOKE_BOMB,  15, 2 },
     { "Goblin",        43, 14,  5, 14,  42,  30, 1 << SCH_FIRE,   IT_ANTIDOTE,    20, 2 },
     { "Reaper",        76, 20,  9, 13,  84,  68, 1 << SCH_HOLY,   IT_ETHER,       18, 3 },
@@ -361,8 +361,8 @@ bool loadAllAssets() {
 
     const char* scenes[BI_COUNT] = {"meadow", "forest", "amber", "fen", "heath", "frost", "dunes"};
     for (int i=0; i<BI_COUNT; ++i)
-        a.battlefield[i] = loadTex(d,(std::string("backdrops/bg_")+scenes[i]+".png").c_str());
-    a.castleBattlefield = loadTex(d,"backdrops/bg_castle.png");
+        a.battlefield[i] = loadTex(d,(std::string("backdrops/")+scenes[i]+".png").c_str());
+    a.castleBattlefield = loadTex(d,"backdrops/castle.png");
 
     // --- props
     a.amberOak = loadTex(d,"sprites/amber_oak.png");
@@ -461,6 +461,7 @@ bool loadAllAssets() {
     // --- faces, in FACE_* order
     const char* faces[FACE_COUNT] = {
         "sprites/face_knight.png", "sprites/face_mage.png", "sprites/face_cleric.png",
+        "sprites/face_knight_big.png",
         "sprites/face_villager0.png", "sprites/face_villager1.png", "sprites/face_villager2.png",
         "sprites/face_villager3.png",
         "sprites/face_elder.png", "sprites/face_mayor.png", "sprites/face_woman.png",
@@ -492,7 +493,7 @@ bool loadAllAssets() {
     // --- icons, in ICON_* order
     const char* icons[ICON_COUNT] = {
         "icons/potion.png", "icons/hi_potion.png", "icons/ether.png", "icons/elixir.png",
-        "icons/feather.png", "icons/food.png", "icons/book.png", "icons/icon_candle.png",
+        "icons/feather.png", "icons/food.png", "icons/book.png", "icons/candle.png",
         "icons/gem.png", "icons/coin.png",
         "icons/sword_0.png", "icons/sword_1.png", "icons/sword_2.png",
         "icons/armor_0.png", "icons/armor_1.png", "icons/armor_2.png", "icons/armor_3.png",
@@ -506,8 +507,10 @@ bool loadAllAssets() {
     // --- ui + backdrops
     a.window = loadTex(d, "ui/window_frame.png", false);
     a.titleBg = loadTex(d, "title_bg.png");
+    a.titleAtlas = loadTex(d, "title_atlas.png", false);
     a.gameoverPlate = loadTex(d, "ui/gameover_plate.png", false);
     a.dawn = loadTex(d, "ui/dawn.png", false);
+    a.night = loadTex(d, "ui/night.png", false);
 
     // --- fx
     a.fxSlash = loadTex(d, "fx/slash.png");
@@ -524,11 +527,13 @@ bool loadAllAssets() {
         a.font8  = LoadFontEx(fp.c_str(), 8, nullptr, 0);
         a.font16 = LoadFontEx(fp.c_str(), 16, nullptr, 0);
         a.font24 = LoadFontEx(fp.c_str(), 24, nullptr, 0);
+        a.font32 = LoadFontEx(fp.c_str(), 32, nullptr, 0);
         SetTextureFilter(a.font8.texture, TEXTURE_FILTER_POINT);
         SetTextureFilter(a.font16.texture, TEXTURE_FILTER_POINT);
         SetTextureFilter(a.font24.texture, TEXTURE_FILTER_POINT);
+        SetTextureFilter(a.font32.texture, TEXTURE_FILTER_POINT);
     } else {
-        a.font8 = a.font16 = a.font24 = GetFontDefault();
+        a.font8 = a.font16 = a.font24 = a.font32 = GetFontDefault();
     }
 
     // --- audio
@@ -555,101 +560,60 @@ bool loadAllAssets() {
 }
 
 // ================================================================ ui helpers
+static Color lerpCol(Color a, Color b, float t) {
+    auto c = [&](unsigned char x, unsigned char y) { return (unsigned char)(x + (y - x) * t); };
+    return { c(a.r, b.r), c(a.g, b.g), c(a.b, b.b), c(a.a, b.a) };
+}
+
 void drawWindow(Rectangle r, bool dimInside) {
-    float rx = floorf(r.x), ry = floorf(r.y);
-    float rw = roundf(r.width), rh = roundf(r.height);
-    DrawRectangle((int)rx + 2, (int)ry + 3, (int)rw, (int)rh, Fade(BLACK, 0.42f));
-    if (g.assets.window.id != 0 && rw >= 16.0f && rh >= 16.0f) {
-        DrawRectangle((int)rx + 3, (int)ry + 3, (int)rw - 6, (int)rh - 6,
-                      dimInside ? Color{ 25, 35, 68, 248 } : Color{ 19, 25, 52, 232 });
-        NPatchInfo np{ { 0.0f, 0.0f, 32.0f, 32.0f }, 8, 8, 8, 8, NPATCH_NINE_PATCH };
-        DrawTextureNPatch(g.assets.window, np, { rx, ry, rw, rh }, { 0.0f, 0.0f }, 0.0f, WHITE);
+    int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
+    int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
+    DrawRectangle(rx + 2, ry + 3, rw, rh, Fade(BLACK, 0.42f));
+    if (dimInside) {
+        for (int i = 0; i < rh; i++) {
+            float t = (float)i / std::max(1.0f, (float)rh - 1.0f);
+            Color c = lerpCol(Color{ 28, 44, 118, 250 }, Color{ 10, 16, 52, 252 }, t);
+            DrawRectangle(rx, ry + i, rw, 1, c);
+        }
     } else {
-        DrawRectangle((int)rx, (int)ry, (int)rw, (int)rh, Color{ 25, 35, 68, 245 });
-        DrawRectangleLines((int)rx, (int)ry, (int)rw, (int)rh, Color{ 20, 24, 36, 255 });
-        if (rw > 4 && rh > 4)
-            DrawRectangleLines((int)rx + 1, (int)ry + 1, (int)rw - 2, (int)rh - 2, Color{ 230, 196, 108, 255 });
+        DrawRectangle(rx, ry, rw, rh, Color{ 14, 20, 56, 236 });
+    }
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
+    if (rw > 4 && rh > 4) {
+        DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
+                             1.0f, Color{ 236, 240, 255, 255 });
+    }
+    if (rw > 6 && rh > 6) {
+        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
+                             1.0f, Color{ 96, 118, 208, 255 });
     }
 }
 
 void drawWindowBlue(Rectangle r) {
-    float rx = floorf(r.x), ry = floorf(r.y);
-    float rw = roundf(r.width), rh = roundf(r.height);
-    DrawRectangle((int)rx + 2, (int)ry + 3, (int)rw, (int)rh, Fade(BLACK, 0.42f));
-    if (g.assets.window.id != 0 && rw >= 16.0f && rh >= 16.0f) {
-        DrawRectangle((int)rx + 3, (int)ry + 3, (int)rw - 6, (int)rh - 6, Color{ 38, 54, 110, 250 });
-        NPatchInfo np{ { 0.0f, 0.0f, 32.0f, 32.0f }, 8, 8, 8, 8, NPATCH_NINE_PATCH };
-        DrawTextureNPatch(g.assets.window, np, { rx, ry, rw, rh }, { 0.0f, 0.0f }, 0.0f, WHITE);
-    } else {
-        DrawRectangle((int)rx, (int)ry, (int)rw, (int)rh, Color{ 38, 54, 110, 248 });
-        DrawRectangleLines((int)rx, (int)ry, (int)rw, (int)rh, Color{ 255, 224, 130, 255 });
-    }
-}
-
-void drawPixelPanel(Rectangle r, bool selected, bool disabled, Color fill, Color border) {
     int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
     int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
-    if (rw < 4 || rh < 4) return;
-    Color bg = disabled ? Color{ 22, 26, 46, 220 }
-                        : (selected ? Color{ 53, 75, 135, 246 } : fill);
-    Color bd = disabled ? Color{ 70, 78, 108, 200 }
-                        : (selected ? Color{ 255, 224, 128, 255 } : border);
-    DrawRectangle(rx, ry, rw, rh, Color{ 20, 24, 36, 255 });
-    DrawRectangle(rx + 1, ry + 1, rw - 2, rh - 2, bg);
-    DrawRectangleLines(rx + 1, ry + 1, rw - 2, rh - 2, bd);
-    if (selected) {
-        DrawRectangle(rx + 1, ry + 1, 2, 2, Color{ 255, 243, 202, 255 });
-        DrawRectangle(rx + rw - 3, ry + 1, 2, 2, Color{ 255, 243, 202, 255 });
-        DrawRectangle(rx + 1, ry + rh - 3, 2, 2, Color{ 255, 243, 202, 255 });
-        DrawRectangle(rx + rw - 3, ry + rh - 3, 2, 2, Color{ 255, 243, 202, 255 });
+    DrawRectangle(rx + 2, ry + 3, rw, rh, Fade(BLACK, 0.42f));
+    DrawRectangle(rx, ry, rw, rh, Color{ 16, 20, 48, 250 });
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
+    if (rw > 4 && rh > 4) {
+        DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
+                             1.0f, Color{ 255, 214, 130, 255 });
     }
-}
-
-void drawCharFrame(const Texture2D& sheet, int facing, bool sideFlip, bool moving,
-                   float animT, float cx, float footY, Color tint,
-                   int overrideCol, float rotationDeg) {
-    if (sheet.id == 0) return;
-    constexpr int CELL_W = 16;
-    constexpr int CELL_H = 24;
-    int cols = sheet.width / CELL_W;
-    int rows = sheet.height / CELL_H;
-    if (cols < 1 || rows < 1) return;
-
-    // 4-direction rows authored natively with upper-left lighting:
-    // 0=Down, 1=Up, 2=Left (when sideFlip), 3=Right (when !sideFlip)
-    int row = 0;
-    if (facing == 1) row = 1;
-    else if (facing == 2) row = sideFlip ? 2 : 3;
-    if (row >= rows) row = rows - 1;
-
-    int col = 0;
-    if (overrideCol >= 0) {
-        col = std::max(0, std::min(cols - 1, overrideCol));
-    } else if (moving && cols >= 6) {
-        col = 2 + ((int)(animT * 7.5f) & 3); // 4-step walk cycle (cols 2..5)
-    } else if (cols >= 2) {
-        col = ((int)(g.totalTime * 1.4f + cx * 0.05f) & 1); // subtle 2-frame idle breathe
-    }
-
-    Rectangle src{ (float)(col * CELL_W), (float)(row * CELL_H), (float)CELL_W, (float)CELL_H };
-    if (rotationDeg != 0.0f) {
-        Rectangle dst{ floorf(cx), floorf(footY - 6.0f), (float)CELL_W, (float)CELL_H };
-        DrawTexturePro(sheet, src, dst, { CELL_W * 0.5f, CELL_H * 0.5f }, rotationDeg, tint);
-    } else {
-        Rectangle dst{ floorf(cx - CELL_W * 0.5f), floorf(footY - (float)CELL_H), (float)CELL_W, (float)CELL_H };
-        DrawTexturePro(sheet, src, dst, { 0.0f, 0.0f }, 0.0f, tint);
+    if (rw > 6 && rh > 6) {
+        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
+                             1.0f, Color{ 118, 96, 56, 255 });
     }
 }
 
 Vector2 measureText(const char* text, int size) {
     if (!text || !text[0]) return { 0.0f, (float)size };
-    Font f = (size >= 24) ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8);
+    Font f = (size >= 32) ? g.assets.font32 : (size >= 24 ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8));
     return MeasureTextEx(f, text, (float)size, 1.0f);
 }
 
 static void drawLine(const char* s, float x, float y, Color c, int size) {
     if (!s || !s[0]) return;
-    Font f = (size >= 24) ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8);
+    Font f = (size >= 32) ? g.assets.font32 : (size >= 24 ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8));
     float px = floorf(x);
     float py = floorf(y);
     if ((int)c.r + (int)c.g + (int)c.b >= 45 && c.a > 24) {
@@ -760,7 +724,9 @@ void drawButton(const char* text, Rectangle r, int size, bool selected) {
     bool hover = CheckCollisionPointRec(m, r);
     if (hover) g.hotButtons++;
     bool hi = hover || selected;
-    drawPixelPanel(r, hi, false, Color{ 30, 38, 92, 245 }, Color{ 120, 140, 200, 255 });
+    DrawRectangleRounded(r, 0.25f, 4, hi ? Color{ 64, 74, 150, 255 } : Color{ 30, 38, 92, 255 });
+    DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.4f, hi ? Color{ 255, 214, 130, 255 }
+                                                      : Color{ 140, 150, 220, 255 });
     drawTextCentered(text, r.x + r.width / 2, r.y + r.height / 2 - size / 2.0f + 1,
                      hi ? WHITE : Color{ 214, 220, 250, 255 }, size);
 }
