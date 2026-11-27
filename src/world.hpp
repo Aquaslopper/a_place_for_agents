@@ -38,6 +38,10 @@ struct SurveyTerrain {
 };
 SurveyTerrain worldSurveyTerrain(int tx, int ty);
 
+// Authored ground the map-piece seams (src/pieces.cpp) must step around.
+bool worldNearSpecialSite(int tx, int ty);
+int  worldTrailAt(int tx, int ty);
+
 // Which prop stands on a tile (P_NONE when the tile is clear). The renderer,
 // the collision test and the pathfinder all read this, so they cannot disagree.
 PropKind propAt(int tx, int ty);

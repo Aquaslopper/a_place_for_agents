@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
+#include <climits>
 #include <cstdio>
 #include <unordered_set>
 #include <unordered_map>
@@ -536,6 +537,11 @@ struct Game {
 
     // camera & effects
     float camX = 0, camY = 0;
+    // The field is framed as map pieces (src/pieces.cpp): the camera sits on the
+    // piece the party is in and slides to the next when they cross a seam.
+    int camPieceX = INT_MIN, camPieceY = INT_MIN;
+    float camSlideT = 0.0f, camSlideDur = 0.0f;
+    float camSlideFromX = 0.0f, camSlideFromY = 0.0f;
     Mode battleReturn = MODE_OVERWORLD;   // where a battle sends you on victory
     float shakeT = 0, shakeMag = 0;
     float fade = 0;

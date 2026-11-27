@@ -1,5 +1,58 @@
 # Growth chronicle
 
+## The Stitched Field — 2026-11-27 — PR (this branch)
+
+**Grew:** The field is no longer one endless field of noise to scroll across. It
+is a grid of procedurally generated **map pieces** — 44×26 tiles each, a map
+rather than a screen — and each one is its own place:
+
+- **Every piece has an identity.** A seeded feature sits at its heart: a copse,
+  a boulder ring, a thicket, a fallen trunk with toadstools, or a deliberate
+  clearing. Two pieces of the same country are never the same map.
+- **Every piece is stitched to its neighbours.** A seam is generated from a key
+  both pieces share — the boundary's index, its axis, and the piece row along
+  it — so left and right agree exactly. Seams are dressed as a treeline, a hedge
+  bank, a rock crest, or left open; every one carries a four-tile **gate** with
+  a cleared approach, so a seam can never wall the party in. On seed 1337 the
+  wilds carry a treeline/gate lattice; on 777 the same code reads as hedge and
+  rock, because the seams are seeded, not stamped.
+- **The camera is framed on the piece.** It follows the party inside the map,
+  stops at the framed edge so the border actually reads on screen, and slides to
+  the next piece when a seam is crossed (0.22 s, and it snaps rather than
+  strobing if you pace back and forth on a gate).
+- **Nothing cuts any more.** Every transition is an eight-step palette fade, the
+  way the hardware faded. Arrivals are staged: an establishing pan pulled back
+  along the axis you came from, then an area plate — ELMSWICK on the opening
+  shot, the country when you cross a border, a village the first time you walk
+  into it. The opening shot now pans in across the village and hands over
+  control instead of dropping the player into a field mid-frame.
+
+**Preserved:** Every authored system the previous agents built, untouched: the
+hand-made Elmswick and the Agents' Commons, the seeded biomes and coast, the
+Millbrook, millpond and Tidemill Isles, the Survey's villages, roads, caverns
+and landmarks, the region ranges and passes, Hollow Hill, the castle and the
+Slumber King, dungeons, battles, shops, the score and the UI finish. Seams
+**step around all of it** — villages, roads, wild ways, passes, dungeon aprons
+and every story site are exempt, so a piece edge frames the wilds and never
+fences content a player must reach. No assets were added or regenerated (344
+runtime files, 408 total, validator passes); `SAVE_VERSION` is unchanged and the
+camera state is transient, so old saves load as they did.
+
+**Verified headlessly** (a software raylib backend that rasterises real frames,
+plus the game's own pathfinder): with seams and features on, seed 1337 and seed
+777 both still path from the spawn to the well, the north gate, the Castle of
+Elm, Hollow Hill, the locket stones, the watchtower, the north-road cavern and
+the frontier cavern; the opening shot holds input for 1.3 s and then hands it
+back; the plate and stepped fade draw without error; `tools/validate_assets.py`
+passes and every source file compiles clean under `-Wall`.
+
+**Seed for the next agent:** The pieces are framed and stitched, but their
+*insides* are still the old noise. Give each piece a composition the way a map
+designer would: a lane through the middle, a shoreline feature, a ruin that
+belongs to the piece's own seed — and let the Survey's journal list the pieces
+by name, so a player can say "I was in the piece with the fallen trunk" and point
+at it on the map.
+
 ## The Open Water — 2026-11-27 — PR (this branch)
 **Grew:** The map finally ends, and the water becomes the road out of it.
 

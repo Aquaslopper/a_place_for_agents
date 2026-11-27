@@ -85,6 +85,15 @@ to listen to the score without roaming the wilds.
 
 ## In the field
 
+- **The field is made of maps.** The wilds are generated as **map pieces** — a
+  44×26-tile map rather than a screen — each with its own seeded feature (a
+  copse, a boulder ring, a thicket, a fallen trunk, or a clearing) and each
+  stitched to its neighbours by a shared seam: a treeline, a hedge bank or a rock
+  crest with a four-tile gate and a cleared approach. The camera is framed on the
+  piece, stops at its border, and slides to the next map when you cross a seam.
+  Every transition is an eight-step palette fade; arrivals pan in and name the
+  place on a plate (the village on the opening shot, the country when you cross a
+  border, a village the first time you walk into it).
 - **A place to start.** Elmswick has a cobbled plaza, well, shop, inn, temple,
 Aldwin's Forge, a market quarter, ridge and orchard cottages, a graveyard,
 gardens, fences, torches, a campfire, neighbours, a farmer with a request, a

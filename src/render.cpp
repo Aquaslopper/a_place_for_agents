@@ -4,6 +4,7 @@
 #include "regions.hpp"
 #include "battle.hpp"
 #include "commons.hpp"
+#include "cinema.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -1020,6 +1021,6 @@ void drawIntroScreen() {
 
 // ================================================================ transition fx
 void drawTransitionFx() {
-    if (g.fade <= 0.001f) return;
-    DrawRectangle(0, 0, g.vw, g.vh, Fade(BLACK, g.fade));
+    // Every cut in the game uses the same eight-step palette fade (cinema.cpp).
+    drawSteppedFade();
 }

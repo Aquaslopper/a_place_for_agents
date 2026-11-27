@@ -5,6 +5,7 @@
 // is a pure function of the seed, and a fixed fallback ladder means a cell only
 // goes unclaimed when it is genuinely open sea.
 #include "atlas.hpp"
+#include "cinema.hpp"
 #include "world.hpp"
 #include "commons.hpp"
 #include "regions.hpp"
@@ -849,8 +850,12 @@ void atlasUpdate(float px, float py, float dt) {
     // separates. Seeded 128-tile Survey names remain as local districts.
     const char* here = regionNameAt(px, py);
     if (g.regionName != here) {
+        bool firstNaming = g.regionName.empty();
         g.regionName = here;
         g.regionBannerT = 4.0f;
+        // Crossing a border is a scene change, not a HUD update: the new
+        // country names itself in the same plate the openings use.
+        if (!firstNaming) cinemaAnnounceRegion();
     }
 }
 
