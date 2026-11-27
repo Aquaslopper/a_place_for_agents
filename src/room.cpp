@@ -131,6 +131,34 @@ void roomBuild(Room& room, const Building& b, const Village& v) {
         addP(RP_URN, room.w - 2.0f, 2.2f);
         addP(RP_PLANT, 2.0f, room.h - 2.5f);
         addP(RP_PLANT, room.w - 2.0f, room.h - 2.5f);
+    } else if (b.kind == 10) {
+        // Aldwin's Forge — the smithy interior
+        room.kind = ROOM_FORGE;
+        room.title = v.startVillage ? "Aldwin's Forge" : (vname + " Forge");
+        g.roomNpcSprite = NS_SMITH;
+        g.roomNpcFace = FACE_SMITH;
+        g.roomNpcName = v.startVillage ? "Aldwin the Smith" : "Village Smith";
+        room.npcX = room.w * 0.5f;
+        room.npcY = 2.7f;
+        // Anvil work counter along the back wall
+        for (int x = 4; x <= room.w - 5; x++) addP(RP_COUNTER, x + 0.5f, 4.2f, true, 1.0f, 0.75f);
+        addP(RP_SHELF, 3.3f, 1.8f, true, 2.6f, 0.85f);
+        addP(RP_SHELF, room.w - 3.3f, 1.8f, true, 2.6f, 0.85f);
+        // The forge hearth and its glow
+        addP(RP_PLATE, 4.6f, 3.85f, false, 0.5f, 0.4f);
+        addP(RP_CANDLE, 4.6f, 3.6f, false, 0.45f, 0.45f);
+        addP(RP_BARREL, 2.2f, 5.6f);
+        addP(RP_BARREL, 3.2f, 5.6f);
+        addP(RP_KEG,    room.w - 2.2f, 5.6f);
+        addP(RP_LONGTABLE, room.w * 0.5f, 7.2f, true, 2.7f, 0.9f);
+        addP(RP_PLATE, room.w * 0.5f - 0.9f, 6.85f, false, 0.4f, 0.4f);
+        addP(RP_PLATE, room.w * 0.5f + 0.9f, 6.85f, false, 0.4f, 0.4f);
+        addP(RP_STOOL, room.w * 0.5f - 1.6f, 7.95f, false, 0.6f, 0.6f);
+        addP(RP_STOOL, room.w * 0.5f + 1.6f, 7.95f, false, 0.6f, 0.6f);
+        addP(RP_PILLAR, 2.4f, 3.4f, true, 0.8f, 0.8f);
+        addP(RP_PILLAR, room.w - 2.4f, 3.4f, true, 0.8f, 0.8f);
+        addP(RP_URN, 2.0f, room.h - 2.5f);
+        addP(RP_PLANT, room.w - 2.0f, room.h - 2.5f);
     } else {
         room.kind = ROOM_HOUSE;
         static const char* kCottageNames[5] = {
@@ -214,6 +242,7 @@ void enterBuilding(int buildingIndex) {
         g.shopTitle = g.village.name + " Sundries";
         g.innTitle  = g.village.name + " Inn";
     }
+    g.shopForge = false;    // the forge re-arms this when its keeper talks shop
 
     g.mode = MODE_ROOM;
     g.fade = 1.0f; g.fadeDir = -1;
@@ -250,7 +279,13 @@ static void talkToKeeper() {
     std::vector<DialogLine> lines;
     DialogAction act = DLG_NONE;
     if (g.room.kind == ROOM_SHOP) {
+        g.shopForge = false;
         lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Steel, salves, and sundries. Buying or selling?\"" });
+        act = DLG_SHOP;
+    } else if (g.room.kind == ROOM_FORGE) {
+        g.shopForge = true;
+        g.shopTitle = g.room.title;
+        lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Ore, ash and honest work. Weapons and armour, if you've the coin.\"" });
         act = DLG_SHOP;
     } else if (g.room.kind == ROOM_INN) {
         char buf[128];

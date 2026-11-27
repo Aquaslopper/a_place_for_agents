@@ -47,6 +47,7 @@ static Texture2D* buildingTexture(const Building& b) {
         case 7: return &g.assets.temple;
         case 8: return &g.assets.manor;
         case 9: return &g.assets.castle;
+        case 10: return &g.assets.smithy;
         default: return &g.assets.house[std::max(0, std::min(4, b.kind))];
     }
 }
@@ -252,6 +253,9 @@ static char npcQuestMarker(const Npc& n) {
     } else if (n.quest == QUEST_CROWN) {
         if (g.quests[QUEST_CROWN].state == QS_OFFERED) return '!';
         if (g.quests[QUEST_CROWN].state != QS_DONE && (itemCount(IT_CROWN) > 0 || g.bossDefeated)) return '?';
+    } else if (n.quest == QUEST_DEEP) {
+        if (g.quests[QUEST_DEEP].state == QS_OFFERED) return '!';
+        if (g.quests[QUEST_DEEP].state == QS_ACTIVE && itemCount(IT_STAR_METAL) > 0) return '?';
     }
     return 0;
 }
@@ -273,6 +277,7 @@ static void drawLandmarkPart(const LandmarkPart& p, float nightAmt) {
         case LP_CAMPFIRE:  t = &g.assets.campfire;   shadowW =  8.0f; shadowH = 2.5f; break;
         case LP_CAULDRON:  t = &g.assets.cauldron;   shadowW =  8.0f; shadowH = 2.5f; break;
         case LP_BARREL:    t = &g.assets.barrel;     shadowW =  6.0f; shadowH = 2.0f; break;
+        case LP_CAVE:      t = &g.assets.caveMouth;  shadowW = 22.0f; shadowH = 5.0f; break;
     }
     if (!t || t->id == 0) return;
     DrawEllipse((int)cx, (int)fy - 2, shadowW, shadowH, Fade(BLACK, 0.25f));
@@ -281,6 +286,12 @@ static void drawLandmarkPart(const LandmarkPart& p, float nightAmt) {
         float pulse = 0.5f + 0.5f * sinf(g.totalTime * 4.5f + (float)p.tx);
         DrawCircleGradient((int)cx, (int)(fy - t->height * 0.55f), 22 + pulse * 6,
                            Fade(Color{ 255, 170, 60, 255 }, 0.22f + nightAmt * 0.18f), BLANK);
+    }
+    if (p.part == LP_CAVE) {
+        // cold breath drifting out of the dark
+        float pulse = 0.5f + 0.5f * sinf(g.totalTime * 2.2f + (float)p.tx * 0.7f);
+        DrawCircleGradient((int)cx, (int)(fy - t->height * 0.35f), 26 + pulse * 8,
+                           Fade(Color{ 90, 120, 220, 255 }, 0.14f + nightAmt * 0.14f), BLANK);
     }
 }
 

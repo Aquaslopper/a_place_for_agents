@@ -48,7 +48,8 @@ float villageDecoCenterX(const Village::Deco& d);
 // Y-sorts independently and matches tile collision 1-to-1.
 enum LandmarkPartKind {
     LP_CASTLE = 0, LP_TOWER, LP_STATUE, LP_PILLAR, LP_TORCH,
-    LP_RUIN_ARCH, LP_MONUMENT, LP_TENT, LP_CAMPFIRE, LP_CAULDRON, LP_BARREL
+    LP_RUIN_ARCH, LP_MONUMENT, LP_TENT, LP_CAMPFIRE, LP_CAULDRON, LP_BARREL,
+    LP_CAVE
 };
 struct LandmarkPart {
     LandmarkPartKind part;

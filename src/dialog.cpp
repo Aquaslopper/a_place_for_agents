@@ -105,6 +105,21 @@ void resolveDialogAction(DialogAction a) {
         case DLG_SAVE_TIP:
             pushToast("Open Menu (ESC) -> Options to save anytime.");
             break;
+        case DLG_START_QUEST_DEEP:
+            questSetState(QUEST_DEEP, QS_ACTIVE);
+            g.quests[QUEST_DEEP].progress = itemCount(IT_STAR_METAL) > 0 ? 1 : 0;
+            playSoundIf(g.assets.confirm);
+            pushToast("Quest started: Ember of the Deep");
+            break;
+        case DLG_FINISH_QUEST_DEEP:
+            questSetState(QUEST_DEEP, QS_DONE);
+            g.quests[QUEST_DEEP].progress = 1;
+            takeItem(IT_STAR_METAL, 1);
+            g.gil += 400;
+            addItem(IT_RING_WAR, 1, true);
+            playSoundIf(g.assets.levelup);
+            pushToast("Quest complete! +400 gil, War Ring.");
+            break;
         default: break;
     }
 }
@@ -158,7 +173,32 @@ static std::vector<int> ownedItems() {
 }
 
 static std::vector<int> shopStock() {
-    std::vector<int> stock = {
+    std::vector<int> stock;
+    if (g.shopForge) {
+        // ---- Aldwin's Forge: weapons and armour only (no tonics out of stock)
+        stock = {
+            IT_SWORD_BRONZE, IT_SWORD_IRON, IT_SWORD_STEEL,
+            IT_WAR_AXE, IT_HALBERD, IT_DAGGER, IT_HUNTER_BOW,
+            IT_STAFF_OAK, IT_ROD_IRON, IT_MACE_BRASS,
+            IT_ARMOR_LEATHER, IT_ARMOR_CHAIN, IT_SHIELD_WOOD, IT_SHIELD_IRON,
+            IT_ROBE_SILK
+        };
+        int zl = zoneLevelAt(g.px, g.py);
+        if (zl >= 3 || g.bossDefeated) {
+            stock.push_back(IT_SWORD_MYTHRIL);
+            stock.push_back(IT_ARMOR_PLATE);
+            stock.push_back(IT_SHIELD_KITE);
+            stock.push_back(IT_STAFF_SAGE);
+            stock.push_back(IT_MACE_HOLY);
+            stock.push_back(IT_ROBE_ARCHMAGE);
+        }
+        if (g.quests[QUEST_DEEP].state == QS_DONE) {
+            stock.push_back(IT_RING_WAR);
+            stock.push_back(IT_RING_SAGE);
+        }
+        return stock;
+    }
+    stock = {
         IT_POTION, IT_HIPOTION, IT_ETHER, IT_ANTIDOTE, IT_PHOENIX,
         IT_SWORD_BRONZE, IT_SWORD_IRON,
         IT_ARMOR_LEATHER, IT_ARMOR_CHAIN,
@@ -172,14 +212,29 @@ static std::vector<int> shopStock() {
         stock.push_back(IT_SWORD_MYTHRIL);
         stock.push_back(IT_ARMOR_MYTHRIL);
     }
+    if (zl >= 4 || g.bossDefeated) {
+        stock.push_back(IT_SMOKE_BOMB);
+        stock.push_back(IT_MEGAPOTION);
+        stock.push_back(IT_REMEDY);
+        stock.push_back(IT_SWORD_STEEL);
+        stock.push_back(IT_ARMOR_PLATE);
+        stock.push_back(IT_HUNTER_BOW);
+        stock.push_back(IT_WAR_AXE);
+        stock.push_back(IT_ROBE_SILK);
+        stock.push_back(IT_HALBERD);
+    }
     return stock;
 }
 
 static std::vector<int> equippableForSlot(int slot) {
     ItemKind want = (slot == 0) ? IK_WEAPON : (slot == 1 ? IK_ARMOR : IK_ACCESSORY);
+    int klass = g.party[std::max(0, std::min(2, g.equipHero))].klass;
     std::vector<int> out;
     for (int i = 0; i < IT_COUNT; i++) {
-        if (g.inventory[i] > 0 && itemDef(i).kind == want) out.push_back(i);
+        if (g.inventory[i] <= 0 || itemDef(i).kind != want) continue;
+        uint8_t mask = itemDef(i).klassMask;
+        if (mask && (mask & (1 << klass)) == 0) continue;
+        out.push_back(i);
     }
     return out;
 }
@@ -883,7 +938,7 @@ void drawMenuScreen() {
             drawText(line, ox + 486.0f - xw, y + 38, Color{ 215, 224, 248, 255 }, 8);
 
             snprintf(line, sizeof(line), "ATK %d   DEF %d   MAG %d   SPD %d",
-                     heroAtk(h), heroDef(h), heroMag(h), h.spd);
+                     heroAtk(h), heroDef(h), heroMag(h), heroSpd(h));
             drawText(line, ox + 182, y + 54, Color{ 195, 210, 240, 255 }, 8);
         }
         drawText("SPACE/Click: switch row  |  ESC: close",
@@ -947,7 +1002,7 @@ void drawMenuScreen() {
         const Hero& h = g.party[g.equipHero];
         char stats[96];
         snprintf(stats, sizeof(stats), "ATK %d   DEF %d   MAG %d   SPD %d",
-                 heroAtk(h), heroDef(h), heroMag(h), h.spd);
+                 heroAtk(h), heroDef(h), heroMag(h), heroSpd(h));
         drawText(stats, ox + 124, oy + 54, Color{ 165, 235, 180, 255 }, 8);
 
         const char* sname[3] = { "Weapon", "Armor", "Accessory" };

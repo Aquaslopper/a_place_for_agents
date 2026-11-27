@@ -158,6 +158,7 @@ void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fi
     else if (count == 1) setBanner(std::string("A wild ") + enemyDef(kinds[0]).name + " draws near!", 1.8f);
     else setBanner("A band of monsters attacks!", 1.8f);
 
+    g.battleReturn = (g.mode == MODE_DUNGEON) ? MODE_DUNGEON : MODE_OVERWORLD;
     g.mode = MODE_BATTLE;
     g.fade = 1.0f; g.fadeDir = -1;
     playSoundIf(g.assets.encounter);
@@ -509,7 +510,7 @@ void battleUpdate(float dt) {
     if (B.phase == BP_VICTORY || B.phase == BP_FLED) {
         B.phaseT = std::max(0.0f, B.phaseT - dt);
         if (B.phaseT <= 0 && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON))) {
-            g.mode = MODE_OVERWORLD;
+            g.mode = (g.battleReturn == MODE_DUNGEON) ? MODE_DUNGEON : MODE_OVERWORLD;
             g.fade = 1.0f; g.fadeDir = -1;
             g.encounterGrace = 3.5f;
         }
@@ -534,7 +535,7 @@ void battleUpdate(float dt) {
         for (int i = 0; i < 3; i++) {
             Hero& h = g.party[i];
             if (h.ko || i == B.activeHero) continue;
-            B.atb[i] = std::min(1.0f, B.atb[i] + dt * (0.14f + h.spd * 0.014f));
+            B.atb[i] = std::min(1.0f, B.atb[i] + dt * (0.14f + heroSpd(h) * 0.014f));
         }
         for (int i = 0; i < (int)B.foes.size(); i++) {
             BattleEnemy& f = B.foes[i];
@@ -702,6 +703,19 @@ void battleUpdate(float dt) {
         auto chooseItem = [&](int idx) {
             gPendingItem = items[idx];
             gPendingSpellIdx = -1;
+            // Smoke bombs need no target — they end the fight on the spot.
+            if (gPendingItem == IT_SMOKE_BOMB) {
+                if (itemCount(IT_SMOKE_BOMB) > 0) {
+                    takeItem(IT_SMOKE_BOMB, 1);
+                    B.phase = BP_FLED;
+                    B.phaseT = 0.25f;
+                    playSoundIf(g.assets.flee);
+                    setBanner("Smoke bomb! The party slips away.", 1.6f);
+                } else {
+                    setBanner("No smoke bombs left!", 1.2f);
+                }
+                return;
+            }
             B.targetCursor = B.activeHero;
             if (gPendingItem == IT_PHOENIX) {
                 for (int k = 0; k < 3; k++) if (g.party[k].ko) { B.targetCursor = k; break; }

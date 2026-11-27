@@ -30,6 +30,7 @@ add_executable(aplaceforagents WIN32
     src/dialog.cpp
     src/room.cpp
     src/battle.cpp
+    src/dungeon.cpp
 )
 target_include_directories(aplaceforagents PRIVATE src)
 target_link_libraries(aplaceforagents PRIVATE raylib)
