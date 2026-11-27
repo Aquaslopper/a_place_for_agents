@@ -1,6 +1,6 @@
 # A Place for Agents
 
-**An endless SNES-JRPG through a world that grows as you explore it.**
+**An endless SNES-style JRPG through a world that grows as you explore it.**
 
 You wake in **Elmswick**, a hand-authored little town with a cobbled plaza, a
 well, shops, a temple and neighbours who know your name. Walk out of the south
@@ -10,6 +10,7 @@ an inn to warm your bones and a shop that sells honest steel.
 
 Built with [raylib](https://github.com/raysan5/raylib), adapted **OpenRTP** pixel art
 and a **13-cue score**. See [credits](CREDITS.md) and the [soundtrack cue sheet](assets/audio/SCORE.txt).
+Working on the game as an AI agent? Start with [AGENTS.md](AGENTS.md).
 
 ![Elmswick, the village the game opens in](docs/screenshots/village.png)
 
@@ -18,8 +19,16 @@ and a **13-cue score**. See [credits](CREDITS.md) and the [soundtrack cue sheet]
 Download the latest build from the **Releases** page (or from the artifacts
 of any CI run):
 
-- `APlaceForAgents-Windows.zip` — run `APlaceForAgents.exe`
+- `APlaceForAgents-Windows.zip` — run `APlaceForAgents.exe` (a windowed game,
+  no console window pops up beside it)
 - `APlaceForAgents-Linux.zip` — run `./APlaceForAgents`
+
+The picture is drawn into a 512×288 virtual framebuffer and **stretched to fill
+the whole window** — no letterbox bars, whatever size or shape the window is.
+Resize freely, or press `F11` for fullscreen. An optional **CRT filter**
+(scanlines + vignette, on by default) dresses the stretched picture the way an
+SNES sat on a tube TV; turn it off in **Esc → Options → CRT Filter** for clean
+pixels.
 
 ### Controls
 
@@ -55,6 +64,17 @@ open **Esc / Tab → Options → Sound Room** and choose a cue with the arrows o
   heath, frozen highlands and dunes. A corner-mask atlas joins ground types,
   layers cliff lips and riverbanks, and keeps animated water visible under bridges.
   Regional plants and encounter pools carry through to the route's battle backdrop.
+- **A living world.** Canopies sway, water twinkles, butterflies drift over
+  meadows by day and fireflies rise in the fen at night, snow falls on the
+  Frozenreach, leaves drift through Amberwood, footstep dust puffs as you run,
+  and village windows glow warm after dark. A slow day/night cycle washes
+  dawn gold and dusk amber over the fields.
+- **SNES presentation throughout.** A title screen with a layered gold logo,
+  blinking PRESS START, a walking-party attract row and copyright line; navy
+  menu windows with white double borders and a blinking cursor triangle;
+  dialogue boxes with gold-framed portraits, name plates and a down-arrow
+  "more" marker; and an optional CRT scanline + vignette filter over the
+  full-window picture.
 - **Thirteen streamed pieces, about 20 minutes 31 seconds per pass.** Villages
   have a theme distinct from the field; woods, marsh, pass and desert have travel
   music. Homes and chapels have their own cues, as do ordinary and boss battles.
@@ -67,7 +87,8 @@ open **Esc / Tab → Options → Sound Room** and choose a cue with the arrows o
   members (Aldric the knight, Iris the mage, Pip the cleric), attack / spells /
   items / defend / flee, crits, elemental weaknesses, a shared ATB, spell
   schools (fire, storm, holy, physical) and per-class spell lists that unlock
-  with levels.
+  with levels. WAIT pauses the gauges while any command menu is open; ACTIVE
+  never pauses.
 - **Thirteen monsters** drawn from OpenRTP and original pixel art: slime, imp, bat,
   hornet, wisp, wolf, skeleton, ghost, orc, serpent, golem, night rider — and the
   Slime King, who holds the Crown of Elm. They appear both as wandering field
@@ -92,6 +113,7 @@ open **Esc / Tab → Options → Sound Room** and choose a cue with the arrows o
 |---|---|
 | ![Millbrook bridge and kitchen gardens](docs/screenshots/millbrook.png) | ![The Amberwood trail](docs/screenshots/wilds.png) |
 | ![Wolf and wisp on the Frozenreach battlefield](docs/screenshots/battle.png) | ![Mira's Sundries interior](docs/screenshots/sundries.png) |
+| ![Title screen with logo and menu](docs/screenshots/title.png) | ![Conversation with a portrait](docs/screenshots/dialog.png) |
 
 ## Build from source
 
@@ -106,9 +128,10 @@ Linux needs the usual X11/GL dev packages
 (`libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libasound2-dev`).
 raylib 5.5 is fetched automatically via CMake `FetchContent`.
 
-The game is drawn into a 512×288 virtual framebuffer and letterboxed to whatever
-window size you give it, with integer scaling when there's room, so the pixels
-stay crisp.
+The Windows build is a GUI-subsystem executable (`WIN32` in CMake), so no
+console window opens next to the game. The game is drawn into a 512×288
+virtual framebuffer and stretched to fill the window at any size; the CRT
+filter (scanlines + vignette) can be toggled in Options.
 
 **Project policy: no tests.** Do not add or run tests. CI builds and packages the game without a test step.
 

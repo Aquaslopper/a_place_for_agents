@@ -122,7 +122,16 @@ static void drawGround(int x0, int y0, int x1, int y1) {
         int sx=x*TILE-camX, sy=y*TILE-camY;
         bool ns=t.kind==G_BRIDGE_NS;
         if (ns || t.kind==G_BRIDGE_EW) {
-            DrawTextureEx(g.assets.bridge,{(float)(sx+(ns?0:TILE)),(float)sy},ns?0.f:90.f,1.f,WHITE);
+            // Planks run along the crossing direction. Rotate about the tile
+            // centre so E/W decks land exactly on their tile (DrawTextureEx
+            // rotates about its origin, which misplaced E/W bridges).
+            Texture2D& br=g.assets.bridge;
+            if (br.id) {
+                float rot=ns?0.f:90.f;
+                DrawTexturePro(br,{0,0,(float)br.width,(float)br.height},
+                               {(float)(sx+TILE/2),(float)(sy+TILE/2),(float)br.width,(float)br.height},
+                               {(float)br.width*0.5f,(float)br.height*0.5f},rot,WHITE);
+            }
             for (int s:{-1,1}) {
                 if (at(x+(ns?s:0),y+(ns?0:s)).kind==t.kind) continue;
                 int rx=sx+(ns && s==1 ? TILE-3:0), ry=sy+(!ns && s==1 ? TILE-3:0);
@@ -135,6 +144,15 @@ static void drawGround(int x0, int y0, int x1, int y1) {
             Texture2D tex=t.deco==1 ? g.assets.tuft[t.decoVariant%3] : t.deco==2 ? g.assets.flowers[t.decoVariant%2]
                         : t.deco==3 ? g.assets.pebble : t.deco==4 ? g.assets.lilies : g.assets.turnips;
             DrawTexture(tex,sx+(TILE-tex.width)/2,sy+TILE-tex.height,WHITE);
+        }
+        // Water glints: a few tiles twinkle like SNES water sparkle.
+        if (t.kind==G_WATER || t.kind==G_DEEP) {
+            float tw=hashf(x,y,g.worldSeed^0x51abU);
+            float ph=fmodf(g.totalTime*0.9f+tw*7.f,1.f);
+            if (ph<0.16f) {
+                int gx=sx+3+(int)(tw*10.f), gy=sy+4+(int)(hashf(y,x,g.worldSeed^0x77cdU)*8.f);
+                DrawRectangle(gx,gy,2,1,Fade(Color{235,250,255,255},0.55f*(1.f-ph/0.16f)));
+            }
         }
     }
 }
@@ -350,7 +368,14 @@ void drawWorld() {
                 float fy = (it.c + 1.0f) * TILE - g.camY;
                 if (it.a != P_BUSH && it.a != P_BUSH_PLAIN && it.a != P_MUSHROOM)
                     DrawEllipse((int)fx, (int)fy - 2, w * 0.28f, 3.0f, Fade(BLACK, 0.18f));
-                texFoot(*t, fx, fy);
+                // Canopies breathe: a 1px sway, phased per tree so a grove
+                // never moves in lockstep.
+                bool canopy = (it.a == P_TREE0 || it.a == P_TREE1 || it.a == P_TREE2 ||
+                               it.a == P_PINE0 || it.a == P_PINE1 || it.a == P_PINE2 ||
+                               it.a == P_AMBER_OAK || it.a == P_COPPER_OAK ||
+                               it.a == P_WILLOW || it.a == P_TREE_SNOW);
+                float sway = canopy ? sinf(g.totalTime * 1.4f + hashf(it.b, it.c, 0x5eedU) * 6.28f) * 1.0f : 0.0f;
+                texFoot(*t, fx + sway, fy);
                 break;
             }
             case RK_LANDMARK:
@@ -383,6 +408,12 @@ void drawWorld() {
                 if (nightAmt > 0.05f) {
                     DrawCircleGradient((int)cx, (int)(fy - 12), 26.0f,
                                        Fade(Color{ 255, 200, 100, 255 }, 0.28f * nightAmt), BLANK);
+                    // Lit windows: two warm panes on the facade, flickering
+                    // very slightly so the village feels inhabited at night.
+                    float fl = 0.85f + 0.15f * sinf(g.totalTime * 3.1f + (float)b.tx * 1.7f);
+                    Color win = Fade(Color{ 255, 214, 120, 255 }, nightAmt * fl);
+                    DrawRectangle((int)(cx - 14), (int)(fy - 20), 5, 6, win);
+                    DrawRectangle((int)(cx + 9), (int)(fy - 20), 5, 6, win);
                 }
                 break;
             }
@@ -472,6 +503,12 @@ void drawWorld() {
                 float fy = (g.py + 0.35f) * TILE - g.camY;
                 if (g.interactT > 0) fy -= sinf((0.25f - g.interactT) * 12.0f) * 2.0f;
                 DrawEllipse((int)cx, (int)fy - 2, 6.0f, 3.0f, Fade(BLACK, 0.28f));
+                // Footstep dust: a soft puff under the boots while walking.
+                if (g.moving) {
+                    float ph = fmodf(g.walkAnimT * 3.5f, 1.0f);
+                    DrawEllipse((int)cx, (int)fy - 1, 3.0f + ph * 3.0f, 1.5f + ph * 1.0f,
+                                Fade(Color{ 230, 220, 190, 255 }, 0.30f * (1.0f - ph)));
+                }
                 drawCharSheet(sheet, row, frame, cx, fy, g.facing == 2 && g.sideFlip);
                 break;
             }
@@ -508,6 +545,40 @@ void drawWorld() {
         }
     }
 
+    // Ambient life around the player (screen-anchored, cheap and cheerful):
+    // butterflies over meadows by day, fireflies in the fen at night.
+    {
+        float px=g.px*TILE-g.camX, py=g.py*TILE-g.camY;
+        bool day = nightAmt < 0.35f;
+        if (day && (biome==BI_MEADOW || biome==BI_FOREST || biome==BI_AMBER)) {
+            for (int i=0;i<3;i++) {
+                float ph=g.totalTime*(0.35f+0.12f*i)+(float)i*2.1f;
+                float bx=px+sinf(ph*1.7f)*46.f+sinf(ph*0.6f)*18.f;
+                float by=py-18.f+sinf(ph*2.3f)*10.f+cosf(ph*1.1f)*6.f;
+                float flap=fmodf(g.totalTime*9.f+(float)i*2.f,1.f)<0.5f?1.f:0.f;
+                Color wc=(i==0)?Color{255,240,170,230}:(i==1)?Color{200,225,255,230}:Color{255,205,230,230};
+                DrawRectangle((int)(bx-2-flap),(int)by,2,1,wc);
+                DrawRectangle((int)bx,(int)by,2,1,wc);
+            }
+        }
+        if (nightAmt > 0.25f && (biome==BI_FEN || biome==BI_FOREST || biome==BI_MEADOW)) {
+            for (int i=0;i<10;i++) {
+                float ph=g.totalTime*(0.5f+0.2f*(i%3))+(float)i*1.37f;
+                float fx=px+sinf(ph)*70.f+sinf(ph*0.37f)*24.f;
+                float fy=py-10.f+cosf(ph*0.83f)*34.f;
+                float tw=0.5f+0.5f*sinf(g.totalTime*2.4f+(float)i*2.9f);
+                DrawCircle((int)fx,(int)fy,1,Fade(Color{190,255,170,255},tw*nightAmt));
+            }
+        }
+    }
+
+    // Warm dawn/dusk tint when the sun is low but not yet night.
+    {
+        float sun=sinf(dayT*6.2831853f); // -1..1, same clock as nightAmt
+        float dusk=(sun>-0.25f && sun<0.35f)?(1.f-fabsf(sun-0.05f)/0.4f):0.f;
+        if (dusk>0.01f) DrawRectangle(0,0,VRES_W,VRES_H,Fade(Color{255,150,70,255},dusk*0.10f));
+    }
+
     if (nightAmt > 0.001f) {
         DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{ 20, 26, 60, 255 }, nightAmt * 0.40f));
     }
@@ -516,42 +587,43 @@ void drawWorld() {
 }
 
 // ================================================================ HUD
-// Quiet travel HUD: a stepped one-pixel frame instead of three large opaque
-// menu boxes. The full stat sheet is still in the pause menu.
-static void travelPlate(int x,int y,int w,int h) {
-    DrawRectangle(x+2,y+2,w,h,Color{26,31,40,100});
-    DrawRectangle(x,y+1,w,h-2,Color{30,41,51,241});
-    DrawRectangle(x+1,y,w-2,h,Color{30,41,51,241});
-    DrawRectangle(x+2,y,w-4,1,Color{180,165,126,255});
-    DrawRectangle(x+2,y+h-1,w-4,1,Color{92,101,93,255});
-}
+// SNES travel HUD: navy windows with white double borders, like the
+// originals. Zone + danger level top-left, gil top-right, party bottom-left.
+// The full stat sheet is still in the pause menu.
 void drawHUD() {
     const char* zone=zoneNameAt(g.px,g.py);
-    travelPlate(5,5,(int)measureText(zone,8).x+29,19);
+    char zoneBuf[96];
+    snprintf(zoneBuf,sizeof(zoneBuf),"%s  Lv.%d",zone,zoneLevelAt(g.px,g.py));
+    Vector2 zsz=measureText(zoneBuf,8);
+    drawWindow({ 5, 5, zsz.x + 30, 20 });
     // Tiny two-colour compass needle.
     DrawTriangle({12,16},{16,14},{16,7},Color{250,218,149,255});
     DrawTriangle({20,12},{16,14},{16,21},Color{134,173,169,255});
-    drawText(zone,27,11,Color{246,238,212,255},8);
+    drawText(zoneBuf,27,11,Color{246,238,212,255},8);
     char buf[64]; snprintf(buf,sizeof(buf),"%d",g.gil);
     int gw=(int)measureText(buf,8).x+27, gx=VRES_W-5-gw;
-    travelPlate(gx,5,gw,19);
+    drawWindow({ (float)gx, 5, (float)gw, 20 });
     DrawTexture(g.assets.icon[ICON_COIN],gx+3,6,WHITE);
     drawText(buf,(float)gx+21,11,Color{247,211,135,255},8);
 
-    constexpr int partyW=239, by=VRES_H-31;
-    travelPlate(5,by,partyW,26);
+    constexpr int partyW=243, by=VRES_H-34;
+    drawWindow({ 5, (float)by, (float)partyW, 29 });
     for (int i=0;i<3;++i) {
-        const Hero& h=g.party[i]; int x=9+78*i;
+        const Hero& h=g.party[i]; int x=9+80*i;
         Texture2D f=g.assets.face[h.klass==KLASS_KNIGHT ? FACE_KNIGHT : h.klass==KLASS_MAGE ? FACE_MAGE : FACE_CLERIC];
-        DrawTexturePro(f,{0,0,(float)f.width,(float)f.height},{(float)x,(float)by+4,17,18},{0,0},0,
+        if (f.id) DrawTexturePro(f,{0,0,(float)f.width,(float)f.height},{(float)x,(float)by+5,17,18},{0,0},0,
                        h.ko ? Color{135,135,154,255} : WHITE);
-        drawText(heroName(h.klass),x+20.f,by+4.f,h.ko ? Color{226,141,139,255} : WHITE,8);
-        // Two slim gauge tracks leave the party readable without hiding the path.
-        int hp=(int)roundf(49.f*h.hp/std::max(1,h.maxHp)), mp=(int)roundf(49.f*h.mp/std::max(1,h.maxMp));
-        DrawRectangle(x+20,by+15,49,3,Color{69,78,81,255}); DrawRectangle(x+20,by+20,49,2,Color{62,72,85,255});
-        DrawRectangle(x+20,by+15,hp,3,h.poisoned ? Color{187,138,192,255} : Color{140,194,137,255});
-        DrawRectangle(x+20,by+20,mp,2,Color{126,179,207,255});
-        if(i<2) DrawRectangle(x+73,by+5,1,16,Color{71,85,87,255});
+        drawText(heroName(h.klass),x+20.f,by+5.f,h.ko ? Color{226,141,139,255} : WHITE,8);
+        char lv[24]; snprintf(lv,sizeof(lv),"Lv.%d",h.level);
+        drawText(lv,x+20.f,by+14.f,Color{165,180,215,255},8);
+        // HP/MP gauges with white SNES borders.
+        drawBar(x+44,by+15,32,4,(float)h.hp/std::max(1,h.maxHp),
+                h.poisoned ? Color{187,138,192,255} : Color{96,220,120,255}, Color{24,34,68,255});
+        drawBar(x+44,by+21,32,3,(float)h.mp/std::max(1,h.maxMp),
+                Color{96,160,255,255}, Color{24,34,68,255});
+        if (h.ko) drawText("KO",x+20.f,by+21.f,Color{255,110,110,255},8);
+        else if (h.poisoned) drawText("PSN",x+20.f,by+21.f,Color{195,130,255,255},8);
+        if(i<2) DrawRectangle(x+76,by+6,1,18,Color{71,85,87,255});
     }
 
     // active quest tracker with progress / compass hint
@@ -580,9 +652,9 @@ void drawHUD() {
         Vector2 sz = measureText(prompt, 8);
         float pw = sz.x + 16;
         float px=VRES_W-pw-5;
-        int py=px>partyW+8 ? VRES_H-28 : VRES_H-53;
-        travelPlate((int)px,py,(int)pw,20);
-        drawTextCentered(prompt,px+pw*.5f,(float)py+6,Color{246,238,212,255},8);
+        int py=px>partyW+8 ? VRES_H-30 : VRES_H-56;
+        drawWindow({ px, (float)py, pw, 21 });
+        drawTextCentered(prompt,px+pw*.5f,(float)py+7,Color{246,238,212,255},8);
     }
     drawToast();
 }
@@ -599,6 +671,8 @@ void drawToast() {
 }
 
 // ================================================================ dialog box
+// SNES dialogue: navy window, gold-framed portrait, name plate overlapping
+// the top edge, and a blinking down-arrow when the line is fully revealed.
 void drawDialogBox() {
     if (g.dialog.empty()) return;
     const DialogLine& line = g.dialog[std::min<int>(g.dialogIndex, (int)g.dialog.size() - 1)];
@@ -607,30 +681,41 @@ void drawDialogBox() {
     drawWindow({ 6, y, VRES_W - 12, h });
     if (line.face >= 0 && line.face < FACE_COUNT && g.assets.face[line.face].id) {
         Texture2D& f = g.assets.face[line.face];
+        DrawRectangle(13, (int)y + 9, 50, 50, Color{ 12, 16, 30, 255 });
         DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height }, { 14, y + 10, 48, 48 },
                        { 0, 0 }, 0.0f, WHITE);
         DrawRectangleLines(14, (int)y + 10, 48, 48, Color{ 255, 232, 150, 255 });
     }
     float tx = (line.face >= 0) ? 72.0f : 18.0f;
     float maxW = VRES_W - tx - 18.0f;
-    if (!line.speaker.empty())
-        drawText(line.speaker.c_str(), tx, y + 8, Color{ 255, 232, 150, 255 }, 8);
+    if (!line.speaker.empty()) {
+        Vector2 nsz = measureText(line.speaker.c_str(), 8);
+        drawWindow({ tx - 4, y - 9, nsz.x + 16, 18 });
+        drawText(line.speaker.c_str(), tx + 4, y - 4, Color{ 255, 232, 150, 255 }, 8);
+    }
 
     // typewriter reveal with pixel-accurate word wrapping
     size_t nchars = (size_t)std::max(0.0f, std::min((float)line.text.size(), g.dialogReveal));
     std::string shown = line.text.substr(0, nchars);
-    drawTextWrapped(shown.c_str(), tx, y + (line.speaker.empty() ? 12.0f : 22.0f), maxW, 12.0f, WHITE, 8);
+    drawTextWrapped(shown.c_str(), tx, y + (line.speaker.empty() ? 12.0f : 16.0f), maxW, 12.0f, WHITE, 8);
 
     if (g.dialogReveal >= (float)line.text.size()) {
         bool last = (g.dialogIndex >= (int)g.dialog.size() - 1);
-        const char* hint = last ? "[SPACE]" : "[SPACE] more";
+        // Blinking down-arrow (SNES "more" marker) + key hint.
+        if (fmodf(g.totalTime * 2.0f, 1.0f) < 0.7f) {
+            float ax = VRES_W - 30.0f, ay = y + h - 16.0f;
+            DrawTriangle({ ax, ay }, { ax + 10, ay }, { ax + 5, ay + 7 }, Color{ 255, 232, 150, 255 });
+        }
+        const char* hint = last ? "SPACE" : "SPACE more";
         Vector2 sz = measureText(hint, 8);
-        if (fmodf(g.totalTime * 3.0f, 2.0f) < 1.2f)
-            drawText(hint, VRES_W - sz.x - 16, y + h - 14, Color{ 180, 200, 255, 255 }, 8);
+        drawText(hint, VRES_W - sz.x - 44, y + h - 14, Color{ 180, 200, 255, 255 }, 8);
     }
 }
 
 // ================================================================ title
+// SNES title presentation: scenic sky, layered gold logo with a soft drop
+// shadow, navy menu windows with a blinking cursor, a walking party
+// attract row, PRESS START blink, copyright and version lines.
 void drawTitleScreen() {
     Texture2D& bg = g.assets.titleBg;
     if (bg.id) DrawTexturePro(bg, { 0, 0, (float)bg.width, (float)bg.height },
@@ -642,34 +727,66 @@ void drawTitleScreen() {
     DrawRectangleGradientV(0, 0, VRES_W, VRES_H / 2, Fade(BLACK, 0.35f), BLANK);
     DrawRectangleGradientV(0, VRES_H / 2, VRES_W, VRES_H / 2, BLANK, Fade(BLACK, 0.55f));
 
+    // Twinkling sparkles over the sky.
+    for (int i = 0; i < 14; i++) {
+        float sx = hashf(i, 3, 0x77aaU) * VRES_W;
+        float sy = hashf(i, 7, 0x99bbU) * 150.0f;
+        float tw = 0.5f + 0.5f * sinf(g.titleT * 2.2f + (float)i * 1.9f);
+        if (tw > 0.55f) DrawRectangle((int)sx, (int)sy, 2, 2, Fade(Color{ 255, 250, 220, 255 }, tw * 0.8f));
+    }
+
     const char* title = "A PLACE FOR AGENTS";
     float bob = sinf(g.titleT * 1.6f) * 1.5f;
-    drawTextCentered(title, VRES_W * 0.5f + 2, 54 + bob, Color{ 12, 16, 30, 255 }, 24);
+    // Layered logo: dark outline, navy mid, gold face.
+    drawTextCentered(title, VRES_W * 0.5f + 3, 55 + bob, Color{ 12, 16, 30, 255 }, 24);
+    drawTextCentered(title, VRES_W * 0.5f + 1, 53 + bob, Color{ 70, 90, 160, 255 }, 24);
     drawTextCentered(title, VRES_W * 0.5f,     52 + bob, Color{ 255, 236, 176, 255 }, 24);
-    drawTextCentered("an endless meadow tale", VRES_W * 0.5f + 1, 85 + bob, Color{ 12, 16, 30, 200 }, 8);
-    drawTextCentered("an endless meadow tale", VRES_W * 0.5f,     84 + bob, Color{ 230, 238, 255, 230 }, 8);
+    drawTextCentered("an endless SNES-style JRPG", VRES_W * 0.5f + 1, 85 + bob, Color{ 12, 16, 30, 200 }, 8);
+    drawTextCentered("an endless SNES-style JRPG", VRES_W * 0.5f,     84 + bob, Color{ 230, 238, 255, 230 }, 8);
 
     const char* opts[3] = { "NEW ADVENTURE", "CONTINUE", "QUIT" };
     for (int i = 0; i < 3; i++) {
         bool sel = (g.titleIndex == i);
         bool disabled = (i == 1 && !g.saveExists);
-        float w = 156;
-        Rectangle box{ VRES_W * 0.5f - w * 0.5f, (float)(146 + i * 24), w, 19 };
-        if (sel) {
-            DrawRectangleRounded(box, 0.5f, 4, Fade(Color{ 20, 30, 80, 255 }, 0.90f));
-            DrawRectangleRoundedLinesEx(box, 0.5f, 4, 1.2f, Color{ 255, 236, 176, 255 });
-        } else {
-            DrawRectangleRounded(box, 0.5f, 4, Fade(Color{ 10, 16, 40, 255 }, 0.45f));
-        }
+        float w = 176;
+        Rectangle box{ VRES_W * 0.5f - w * 0.5f, (float)(112 + i * 24), w, 20 };
+        drawWindow(box);
         Color c = disabled ? Color{ 150, 160, 185, 190 }
                            : (sel ? Color{ 255, 236, 176, 255 } : Color{ 235, 240, 255, 245 });
-        drawTextCentered(opts[i], VRES_W * 0.5f + 1, box.y + 6, Fade(BLACK, 0.65f), 8);
-        drawTextCentered(opts[i], VRES_W * 0.5f,     box.y + 5, c, 8);
+        drawTextCentered(opts[i], VRES_W * 0.5f, box.y + 6, c, 8);
+        if (sel && !disabled) drawCursor(box.x + 10, box.y + 6);
     }
+    if (fmodf(g.titleT * 1.4f, 1.0f) < 0.65f)
+        drawTextCentered("PRESS START", VRES_W * 0.5f, 190, Color{ 255, 236, 176, 255 }, 8);
+
+    // Attract row: the party (and a slime) walk across the bottom forever.
+    {
+        float walk = fmodf(g.titleT * 26.0f, (float)(VRES_W + 120)) - 60.0f;
+        float gy = VRES_H - 34.0f;
+        DrawRectangle(0, (int)gy + 8, VRES_W, 2, Fade(Color{ 20, 30, 60, 255 }, 0.35f));
+        for (int i = 0; i < 3; i++) {
+            Texture2D& sheet = g.assets.heroWalk[i];
+            if (sheet.id == 0) continue;
+            float cx = walk + (float)i * 30.0f;
+            float fy = gy + sinf(g.titleT * 9.0f + (float)i * 1.3f) * 1.5f;
+            DrawEllipse((int)cx, (int)fy, 6.0f, 2.5f, Fade(BLACK, 0.25f));
+            int frame = 1 + ((int)(g.titleT * 7.0f + (float)i) & 1);
+            Rectangle src{ (float)(frame * 24), 64.0f, 24, 32 };
+            DrawTexturePro(sheet, src, { cx - 12, fy - 32, 24, 32 }, { 0, 0 }, 0.0f, WHITE);
+        }
+        Texture2D& sl = g.assets.enemy[EN_SLIME];
+        if (sl.id) {
+            float cx = walk - 34.0f;
+            float fy = gy + sinf(g.titleT * 6.0f) * 1.5f;
+            DrawEllipse((int)cx, (int)fy, 8.0f, 3.0f, Fade(BLACK, 0.25f));
+            texFoot(sl, cx, fy, WHITE, 0.62f);
+        }
+    }
+
     drawTextCentered("arrows / mouse to choose - SPACE to begin",
-                     VRES_W * 0.5f, VRES_H - 26, Color{ 210, 220, 245, 220 }, 8);
-    drawTextCentered("art: OpenRTP - press F11 for fullscreen",
-                     VRES_W * 0.5f, VRES_H - 14, Color{ 180, 190, 220, 180 }, 8);
+                     VRES_W * 0.5f, VRES_H - 22, Color{ 210, 220, 245, 220 }, 8);
+    drawTextCentered("(C) 2026 A Place for Agents - art: OpenRTP - v0.2.0",
+                     VRES_W * 0.5f, VRES_H - 11, Color{ 180, 190, 220, 180 }, 8);
     drawToast();
 }
 

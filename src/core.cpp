@@ -621,6 +621,13 @@ bool uiButtonAt(const char* text, Rectangle r, int size) {
     return uiButtonHit(r);
 }
 
+void drawCursor(float x, float y, Color c) {
+    // Blinks at ~2 Hz like an SNES menu cursor; steady when the caller wants
+    // a static marker by passing through a frame where the blink is on.
+    if (fmodf(g.totalTime * 2.0f, 1.0f) > 0.72f) return;
+    DrawTriangle({ x, y }, { x, y + 8 }, { x + 7, y + 4 }, c);
+}
+
 void pushToast(const std::string& msg) {
     g.toast = msg;
     g.toastT = 2.8f;
@@ -695,7 +702,8 @@ struct SaveBlob {
     } heroes[3];
     int32_t questState[QUEST_COUNT], questProgress[QUEST_COUNT], questGoal[QUEST_COUNT];
     uint32_t flags;                // bit0 bossDefeated, bit1 locketFound, bit2 towerChestOpened,
-                                   // bit3 startVillageSeen, bit4 musicOn, bit5 waitBattle
+                                   // bit3 startVillageSeen, bit4 musicOn, bit5 waitBattle,
+                                   // bit6 crtOn (older saves read as CRT off)
     int32_t openedChestCount;
     uint64_t openedChests[SAVE_MAX_IDS];
     int32_t defeatedMonsterCount;
@@ -749,6 +757,7 @@ bool saveGame() {
     if (g.startVillageSeen) b.flags |= (1u << 3);
     if (g.musicOn)          b.flags |= (1u << 4);
     if (g.waitBattle)       b.flags |= (1u << 5);
+    if (g.crtOn)            b.flags |= (1u << 6);
 
     int oc = 0;
     for (uint64_t id : g.openedChests) {
@@ -823,6 +832,7 @@ bool loadGame() {
     g.startVillageSeen = (b.flags & (1u << 3)) != 0;
     g.musicOn          = (b.flags & (1u << 4)) != 0;
     g.waitBattle       = (b.flags & (1u << 5)) != 0;
+    g.crtOn            = (b.flags & (1u << 6)) != 0;
 
     g.openedChests.clear();
     int oc = std::max(0, std::min(SAVE_MAX_IDS, (int)b.openedChestCount));

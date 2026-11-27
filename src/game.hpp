@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <algorithm>
 
-constexpr int VRES_W = 512;      // virtual framebuffer, letterboxed to the window
+constexpr int VRES_W = 512;      // virtual framebuffer, stretched to fill the window
 constexpr int VRES_H = 288;
 constexpr int TILE = 16;
 
@@ -429,6 +429,7 @@ struct Game {
     MusicCue audition = MUS_VILLAGE;  // sound room only; never part of a save
     bool waitBattle = true;        // true = ATB pauses in menus (WAIT), false = ACTIVE
     bool musicOn = true;
+    bool crtOn = true;             // CRT scanlines + vignette over the stretched picture
 
     // title
     int titleIndex = 0;
@@ -482,6 +483,9 @@ std::string formatGil(int gil);
 void drawButton(const char* text, Rectangle r, int size = 8, bool selected = false);
 bool uiButtonAt(const char* text, Rectangle r, int size = 8);
 bool uiButtonHit(Rectangle r);
+// SNES menu cursor: a small right-pointing triangle, blinking like the
+// originals. Drawn just left of the selected row.
+void drawCursor(float x, float y, Color c = Color{ 255, 232, 150, 255 });
 
 // ============================================================== save / load
 bool saveGame();

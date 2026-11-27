@@ -1,4 +1,5 @@
-// main.cpp — window, virtual 512x288 canvas, main loop, audio streams & transitions
+// main.cpp — window, virtual 512x288 canvas stretched to fill the window,
+// main loop, audio streams & transitions
 #include "game.hpp"
 #include "world.hpp"
 #include "battle.hpp"
@@ -41,7 +42,7 @@ static void titleUpdate(float dt) {
     }
     Vector2 m = getVirtualMouse();
     for (int i = 0; i < 3; i++) {
-        Rectangle box{ VRES_W * 0.5f - 78.0f, (float)(146 + i * 24), 156.0f, 19.0f };
+        Rectangle box{ VRES_W * 0.5f - 88.0f, (float)(112 + i * 24), 176.0f, 20.0f };
         if (CheckCollisionPointRec(m, box)) {
             g.titleIndex = i;
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -73,7 +74,7 @@ static void gameOverUpdate() {
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
-    InitWindow(1280, 720, "A Place for Agents");
+    InitWindow(1280, 720, "A Place for Agents — an endless SNES-style JRPG");
     SetExitKey(0); // ESC opens pause menu / backs out instead of abruptly quitting
     SetTargetFPS(60);
 
@@ -88,7 +89,8 @@ int main() {
 
     while (!WindowShouldClose() && !g.quitRequested) {
         float dt = std::min(0.05f, GetFrameTime());
-        g.hotButtons = 0;
+        // hotButtons is filled by last frame's draw (hover detection) and
+        // read by this frame's update, so it is cleared just before drawing.
 
         if (IsKeyPressed(KEY_F11)) ToggleFullscreen();
 
@@ -120,6 +122,7 @@ int main() {
 
         updateScore(dt);
 
+        g.hotButtons = 0; // fresh hover set for the draw below
         // ---- render to crisp 512x288 virtual framebuffer
         BeginTextureMode(g.rt);
         ClearBackground(Color{ 10, 14, 26, 255 });
@@ -157,17 +160,32 @@ int main() {
         drawTransitionFx();
         EndTextureMode();
 
-        // ---- present letterboxed integer-scaled canvas
+        // ---- present: stretch the 512x288 canvas to fill the whole window.
+        // No letterbox bars — the picture always reaches the window edges,
+        // whatever size or aspect the window is. Mouse mapping in
+        // getVirtualMouse() uses the same independent X/Y scales.
         BeginDrawing();
         ClearBackground(Color{ 6, 8, 16, 255 });
         int sw = GetScreenWidth(), sh = GetScreenHeight();
-        float scale = std::min((float)sw / VRES_W, (float)sh / VRES_H);
-        if (scale >= 2.0f) scale = floorf(scale);
-        float dw = VRES_W * scale, dh = VRES_H * scale;
-        float ox = (sw - dw) * 0.5f, oy = (sh - dh) * 0.5f;
+        if (sw < 1) sw = VRES_W;
+        if (sh < 1) sh = VRES_H;
         DrawTexturePro(g.rt.texture,
                        { 0, 0, (float)VRES_W, -(float)VRES_H },
-                       { ox, oy, dw, dh }, { 0, 0 }, 0.0f, WHITE);
+                       { 0, 0, (float)sw, (float)sh }, { 0, 0 }, 0.0f, WHITE);
+        // Optional CRT dressing (Options -> CRT Filter): faint scanlines and
+        // a soft vignette, the way the SNES picture sat on a tube TV.
+        if (g.crtOn) {
+            float lineH = (float)sh / VRES_H; // one virtual scanline in window px
+            for (int y = 0; y < VRES_H; y += 2) {
+                DrawRectangle(0, (int)(y * lineH), sw, std::max(1, (int)(lineH * 0.45f)),
+                              Color{ 0, 0, 0, 26 });
+            }
+            int vw = std::max(24, sw / 10), vh = std::max(18, sh / 10);
+            DrawRectangleGradientV(0, 0, sw, vh, Color{ 0, 0, 0, 52 }, BLANK);
+            DrawRectangleGradientV(0, sh - vh, sw, vh, BLANK, Color{ 0, 0, 0, 52 });
+            DrawRectangleGradientH(0, 0, vw, sh, Color{ 0, 0, 0, 40 }, BLANK);
+            DrawRectangleGradientH(sw - vw, 0, vw, sh, BLANK, Color{ 0, 0, 0, 40 });
+        }
         EndDrawing();
     }
 
