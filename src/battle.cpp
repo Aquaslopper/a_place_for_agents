@@ -158,7 +158,8 @@ void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fi
     else if (count == 1) setBanner(std::string("A wild ") + enemyDef(kinds[0]).name + " draws near!", 1.8f);
     else setBanner("A band of monsters attacks!", 1.8f);
 
-    g.battleReturn = (g.mode == MODE_DUNGEON) ? MODE_DUNGEON : MODE_OVERWORLD;
+    g.battleReturn = (g.mode == MODE_DUNGEON) ? MODE_DUNGEON
+                   : (g.mode == MODE_SAIL ? MODE_SAIL : MODE_OVERWORLD);
     g.mode = MODE_BATTLE;
     g.fade = 1.0f; g.fadeDir = -1;
     playSoundIf(g.assets.encounter);
@@ -510,7 +511,8 @@ void battleUpdate(float dt) {
     if (B.phase == BP_VICTORY || B.phase == BP_FLED) {
         B.phaseT = std::max(0.0f, B.phaseT - dt);
         if (B.phaseT <= 0 && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON))) {
-            g.mode = (g.battleReturn == MODE_DUNGEON) ? MODE_DUNGEON : MODE_OVERWORLD;
+            g.mode = (g.battleReturn == MODE_DUNGEON) ? MODE_DUNGEON
+                   : (g.battleReturn == MODE_SAIL ? MODE_SAIL : MODE_OVERWORLD);
             g.fade = 1.0f; g.fadeDir = -1;
             g.encounterGrace = 3.5f;
         }

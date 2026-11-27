@@ -27,6 +27,7 @@ add_executable(aplaceforagents WIN32
     src/world.cpp
     src/atlas.cpp
     src/commons.cpp
+    src/sail.cpp
     src/overworld.cpp
     src/render.cpp
     src/dialog.cpp

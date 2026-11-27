@@ -283,6 +283,18 @@ static void drawLandmarkPart(const LandmarkPart& p, float nightAmt) {
         case LP_CAULDRON:  t = &g.assets.cauldron;   shadowW =  8.0f; shadowH = 2.5f; break;
         case LP_BARREL:    t = &g.assets.barrel;     shadowW =  6.0f; shadowH = 2.0f; break;
         case LP_CAVE:      t = &g.assets.caveMouth;  shadowW = 22.0f; shadowH = 5.0f; break;
+        case LP_TIDEWELL: {
+            // A found Tidewell runs; an unfound one is a dry basin, so the
+            // player can read the quest's progress from the stone itself.
+            bool found = false;
+            for (int i = 0; i < TIDE_ISLANDS; i++) {
+                if ((g.tideMask & (1 << i)) && tideIslandWellX(i) == (float)p.tx + 0.5f &&
+                    tideIslandWellY(i) == (float)(p.ty - 1) + 0.5f) found = true;
+            }
+            t = found ? &g.assets.tidewell : &g.assets.tidewellDry;
+            shadowW = 13.0f; shadowH = 3.5f;
+            break;
+        }
     }
     if (!t || t->id == 0) return;
     DrawEllipse((int)cx, (int)fy - 2, shadowW, shadowH, Fade(BLACK, 0.25f));

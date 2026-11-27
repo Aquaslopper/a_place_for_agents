@@ -21,6 +21,9 @@ MusicCue sceneCue(Mode scene) {
     if (scene == MODE_BATTLE) return battleMusicCue();
     if (scene == MODE_ROOM) return g.room.kind == ROOM_TEMPLE ? MUS_CHAPEL : MUS_HEARTH;
     if (scene == MODE_DUNGEON) return dungeonMusicCue();
+    // Out on the water the score has no sea cue, so the Open Road carries it:
+    // silence over a lake is worse than a borrowed tune.
+    if (scene == MODE_SAIL) return MUS_FIELD;
     if (inCommons(g.px,g.py) || inVillage(g.px,g.py) || (!g.villageLoaded && g.px*g.px+g.py*g.py < 18*18)) return MUS_VILLAGE;
     if (inBossArena(g.px,g.py)) return MUS_PASS;
     switch (sampleGround((int)floorf(g.px),(int)floorf(g.py)).biome) {

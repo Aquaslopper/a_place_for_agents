@@ -869,7 +869,13 @@ void atlasJournalDraw(float ox, float oy) {
             for (int bx = 0; bx < BW; ++bx) {
                 int tx = originX + bx * TILES_PER_BLOCK + TILES_PER_BLOCK / 2;
                 int ty = originY + by * TILES_PER_BLOCK + TILES_PER_BLOCK / 2;
-                sketch[(size_t)by * BW + bx] = biomeColor(worldSurveyTerrain(tx, ty));
+                SurveyTerrain st = worldSurveyTerrain(tx, ty);
+                // The Open Water: past the coast the sketch is sea, not land.
+                // Without this the map lies — it paints a forest out to the
+                // edge of the page and a player reads that as "keep walking".
+                float sx = (float)tx, sy = (float)ty;
+                if (sx * sx + sy * sy > shoreRadius() * shoreRadius()) st.water = st.deep = true;
+                sketch[(size_t)by * BW + bx] = biomeColor(st);
             }
     }
 

@@ -153,7 +153,7 @@ enum NpcSprite { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_ELDE
     NS_WOMAN, NS_CHILD, NS_GUARD, NS_SOLDIER, NS_KNIGHT, NS_MERCHANT, NS_SMITH,
     NS_PRIEST, NS_FARMER, NS_DOG, NS_CAT, NS_CHICKEN, NS_SHEEP,
     NS_VILLAGER4, NS_VILLAGER5, NS_VILLAGER6, NS_VILLAGER7, NS_VILLAGER8, NS_VILLAGER9,
-    NS_RANGER, NS_COW, NS_HORSE, NS_KEEPER, NS_KIND_COUNT };
+    NS_RANGER, NS_COW, NS_HORSE, NS_KEEPER, NS_FERRYMAN, NS_KIND_COUNT };
 
 struct Assets {
     Texture2D landscape{}, relief{}, bridge{}, lilies{}, turnips{};
@@ -176,6 +176,8 @@ struct Assets {
     Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{}, tent{}, statusStone[3]{};
     Texture2D barrel{}, table{}, longtable{}, counter{}, lantern{}, candle{}, keg{}, plate{}, shelf{};
     Texture2D forgeHearth{}, forgeAnvil{};
+    // the Tidemill Isles: a stone basin with a standing stone behind it
+    Texture2D tidewell{}, tidewellDry{}, tideStone{};
     Texture2D mailbox{}, noticeboard{};
     Texture2D chestClosed{}, chestOpen{}, stump{}, bed{};
     Texture2D cloud{};
@@ -183,6 +185,8 @@ struct Assets {
     Texture2D house[5]{}, shop{}, inn{}, temple{}, manor{}, castle{}, tower{}, gate{}, smithy{};
     // dungeon entrance & stairs
     Texture2D caveMouth{}, stairDown{}, stairUp{};
+    // the ferry's boat (src/sail.cpp) — native 72x96 character sheet, blue hull
+    Texture2D boat{};
     // characters
     Texture2D heroWalk[3]{};
     Texture2D npc[NS_KIND_COUNT]{};
@@ -272,6 +276,7 @@ bool nearStartVillage(float x, float y);
 
 // collision + navigation
 bool cellWalkable(int tx, int ty);
+bool cellSailable(int tx, int ty);   // shallow water: a hull may cross it
 bool positionBlocked(float x, float y, float r);
 struct WalkPath {
     std::vector<std::pair<int, int>> cells;
@@ -343,7 +348,7 @@ float smoothNoise(float x, float y, uint32_t seed);
 float fbm(float x, float y, uint32_t seed, int octaves);
 
 // ============================================================== quests
-enum QuestId { QUEST_SLIMES = 0, QUEST_LOCKET, QUEST_CROWN, QUEST_DEEP, QUEST_COMMONS, QUEST_COUNT };
+enum QuestId { QUEST_SLIMES = 0, QUEST_LOCKET, QUEST_CROWN, QUEST_DEEP, QUEST_COMMONS, QUEST_TIDE, QUEST_COUNT };
 enum QuestState { QS_UNKNOWN = 0, QS_OFFERED, QS_ACTIVE, QS_DONE };
 struct Quest {
     int state = QS_UNKNOWN;
@@ -372,7 +377,7 @@ bool roomBlocked(const Room& room, float x, float y, float r);
 // ============================================================== modes
 enum Mode {
     MODE_TITLE = 0, MODE_OVERWORLD, MODE_BATTLE, MODE_MENU, MODE_DIALOG,
-    MODE_ROOM, MODE_GAMEOVER, MODE_INTRO, MODE_DUNGEON
+    MODE_ROOM, MODE_GAMEOVER, MODE_INTRO, MODE_DUNGEON, MODE_SAIL
 };
 
 // ============================================================== dialog
@@ -387,7 +392,8 @@ enum DialogAction {
     DLG_START_QUEST_CROWN, DLG_GIVE_KEY, DLG_HEAL, DLG_CROWN_REWARD,
     DLG_BOSS_SLIME_KING, DLG_SAVE_TIP,
     DLG_START_QUEST_DEEP, DLG_FINISH_QUEST_DEEP,
-    DLG_START_QUEST_COMMONS, DLG_FINISH_QUEST_COMMONS
+    DLG_START_QUEST_COMMONS, DLG_FINISH_QUEST_COMMONS,
+    DLG_BUY_BOAT, DLG_SAIL_TIDE
 };
 void startDialog(const std::vector<DialogLine>& lines, DialogAction action = DLG_NONE);
 
@@ -445,6 +451,17 @@ struct Game {
     // npc cache
     uint64_t npcKey = ~0ull;
     std::vector<Npc> npcs;
+
+    // ---- the Open Water (src/sail.cpp) --------------------------------------
+    // The boat is a ferryman's promise, not an item: once he has been paid you
+    // can board at any dock. Boarding swaps the whole overworld for a sail on
+    // the water; stepping onto a beach swaps it back.
+    bool hasBoat = false;          // the ferryman has sold you the boat (flag bit7)
+    bool sailing = false;          // true while the party is afloat
+    float boatTrail = 0;           // seconds since the last landing (for the wake)
+    int tideFound = 0;             // islands' Tidewells found, 0..3 (quest progress)
+    int tideMask = 0;              // bit i = isle i's Tidewell has been lit (not saved: rebuildable)
+    float surfT = 0;               // animation clock for the shoreline
 
     // chests & world flags
     std::unordered_set<uint64_t> openedChests;
@@ -547,6 +564,38 @@ void updateScore(float dt);
 MusicCue playingCue();
 const char* cueTitle(MusicCue cue);
 void unloadScore();
+
+// ============================================================== the Open Water
+// world.cpp owns the shoreline; sail.cpp owns everything that happens on it.
+float shoreRadius();                       // this seed's mean distance to the sea
+bool  inOpenSea(float x, float y);         // past the coast: deep, and no hull goes there
+struct Dock {
+    bool valid = false;
+    int tx = 0, ty = 0;      // the plank the party stands on
+    int wx = 0, wy = 0;      // the first water tile the boat slips into
+};
+bool dockFind(bool sailing, Dock& out);    // nearest dock; afloat = nearest harbour
+constexpr int TIDE_ISLANDS = 3;            // islands that carry a Tidewell
+struct TideIsle { int tx = 0, ty = 0; bool well = false; };
+void tideIslands();
+int  tideIslandCount();
+bool tideIslandAt(int i, TideIsle& out);
+const char* tideIslandName(int i);
+float tideIslandWellX(int i), tideIslandWellY(int i);
+
+// sail.cpp
+bool sailCanBoard();                       // standing beside open water, boat in hand
+void sailEnter();                          // push off from the nearest bank
+void sailExit();                           // step ashore onto the nearest beach
+void sailUpdate(float dt);                 // movement, wake, landings, encounters
+void sailDraw();                           // the water, the boat, the shore
+void sailHud();                            // bow marker + landing prompt
+bool sailPrompt(const char** text);        // "SPACE: land at ..." style prompt
+void sailInteract();                       // land, or found a Tidewell
+bool tideTryInteract();                    // light a Tidewell the party is standing at
+bool tidePrompt(const char** text);
+const char* sailZoneName();                // the name of the water under the hull
+extern float gSailX, gSailY, gSailFacing;
 
 // ============================================================== ui helpers
 void drawWindow(Rectangle r, bool dimInside = true);

@@ -370,6 +370,35 @@ static void talkToNpc(int npcIdx) {
             lines.push_back({ n.face, n.name, "\"Find a shard in the deepest chamber and I'll make it worth your while.\"" });
             action = DLG_START_QUEST_DEEP;
         }
+    } else if (n.quest == QUEST_TIDE) {
+        Quest& q = g.quests[QUEST_TIDE];
+        char buf[192];
+        if (!g.hasBoat) {
+            lines.push_back({ n.face, n.name,
+                              "\"You'll be the three from Elmswick. I'm Bel. I keep the boat.\"" });
+            lines.push_back({ n.face, n.name,
+                              "\"Out past this bank the millpond runs miles west, and there's three\n"
+                              "low islands out on it with old wells nobody's tended in a age.\"" });
+            lines.push_back({ n.face, n.name,
+                              "\"Forty gil and the boat's yours for as long as you've a mind.\n"
+                              "Stand on any bank and press Space and she'll come to you.\"" });
+            action = DLG_BUY_BOAT;
+        } else if (q.state == QS_DONE) {
+            lines.push_back({ n.face, n.name,
+                              "\"Three wells running again. You can hear the water from the dock on a still night.\"" });
+            lines.push_back({ n.face, n.name,
+                              "\"Keep the boat as long as you want it. There's water I've never sounded out there.\"" });
+        } else {
+            snprintf(buf, sizeof(buf),
+                     "\"Tidewells found: %d of %d. %s\"", g.tideFound, TIDE_ISLANDS,
+                     g.tideFound == 0 ? "Low on the water, west and south of the town bank." :
+                     (g.tideFound < TIDE_ISLANDS ? "One still asleep somewhere out there." :
+                      "That's all of them."));
+            lines.push_back({ n.face, n.name, buf });
+            lines.push_back({ n.face, n.name,
+                              "\"Follow the wake back the way you came and nothing out there bites you\n"
+                              "that hasn't bitten me first.\"" });
+        }
     } else if (n.role == NPC_KEEPER) {
         Quest& q = g.quests[QUEST_COMMONS];
         int built = commonsBuiltStones();
@@ -514,6 +543,14 @@ static void interactWithNearest() {
             }
         }
     }
+
+    // 4b. Push off: if the ferryman has sold you the boat and open water is a
+    // step away, SPACE casts off. This is deliberately ahead of every bank
+    // interaction, because standing on a jetty the only thing you want is water.
+    if (g.hasBoat && sailCanBoard()) { sailEnter(); return; }
+
+    // 4c. A Tidemill Tidewell: the isles' one act.
+    if (tideTryInteract()) { g.interactT = 0.25f; return; }
 
     // 5. The Agents' Commons: its stones, its plots, its brazier, its board.
     if (g.villageLoaded && inCommons(g.px, g.py) && commonsTryInteract()) {
@@ -892,6 +929,11 @@ const char* interactionPrompt() {
         if (dx * dx + dy * dy < 1.5f * 1.5f)
             return g.towerChestOpened ? "SPACE: empty chest"
                  : (itemCount(IT_RUSTY_KEY) > 0 ? "SPACE: unlock tower chest" : "SPACE: locked chest");
+    }
+    if (g.hasBoat && sailCanBoard()) return "SPACE: push off in the boat";
+    {
+        const char* tide = nullptr;
+        if (tidePrompt(&tide)) return tide;
     }
     if (g.villageLoaded && inCommons(g.px, g.py)) {
         int ptx = (int)floorf(g.px), pty = (int)floorf(g.py);
