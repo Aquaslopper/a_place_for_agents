@@ -1,5 +1,6 @@
 // world.cpp — noise, biomes, villages, props, npcs, chests, landmarks, A*
 #include "world.hpp"
+#include "atlas.hpp"
 #include "commons.hpp"
 #include <cmath>
 #include <cstdlib>
@@ -204,44 +205,9 @@ static bool nearTrail(int tx, int ty, int r) {
     return false;
 }
 
-// Caverns have their own survey, independent of decorative landmark rolls.
-// These helpers never call sampleGround, propAt or loaded-village state: terrain,
-// entrances, collision and interaction therefore agree regardless of visit order.
-static bool surveyCavernSector(int sx, int sy, Landmark& out) {
-    uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0xCA7E51u);
-    if (h % 100u >= 58u) return false;
-    int x = sx * 64 + 20 + (int)((h >> 8) % 25u);
-    int y = sy * 64 + 20 + (int)((h >> 16) % 25u);
-    if ((float)x * x + (float)y * y < 52 * 52 || nearSpecialSite(x, y) || nearTrail(x, y, 7)) return false;
-    if ((abs(x - BOSS_CASTLE_TX) < 23 && abs(y - BOSS_CASTLE_TY) < 23) ||
-        (abs(x - LOCKET_SITE_TX) < 19 && abs(y - LOCKET_SITE_TY) < 19) ||
-        (abs(x - TOWER_SITE_TX) < 19 && abs(y - TOWER_SITE_TY) < 19)) return false;
-    // Reject sea/marsh basins rather than stranding a cave on an artificial island.
-    for (int dy = -6; dy <= 6; dy += 6)
-        for (int dx = -6; dx <= 6; dx += 6) {
-            float e = elevationAt((float)x + dx, (float)y + dy, g.worldSeed);
-            if (e < 0.41f || e > 0.71f ||
-                fabsf(y + (float)dy - brookCenterAt(x + (float)dx, g.worldSeed)) < 5.0f) return false;
-            float t = temperatureAt(x + (float)dx, y + (float)dy, g.worldSeed);
-            float m = moistureAt(x + (float)dx, y + (float)dy);
-            float patch = smoothNoise((x + dx) * 0.095f, (y + dy) * 0.095f, g.worldSeed ^ 0x4921u);
-            if (climate(x + dx, y + dy, e, t, m, patch) == BI_FEN) return false;
-        }
-    out = {LK_CAVERN, x, y, h};
-    return true;
-}
-
-static bool cavernInSector(int sx, int sy, Landmark& out) {
-    struct Entry { int x = 0, y = 0; uint32_t seed = 0; bool valid = false, exists = false; Landmark cave; };
-    static Entry cache[256];
-    auto& entry = cache[hash2i(sx, sy, 0xCA7Eu) & 255u];
-    if (!entry.valid || entry.x != sx || entry.y != sy || entry.seed != g.worldSeed) {
-        entry = {sx, sy, g.worldSeed, true, false, {}};
-        entry.exists = surveyCavernSector(sx, sy, entry.cave);
-    }
-    out = entry.cave;
-    return entry.exists;
-}
+// Cavern mouths are planned by the Survey (src/atlas.cpp): one per 88-tile
+// lattice cell, on ground a party can walk to. Hollow Hill and the north-road
+// mouth are authored, and are consulted first.
 
 static Landmark northRoadCavern() {
     static uint32_t seed = 0;
@@ -268,13 +234,11 @@ static bool surveyedCavernNear(int tx, int ty, int radius, Landmark& out) {
     if (abs(tx - north.tx) <= radius && abs(ty - north.ty) <= radius) {
         out = north; return true;
     }
-    int sx = (int)floorf((float)tx / 64), sy = (int)floorf((float)ty / 64);
-    for (int yy = sy - 1; yy <= sy + 1; ++yy)
-        for (int xx = sx - 1; xx <= sx + 1; ++xx) {
-            Landmark candidate;
-            if (cavernInSector(xx, yy, candidate) && abs(tx - candidate.tx) <= radius &&
-                abs(ty - candidate.ty) <= radius) { out = candidate; return true; }
-        }
+    AtlasSite site;
+    if (atlasCavernNear(tx, ty, radius, site)) {
+        out = {LK_CAVERN, site.tx, site.ty, site.seed};
+        return true;
+    }
     return false;
 }
 
@@ -340,6 +304,19 @@ static GroundTile generateGround(int tx, int ty) {
         bool wet = out.kind == G_WATER || out.kind == G_DEEP;
         out.kind = wet ? (trail == 1 ? G_BRIDGE_NS : G_BRIDGE_EW) : G_DIRT;
         return out;
+    }
+
+    // The Survey's roads (src/atlas.cpp) join the settlements. Two tiles of
+    // packed dirt, and planks wherever a road meets water — a crossing the party
+    // can actually walk, which is the whole point of drawing them.
+    {
+        int axis = atlasRoadAxis(tx, ty);
+        if (axis) {
+            bool wet = out.kind == G_WATER || out.kind == G_DEEP;
+            out.kind = wet ? ((axis & 1) ? G_BRIDGE_NS : G_BRIDGE_EW) : G_DIRT;
+            out.deco = 0;
+            return out;
+        }
     }
 
     // Grade a rocky shoulder and a clear, two-wide approach into each cave.
@@ -430,6 +407,55 @@ static GroundTile generateGround(int tx, int ty) {
         out.kind = wayGroundKind(tx, ty, out.kind);
         out.deco = 0;
     }
+    return out;
+}
+
+// ================================================================ survey terrain
+// The Survey cannot call sampleGround() — sampleGround asks the Survey where the
+// caverns are, and the survey would then depend on visit order. This runs the
+// same noise generateGround starts from, one layer below every cache, and answers
+// the only question placement needs: is this tile water, ice, crag or marsh?
+// It is asked from several directions at once (placement rings, road nodes, the
+// survey page), so a direct-mapped cache keeps a noise field from being paid twice.
+namespace {
+struct SurveyCacheEntry {
+    int x = 1 << 30, y = 1 << 30;
+    uint32_t seed = 0;
+    SurveyTerrain t;
+};
+SurveyCacheEntry gSurveyCache[1 << 15];
+}
+
+SurveyTerrain worldSurveyTerrain(int tx, int ty) {
+    SurveyCacheEntry& c = gSurveyCache[((uint32_t)tx * 73856093u ^ (uint32_t)ty * 19349663u) & ((1u << 15) - 1)];
+    if (c.x == tx && c.y == ty && c.seed == g.worldSeed) return c.t;
+    SurveyTerrain out;
+    float x = (float)tx, y = (float)ty;
+    uint32_t seed = g.worldSeed;
+    float e = elevationAt(x, y, seed), t = temperatureAt(x, y, seed), m = moistureAt(x, y);
+    flattenSpecialSites(x, y, e, t, m);
+    float patch = smoothNoise(x * 0.095f, y * 0.095f, seed ^ 0x4921u);
+    float ridge = fbm(x * 0.062f + 19.3f, y * 0.082f - 41.7f, seed ^ 0x31ffu, 3);
+    float shelf = smoothNoise(x * 0.13f - 7.1f, y * 0.13f + 13.9f, seed ^ 0x8821u);
+    out.elevation = e;
+    out.biome = climate(tx, ty, e, t, m, patch);
+    out.brookDistance = fabsf(y - brookCenterAt(x, seed));
+
+    if (out.biome == BI_FEN) {
+        if (patch < 0.24f || e < 0.29f) out.water = true;
+        else out.swamp = true;
+    } else if (e < 0.325f) {
+        out.water = true;
+        out.deep = e < 0.265f;
+    } else if (e > 0.745f ||
+               ((out.biome == BI_HEATH || out.biome == BI_DUNES) && ridge > 0.61f && shelf > 0.50f) ||
+               ((out.biome == BI_MEADOW || out.biome == BI_FOREST || out.biome == BI_AMBER) &&
+                ridge > 0.68f && shelf > 0.55f)) {
+        out.crag = true;
+    }
+    if (out.biome == BI_FROST && patch < 0.24f && e < 0.55f) out.ice = true;
+    if (out.brookDistance < 2.10f) out.water = true;      // Millbrook
+    c = { tx, ty, g.worldSeed, out };
     return out;
 }
 
@@ -887,35 +913,13 @@ bool startCavernSite(int& outTx, int& outTy) {
     return true;
 }
 
-static bool proceduralLandmark(int sx, int sy, Landmark& out) {
-    const int sector = 128;
-    uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
-    if ((h % 100) >= 50) return false;
-    int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
-    int ly = sy * sector + sector / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
-    if ((float)lx * lx + (float)ly * ly < 42.0f * 42.0f) return false;
-    if ((abs(lx - BOSS_CASTLE_TX) < 20 && abs(ly - BOSS_CASTLE_TY) < 20) ||
-        (abs(lx - LOCKET_SITE_TX) < 16 && abs(ly - LOCKET_SITE_TY) < 16) ||
-        (abs(lx - TOWER_SITE_TX) < 15 && abs(ly - TOWER_SITE_TY) < 15)) return false;
-    int scx, scy;
-    if (startCavernSite(scx, scy) && abs(lx - scx) < 16 && abs(ly - scy) < 16) return false;
-    Landmark cave;
-    if (surveyedCavernNear(lx, ly, 14, cave)) return false;
-    GroundKind ground = sampleGround(lx, ly).kind;
-    if (!groundWalkable(ground) || ground == G_ICE) return false;
-    out = { (LandmarkKind)(1 + (h >> 6) % 5), lx, ly, h };   // caverns have their own survey
-    return true;
-}
-
+// The Survey owns the five ruin-kinds (src/atlas.cpp). Every landmark now has a
+// stable position and a stable seed instead of a lucky roll.
 static bool proceduralLandmarkNear(int tx, int ty, int radius, Landmark& out) {
-    const int sector = 128;
-    int sx = (int)floorf((float)tx / sector), sy = (int)floorf((float)ty / sector);
-    uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
-    if ((h % 100) >= 50) return false;
-    int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
-    int ly = sy * sector + sector / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
-    if (abs(tx - lx) > radius || abs(ty - ly) > radius) return false;
-    return proceduralLandmark(sx, sy, out);
+    AtlasSite site;
+    if (!atlasLandmarkNear(tx, ty, radius, site)) return false;
+    out = { (LandmarkKind)(site.kind - 1), site.tx, site.ty, site.seed };   // AS_RUINS==LK_RUINS+1
+    return true;
 }
 
 void expandLandmarkParts(const Landmark& lm, std::vector<LandmarkPart>& out) {
@@ -1127,6 +1131,9 @@ static PropKind propAtUncached(int tx, int ty) {
     // A wild way is a worn line through the terrain: keep it trodden, never
     // walled by a tree or boulder that happens to fall on it.
     if (onWildWay(tx, ty)) return P_NONE;
+
+    // ...and the Survey's roads are trodden ground too.
+    if (atlasRoadAt(tx, ty)) return P_NONE;
 
     // Sacred ring of ancient amber oaks framing the Standing Stones glade
     {
@@ -1382,25 +1389,6 @@ std::string compassHint(float fromX, float fromY, float toX, float toY) {
     snprintf(buf, sizeof(buf), "%s ~%d", dir, dist);
     return buf;
 }
-
-// ================================================================ villages
-static bool siteFit(int cx, int cy, int R) {
-    Landmark cave;
-    if (surveyedCavernNear(cx, cy, R + 7, cave)) return false;
-    Landmark landmark;
-    if (proceduralLandmarkNear(cx, cy, R + 10, landmark)) return false;
-    for (int dy = -R; dy <= R; dy++) {
-        for (int dx = -R; dx <= R; dx++) {
-            if (dx * dx + dy * dy > R * R) continue;
-            GroundTile t = sampleGround(cx + dx, cy + dy);
-            if (t.kind == G_WATER || t.kind == G_DEEP || t.kind == G_ROCK || t.kind == G_ICE ||
-                t.kind == G_SWAMP || t.kind == G_BRIDGE_NS || t.kind == G_BRIDGE_EW || t.kind == G_DIRT)
-                return false;
-        }
-    }
-    return true;
-}
-
 static bool buildingsOverlap(const Building& a, const Building& b, int pad = 2) {
     int ax0 = buildingX0(a) - pad, ax1 = buildingX0(a) + a.w - 1 + pad;
     int ay0 = buildingY0(a) - pad, ay1 = a.ty + 1 + pad;
@@ -1986,48 +1974,30 @@ void villageLoadAt(float x, float y) {
         return;
     }
 
-    const int SECTOR = 96;
-    int sx = (int)floorf(x / SECTOR), sy = (int)floorf(y / SECTOR);
-    struct Site { int sx, sy, x, y; uint32_t seed; };
-    static std::vector<Site> sites;
-    static int lastX, lastY;
-    static uint32_t lastSeed;
-    static bool surveyed = false;
-    if (!surveyed || sx != lastX || sy != lastY || lastSeed != g.worldSeed) {
-        surveyed = true; lastX = sx; lastY = sy; lastSeed = g.worldSeed; sites.clear();
-        for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
-            int cx = sx + dx, cy = sy + dy;
-            uint32_t h = hash2i(cx, cy, g.worldSeed ^ 0x71a9eu);
-            if (h % 1000 >= 320) continue;
-            int bx = cx * SECTOR + SECTOR / 2, by = cy * SECTOR + SECTOR / 2;
-            bool ok = false;
-            for (int r = 0; r < 40 && !ok; r += 3) for (int a = 0; a < (r ? 16 : 1) && !ok; ++a) {
-                float ang = a * (6.2831853f / 16);
-                int tx = bx + (int)(cosf(ang) * r), ty = by + (int)(sinf(ang) * r);
-                if (tx * (float)tx + ty * (float)ty < 50 * 50 ||
-                    (abs(tx - BOSS_CASTLE_TX) < 29 && abs(ty - BOSS_CASTLE_TY) < 29) ||
-                    (abs(tx - LOCKET_SITE_TX) < 23 && abs(ty - LOCKET_SITE_TY) < 23) ||
-                    (abs(tx - TOWER_SITE_TX) < 23 && abs(ty - TOWER_SITE_TY) < 23)) continue;
-                if (siteFit(tx, ty, 15)) { sites.push_back({ cx, cy, tx, ty, h }); ok = true; }
-            }
-        }
+    // The Survey guarantees one settlement per 112-tile lattice cell (atlas.hpp),
+    // so this only has to ask which of the nearby ones the party has walked up to.
+    const int TRIGGER = 52;
+    AtlasSite site;
+    if (!atlasVillageNear((int)floorf(x), (int)floorf(y), TRIGGER, site)) {
+        g.villageLoaded = false;
+        g.villageKey = ~0ull;
+        return;
     }
-    Village best;
-    bool found = false;
-    int bestDist = 48;
-    for (const auto& s : sites) {
-        int d = std::max(abs(s.x - (int)floorf(x)), abs(s.y - (int)floorf(y)));
-        if (d >= bestDist) continue;
-        bestDist = d; found = true; best.valid = true; best.cx = s.x; best.cy = s.y;
-        best.sectorX = s.sx; best.sectorY = s.sy; best.seed = s.seed;
-    }
-    if (!found) { g.villageLoaded = false; g.villageKey = ~0ull; return; }
 
-    uint64_t key = ((uint64_t)(uint32_t)best.sectorX << 32) | (uint32_t)best.sectorY;
+    uint64_t key = ((uint64_t)(uint32_t)(site.cellX + 4096) << 32) | (uint32_t)(site.cellY + 4096);
     if (g.villageLoaded && g.villageKey == key) return;
-    best.name = villageNameFor(best.sectorX, best.sectorY, g.worldSeed);
-    layoutVillage(best);
-    g.village = best;
+
+    Village v;
+    v.valid = true;
+    v.startVillage = false;
+    v.cx = site.tx;
+    v.cy = site.ty;
+    v.sectorX = site.cellX;
+    v.sectorY = site.cellY;
+    v.seed = site.seed;
+    v.name = villageNameFor(site.cellX, site.cellY, g.worldSeed);
+    layoutVillage(v);
+    g.village = v;
     g.villageKey = key;
     g.villageLoaded = true;
 }
@@ -2334,6 +2304,7 @@ void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out)
         if (tx >= x0 - 6 && tx <= x1 + 6 && ty >= y0 - 8 && ty <= y1 + 8)
             out.push_back({ kind, tx, ty, seed });
     };
+    // The three story sites and the two authored cavern mouths are always there.
     maybeAdd(LK_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, 0xca571eu);
     maybeAdd(LK_STONES, LOCKET_SITE_TX, LOCKET_SITE_TY, 0x10c4e7u);
     maybeAdd(LK_TOWER,  TOWER_SITE_TX,  TOWER_SITE_TY,  0x703e2u);
@@ -2341,26 +2312,17 @@ void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out)
         int cx, cy;
         if (startCavernSite(cx, cy)) maybeAdd(LK_CAVERN, cx, cy, 0x57acu);
     }
-
     Landmark northCave = northRoadCavern();
     maybeAdd(northCave.kind, northCave.tx, northCave.ty, northCave.seed);
-    for (int sy = (int)floorf((float)(y0 - 8) / 64); sy <= (int)floorf((float)(y1 + 8) / 64); ++sy)
-        for (int sx = (int)floorf((float)(x0 - 8) / 64); sx <= (int)floorf((float)(x1 + 8) / 64); ++sx) {
-            Landmark cave;
-            if (cavernInSector(sx, sy, cave)) maybeAdd(cave.kind, cave.tx, cave.ty, cave.seed);
-        }
 
-    const int SECTOR = 128;
-    int sx0 = (int)floorf((float)(x0 - 8) / SECTOR);
-    int sx1 = (int)floorf((float)(x1 + 8) / SECTOR);
-    int sy0 = (int)floorf((float)(y0 - 8) / SECTOR);
-    int sy1 = (int)floorf((float)(y1 + 8) / SECTOR);
-    for (int sy = sy0; sy <= sy1; sy++) {
-        for (int sx = sx0; sx <= sx1; sx++) {
-            Landmark lm;
-            if (proceduralLandmark(sx, sy, lm))
-                maybeAdd(lm.kind, lm.tx, lm.ty, lm.seed);
-        }
+    // Everything else is surveyed ground: caverns, ruins, towers, castles,
+    // standing stones and camps, each guaranteed by its lattice cell.
+    static std::vector<AtlasSite> sites;
+    atlasSitesInRect(x0, y0, x1, y1, sites);
+    for (const AtlasSite& site : sites) {
+        if (site.kind == AS_VILLAGE) continue;              // villages draw themselves
+        if (site.kind == AS_CAVERN) { maybeAdd(LK_CAVERN, site.tx, site.ty, site.seed); continue; }
+        maybeAdd((LandmarkKind)(site.kind - 1), site.tx, site.ty, site.seed);
     }
 }
 

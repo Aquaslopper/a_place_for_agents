@@ -1,6 +1,7 @@
 // core.cpp — tables, assets, UI drawing, save/load, quests
 #include "game.hpp"
 #include "world.hpp"
+#include "atlas.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -1244,6 +1245,7 @@ bool loadGame() {
 
 void newGameState(uint32_t seed) {
     g.worldSeed = seed;
+    atlasResetRegion();
     g.px = 0.5f; g.py = 4.5f;      // just south of the Elmswick plaza
     g.facing = 0;
     g.sideFlip = false;

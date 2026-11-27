@@ -496,7 +496,9 @@ struct Game {
     int menuUseHero = 0;
     int equipHero = 0, equipSlot = 0, equipIndex = 0;
     int optionsIndex = 0;
-    int journalTab = 0;            // Quests page: 0 = quests, 1 = the Commons chronicle
+    int journalTab = 0;            // Quests page: 0 = quests, 1 = the Commons, 2 = the Survey
+    std::string regionName;        // name of the country underfoot (the Survey names it)
+    float regionBannerT = 0;       // seconds left on the region banner
     int commonsJournalSel = 0;     // first chronicle row shown on the Commons page
     float commonsFlameT = 0;       // transient: flame lighting after the keeper's errand
     MusicCue audition = MUS_VILLAGE;  // sound room only; never part of a save

@@ -1,6 +1,7 @@
 // dialog.cpp — conversation box, pause menu (Party/Items/Equip/Quests/Options), Shop & Inn
 #include "game.hpp"
 #include "commons.hpp"
+#include "atlas.hpp"
 #include "world.hpp"
 #include "battle.hpp"
 #include <algorithm>
@@ -673,13 +674,13 @@ void menuUpdate(float dt) {
         return;
     }
 
-    // ---- Page 3: Quests + the Agents' Commons chronicle
+    // ---- Page 3: Quests + the Agents' Commons chronicle + the Survey
     if (g.menuPage == 3) {
-        if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT)) { g.journalTab = 0; playSoundIf(g.assets.cursor); }
-        if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) { g.journalTab = 1; playSoundIf(g.assets.cursor); }
+        if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT)) { g.journalTab = (g.journalTab + 2) % 3; playSoundIf(g.assets.cursor); }
+        if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) { g.journalTab = (g.journalTab + 1) % 3; playSoundIf(g.assets.cursor); }
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 m = getVirtualMouse();
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < 3; i++) {
                 if (CheckCollisionPointRec(m, { uiOx() + 122 + i * 96.0f, uiOy() + 18, 90, 16 })) {
                     g.journalTab = i;
                     playSoundIf(g.assets.cursor);
@@ -687,6 +688,7 @@ void menuUpdate(float dt) {
                 }
             }
         }
+        if (g.journalTab == 2) return;   // the Survey page is a drawing, not a list
         if (g.journalTab == 0) {
             if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.menuIndex = (g.menuIndex + QUEST_COUNT - 1) % QUEST_COUNT; playSoundIf(g.assets.cursor); }
             if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.menuIndex = (g.menuIndex + 1) % QUEST_COUNT; playSoundIf(g.assets.cursor); }
@@ -1068,10 +1070,11 @@ void drawMenuScreen() {
 
     // ---- Page 3: Quests + the Commons chronicle
     else if (g.menuPage == 3) {
-        // Two views of the same journal: the errands, and the place that
-        // remembers the work behind them. A/D or a click switches.
-        const char* jt[2] = { "QUESTS", "THE COMMONS" };
-        for (int i = 0; i < 2; i++) {
+        // Three views of the same journal: the errands, the place that
+        // remembers the work behind them, and the country they are walked in.
+        // A/D or a click switches.
+        const char* jt[3] = { "QUESTS", "THE COMMONS", "THE SURVEY" };
+        for (int i = 0; i < 3; i++) {
             Rectangle tr{ ox + 122 + i * 96.0f, oy + 18, 90, 16 };
             bool sel = (i == g.journalTab);
             drawPixelPanel(tr, sel ? Color{ 56, 86, 164, 255 } : Color{ 22, 32, 74, 220 },
@@ -1081,6 +1084,10 @@ void drawMenuScreen() {
         }
         if (g.journalTab == 1) {
             commonsJournalDraw(ox, oy);
+            return;
+        }
+        if (g.journalTab == 2) {
+            atlasJournalDraw(ox, oy);
             return;
         }
         drawText("JOURNAL / QUESTS", ox + 124, oy + 38, Color{ 255, 232, 150, 255 }, 8);

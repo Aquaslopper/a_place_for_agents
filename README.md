@@ -57,6 +57,10 @@ image-aligned scanline shading. Clean pixels are always available.
 | West | Find reed beds, willow pools and a causeway through Mirefen to the Old Watchtower. |
 | North | Circle the chapel, follow the road through Briarwood and the heath, then climb the snow track to the Castle of Elm. |
 
+Every gate also opens onto a **King's Road** — follow it and it will arrive at a
+village. `Esc → Journal → THE SURVEY` draws where those roads go, and names the
+country you are standing in.
+
 These story routes are fixed; beyond them, the seed shapes the terrain,
 settlements, landmarks and treasure. Use the **Sound Room** in **Esc → Options**
 to listen to the score without roaming the wilds.
@@ -73,17 +77,25 @@ not dining furniture standing in for smithing equipment.
 The added homes occupy spaced ridge, chapel and orchard plots rather than
 overlapping existing roofs and decorations. Generated villages reserve a
 smithy before placing cottages and route shared lanes around building envelopes.
-- **Seven regions.** Meadows, evergreen woods, autumn forests, fen, heath,
-frozen highlands and dunes have different ground, plants, encounter pools and
-battle horizons. Corner-masked ground transitions, banks, cliffs and river
+- **Seven regions, and names for all of them.** Meadows, evergreen woods, autumn
+forests, fen, heath, frozen highlands and dunes have different ground, plants,
+encounter pools and battle horizons. They are also *named*: every 128-tile
+country gets a stable name from the seed and the land ("Millbrook", "Thornmire",
+"Ashenfell"), and walking into a new one raises its name across the screen. Corner-masked ground transitions, banks, cliffs and river
 crossings are composed from tiles rather than one stretched map image.
 - **A world with a little weather in it.** Tree canopies sway, water glints,
 butterflies cross meadows, fireflies drift through the fen, snow falls in the
 Frozenreach and leaves move through Amberwood. A slow day/night wash, warm
 village windows and footstep dust give places a changing mood.
-- **Places worth finding.** Deterministic villages, inns, shops, temples,
-houses, camps, ruins, stone circles, towers, castles and chests appear across
-the generated world. Interiors have their own small scenes. Stone mouths in
+- **Places worth finding, and a road to each of them.** The world's places are
+not left to luck. **The Survey** (`src/atlas.cpp`) owes every lattice cell one
+place: a village every 112 tiles, a ruin, tower, castle, stone circle or camp
+every 96, a cavern mouth every 88 — placed from the seed alone, so the same
+seed always puts the same place on the same tile. The lattice is then joined by
+**roads**: two tiles of packed dirt (planks where they meet water) routed around
+crags and towns, so a road out of Elmswick's gates leads to another village
+rather than into the wilds. Every one of those places also **names itself** as
+you come near it. Interiors have their own small scenes. Stone mouths in
 the hills open into **procedurally generated cavern dungeons**: a connected BSP backbone weathered into irregular chambers, alcoves and
 passages, natural rock and mineral formations, roaming inhabitants, treasure,
 multiple floors and a deep vault — always the same layout for the same seed.
@@ -91,14 +103,17 @@ The rare deep crypt keeps its built stone halls. Cavern treasure, creature and
 stair locations remain compatible with earlier saves. **To find a cave:** leave Elmswick by the west gate and follow the
 causeway until the short northbound dirt spur to **Hollow Hill** (four floors).
 A second seeded mouth lies just east of the north road in Briarwood. Both
-are guaranteed; further hillside caverns use their own 64-tile sector survey,
-not the decorative-landmark lottery. Click a cave mouth to walk up and enter,
+are guaranteed; every other hillside cavern is guaranteed too — the Survey owes
+one per 88-tile cell, and most stand within a screen of a road. Click a cave
+mouth to walk up and enter,
 or press **Space / E / Enter** at its threshold. A lantern-revealed
 survey map tracks visited passages across floors during the current cavern
 visit (white: party, teal: ascent, blue: descent, gold: unopened treasure).
 Field HP/MP gauges and KO/poison badges keep party condition visible.
-Existing v5 saves still load, but this generation revision changes cavern
-entrance positions and village plots; old entrance locations are not retained.
+Existing v5 saves still load (caverns, treasure and stairs are keyed by seed),
+but this generation revision moves every generated village, cavern mouth and
+landmark onto the Survey's lattices, so a place saved months ago is recomputed
+where the lattice puts it now rather than where it used to stand.
 Furniture respects traversable routes; click-to-move routes around it and
 chooses a reachable approach to treasure. Defeated cavern inhabitants stay
 cleared, including after leaving and returning; fleeing does not clear them.
@@ -115,7 +130,9 @@ locket, recover the Crown of Elm from the Slime King, bring star metal up from
 the deep vaults for Nell at the forge, and answer the keeper's errand —
 **The Kept Light** — by clearing the wisps from the ring's hedge so the brazier
 can be lit for good. The quest log tracks progress and points toward story
-destinations; the Journal's **The Commons** tab shows the ring's chronicle.
+destinations; the Journal's **The Commons** tab shows the ring's chronicle, and
+its **The Survey** tab draws the country around you — terrain, roads, settlements,
+caverns and named regions — with the distance to the nearest town and cavern.
 - **Field encounters and a party.** Aldric (Knight), Iris (Mage) and Pip
   (Cleric) have distinct strengths. Twenty-three enemy species roam the world
   (plus the Slime King); walking into a visible field monster starts that fight.
@@ -243,7 +260,8 @@ references used while designing the terrain and walking-scale world.
 
 ```text
 src/game.hpp      shared types and game state
-src/world.cpp     seeded terrain, villages, props, NPCs, landmarks, pathfinding
+src/world.cpp     seeded terrain, props, NPCs, chests, pathfinding, ground/road stamping
+src/atlas.cpp     the Survey: guaranteed villages/landmarks/caverns, roads, region names
 src/overworld.cpp field movement, camera, interactions and encounters
 src/render.cpp    field renderer, HUD, title, intro and game-over screens
 src/dialog.cpp    dialogue, shops, pause menu and options
@@ -293,9 +311,17 @@ only builds and packages the Windows exe and Linux binary.
   and fade transitions. `getVirtualMouse()` maps window coordinates cleanly to
   the active virtual canvas.
 - `src/world.cpp` / `src/world.hpp` — deterministic noise, biomes, the
-  Millbrook river and story trails, villages, props, NPCs, chests, landmarks,
-  field monsters, A* pathfinding. Rendering, collision and pathfinding all
-  read `propAt()` / `sampleGround()` so they cannot disagree.
+  Millbrook river and story trails, props, NPCs, chests, field monsters, A*
+  pathfinding, and the stamping of surveyed roads into the ground. Rendering,
+  collision and pathfinding all read `propAt()` / `sampleGround()` so they
+  cannot disagree.
+- `src/atlas.cpp` / `src/atlas.hpp` — **the Survey**, the one authority on where
+  a place is: three lattices (villages 112 tiles, ruin-kinds 96, caverns 88),
+  A*-routed roads joining them, stable region names, and the Journal's survey
+  page. It answers only from `worldSurveyTerrain()` — the same noise the ground
+  generator starts from, one layer below every cache — so it can never recurse
+  into `sampleGround()` or depend on visit order. **Adding a kind of place means
+  adding it here, not rolling another die in `world.cpp`.**
 - `src/overworld.cpp` — field movement (cardinal-only keyboard, click-to-move
   with A*), camera, encounters, interactions, prompts.
 - `src/render.cpp` — Y-sorted field renderer, HUD, title/intro/game-over,
@@ -314,6 +340,9 @@ only builds and packages the Windows exe and Linux binary.
 
 - **Determinism:** world gen is a pure function of `(tx, ty, worldSeed)`.
   Never depend on visit order or camera position for what exists.
+- **One authority per question.** *Where is a place?* → `src/atlas.cpp`. *What
+  is on this tile?* → `propAt()`/`sampleGround()`. If two systems must agree,
+  they read the same function; never re-roll the dice in a second place.
 - **SNES feel:** 16px tiles, corner-mask autotiling, warm pastel palette with
   cool/purple shadows (see `tools/snes.py`), navy+gold UI, Press Start 2P at
   multiples of 8px. No modern rounded-glass UI.
