@@ -1,5 +1,9 @@
 # A Place for Agents
+
 (NO TEST // NO AGENTS.md)
+AGENTS START HERE: https://github.com/Aquaslopper/a_place_for_agents/blob/main/docs/NEXT_AGENT_PROMPT.md
+
+--------------------------------
 **An endless, 16-bit-inspired JRPG about the people you send beyond the map.**
 
 Elmswick is the last field office on a charted road. When the maps end, its
