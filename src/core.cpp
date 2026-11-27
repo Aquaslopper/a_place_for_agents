@@ -13,36 +13,64 @@ float gAnimTime = 0.0f;
 // ================================================================ items
 static const ItemDef ITEMS[IT_COUNT] = {
     // consumables
-    { "Potion",       "Restores 60 HP.",                       15,  IK_CONSUMABLE, 60,   ICON_POTION,   true  },
-    { "Hi-Potion",    "Restores 180 HP.",                      60,  IK_CONSUMABLE, 180,  ICON_HIPOTION, true  },
-    { "Ether",        "Restores 30 MP.",                       40,  IK_CONSUMABLE, 30,   ICON_ETHER,    true  },
-    { "Hi-Ether",     "Restores 90 MP.",                      120,  IK_CONSUMABLE, 90,   ICON_ETHER,    true  },
-    { "Elixir",       "Fully restores HP, MP, and cures all.",400,  IK_CONSUMABLE, 9999, ICON_ELIXIR,   true  },
-    { "Antidote",     "Cures poison (or restores 20 HP).",     20,  IK_CONSUMABLE, 20,   ICON_FOOD,     true  },
-    { "Phoenix Down", "Revives a fallen hero at half HP.",     80,  IK_CONSUMABLE, 1,    ICON_FEATHER,  true  },
+    { "Potion",       "Restores 60 HP.",                       15,  IK_CONSUMABLE, 60,   ICON_POTION,   true,  KM_ANY },
+    { "Hi-Potion",    "Restores 180 HP.",                      60,  IK_CONSUMABLE, 180,  ICON_HIPOTION, true,  KM_ANY },
+    { "Mega Potion",  "Restores 400 HP.",                      180, IK_CONSUMABLE, 400,  ICON_HIPOTION, true,  KM_ANY },
+    { "Ether",        "Restores 30 MP.",                       40,  IK_CONSUMABLE, 30,   ICON_ETHER,    true,  KM_ANY },
+    { "Hi-Ether",     "Restores 90 MP.",                       120, IK_CONSUMABLE, 90,   ICON_ETHER,    true,  KM_ANY },
+    { "Elixir",       "Fully restores HP, MP, and cures all.",400,  IK_CONSUMABLE, 9999, ICON_ELIXIR,   true,  KM_ANY },
+    { "Antidote",     "Cures poison (or restores 20 HP).",     20,  IK_CONSUMABLE, 20,   ICON_FOOD,     true,  KM_ANY },
+    { "Remedy",       "Cures poison and revives 30 HP.",       70,  IK_CONSUMABLE, 30,   ICON_REMEDY,   true,  KM_ANY },
+    { "Phoenix Down", "Revives a fallen hero at half HP.",     80,  IK_CONSUMABLE, 1,    ICON_FEATHER,  true,  KM_ANY },
+    { "Smoke Bomb",   "Escape any battle unscathed.",          45,  IK_CONSUMABLE, 0,    ICON_BOMB,     true,  KM_ANY },
 
-    // weapons
-    { "Bronze Sword", "A serviceable blade. ATK +5",          140,  IK_WEAPON,  5, ICON_SWORD0, true  },
-    { "Iron Sword",   "Honest steel. ATK +11",                380,  IK_WEAPON, 11, ICON_SWORD1, true  },
-    { "Mythril Sword","Light as a whisper. ATK +19",          900,  IK_WEAPON, 19, ICON_SWORD2, true  },
-    { "Dragon Fang",  "It hums when monsters near. ATK +30", 2400,  IK_WEAPON, 30, ICON_SWORD2, false },
+    // weapons — knightly steel
+    { "Bronze Sword", "A serviceable blade. ATK +5",          140,  IK_WEAPON,  5, ICON_SWORD0, true,  KM_ANY },
+    { "Iron Sword",   "Honest steel. ATK +11",                380,  IK_WEAPON, 11, ICON_SWORD1, true,  KM_ANY },
+    { "Steel Sword",  "Tempered in Elmswick's forge. ATK +16",620,  IK_WEAPON, 16, ICON_SWORD1, true,  KM_KNIGHT },
+    { "Mythril Sword","Light as a whisper. ATK +19",          900,  IK_WEAPON, 19, ICON_SWORD2, true,  KM_ANY },
+    { "Dragon Fang",  "It hums when monsters near. ATK +30", 2400,  IK_WEAPON, 30, ICON_SWORD2, false, KM_ANY },
+    { "War Axe",      "Heavy iron that bites shields. ATK +22",1100,IK_WEAPON, 22, ICON_AXE,    true,  KM_KNIGHT },
+    { "Halberd",      "Reach and ruin. ATK +26",              1600,  IK_WEAPON, 26, ICON_SPEAR,  true,  KM_KNIGHT },
+
+    // weapons — arcane
+    { "Oak Staff",    "Knotted heartwood. ATK +6, MAG +3",    160,  IK_WEAPON,  6, ICON_STAFF,  true,  KM_MAGE },
+    { "Iron Rod",     "Cold to the touch. ATK +9, MAG +7",    460,  IK_WEAPON,  9, ICON_STAFF,  true,  KM_MAGE },
+    { "Sage Staff",   "Whispers back. ATK +14, MAG +15",     1250,  IK_WEAPON, 14, ICON_STAFF,  true,  KM_MAGE },
+
+    // weapons — devotional
+    { "Brass Mace",   "Blessed weight. ATK +8, MAG +2",       240,  IK_WEAPON,  8, ICON_MACE,   true,  KM_CLERIC },
+    { "Holy Mace",    "Strikes true against the dark. ATK +17, MAG +9", 1400, IK_WEAPON, 17, ICON_MACE, true, KM_CLERIC },
+
+    // weapons — light & ranged
+    { "Dagger",       "Quick and quiet. ATK +7",              120,  IK_WEAPON,  7, ICON_SWORD0, true,  KM_ANY },
+    { "Hunter Bow",   "Pulled from a yew stave. ATK +13",     540,  IK_WEAPON, 13, ICON_BOW,    true,  KM_ANY },
 
     // armour
-    { "Leather Vest", "Boiled leather. DEF +4",               110,  IK_ARMOR,  4, ICON_ARMOR0, true  },
-    { "Chain Mail",   "Heavy but honest. DEF +9",             340,  IK_ARMOR,  9, ICON_ARMOR1, true  },
-    { "Mythril Mail", "Rings like a bell. DEF +15",           820,  IK_ARMOR, 15, ICON_ARMOR2, true  },
-    { "Dragon Scale", "Scaled like its namesake. DEF +24",   2100,  IK_ARMOR, 24, ICON_ARMOR3, false },
+    { "Leather Vest", "Boiled leather. DEF +4",               110,  IK_ARMOR,  4, ICON_ARMOR0, true,  KM_ANY },
+    { "Chain Mail",   "Heavy but honest. DEF +9",             340,  IK_ARMOR,  9, ICON_ARMOR1, true,  KM_ANY },
+    { "Plate Mail",   "A walking wall. DEF +13",              700,  IK_ARMOR, 13, ICON_ARMOR1, true,  KM_KNIGHT },
+    { "Mythril Mail", "Rings like a bell. DEF +15",           820,  IK_ARMOR, 15, ICON_ARMOR2, true,  KM_ANY },
+    { "Dragon Scale", "Scaled like its namesake. DEF +24",   2100,  IK_ARMOR, 24, ICON_ARMOR3, false, KM_ANY },
+    { "Silk Robe",    "Spellwoven silk. DEF +6, MAG +4",      480,  IK_ARMOR,  6, ICON_ROBE,   true,  KM_MAGE | KM_CLERIC },
+    { "Archmage Robe","Threads of old power. DEF +14, MAG +10",1750,IK_ARMOR, 14, ICON_ROBE,   true,  KM_MAGE | KM_CLERIC },
 
     // shields & accessories
-    { "Wooden Shield","A round of oak. DEF +2",                70,  IK_ACCESSORY, 2, ICON_SHIELD, true },
-    { "Iron Shield",  "Banded and true. DEF +5",              260,  IK_ACCESSORY, 5, ICON_SHIELD, true },
-    { "Power Ring",   "Strength hums in the band. ATK +6",    600,  IK_ACCESSORY, 6, ICON_RING,   true },
-    { "Mana Amulet",  "Thoughts flow easier. MAG +6",         600,  IK_ACCESSORY, 6, ICON_RING,   true },
+    { "Wooden Shield","A round of oak. DEF +2",                70,  IK_ACCESSORY, 2, ICON_SHIELD, true, KM_ANY },
+    { "Iron Shield",  "Banded and true. DEF +5",              260,  IK_ACCESSORY, 5, ICON_SHIELD, true, KM_ANY },
+    { "Kite Shield",  "Heraldic and hard. DEF +8",            640,  IK_ACCESSORY, 8, ICON_SHIELD, true, KM_KNIGHT },
+    { "Power Ring",   "Strength hums in the band. ATK +6",    600,  IK_ACCESSORY, 6, ICON_RING,   true, KM_ANY },
+    { "Mana Amulet",  "Thoughts flow easier. MAG +6",         600,  IK_ACCESSORY, 6, ICON_RING,   true, KM_ANY },
+    { "War Ring",     "A soldier's oath. ATK +10",           1300,  IK_ACCESSORY,10, ICON_RING,   true, KM_ANY },
+    { "Sage Ring",    "A scholar's focus. MAG +10",          1300,  IK_ACCESSORY,10, ICON_RING,   true, KM_ANY },
+    { "Guard Amulet", "Steady as stone. DEF +8",              900,  IK_ACCESSORY, 8, ICON_RING,   true, KM_ANY },
+    { "Swift Boots",  "The road blurs. SPD +5",              1100,  IK_ACCESSORY, 5, ICON_BOOTS,  true, KM_ANY },
 
     // key items
-    { "Rusty Key",    "Opens the old western watchtower chest.",0,  IK_KEY, 0, ICON_KEY,  false },
-    { "Lost Locket",  "A silver locket from the standing stones.",0,IK_KEY, 0, ICON_RING, false },
-    { "Crown of Elm", "The old crown of the first village.",    0,  IK_KEY, 0, ICON_CROWN,false },
+    { "Rusty Key",    "Opens the old western watchtower chest.",0,  IK_KEY, 0, ICON_KEY,  false, KM_ANY },
+    { "Lost Locket",  "A silver locket from the standing stones.",0,IK_KEY, 0, ICON_RING, false, KM_ANY },
+    { "Crown of Elm", "The old crown of the first village.",    0,  IK_KEY, 0, ICON_CROWN,false, KM_ANY },
+    { "Star Metal",   "Ore from the deep vault. The forge wants it.",0, IK_KEY, 0, ICON_STAR, false, KM_ANY },
 };
 const ItemDef& itemDef(int id) {
     static const ItemDef none{ "Nothing", "", 0, IK_KEY, 0, ICON_GEM, false };
@@ -53,19 +81,41 @@ const ItemDef& itemDef(int id) {
 // ================================================================ heroes
 int heroAtk(const Hero& h) {
     int bonus = (h.weapon >= 0) ? itemDef(h.weapon).power : 0;
-    if (h.accessory == IT_RING_POWER) bonus += itemDef(h.accessory).power;
+    if (h.accessory == IT_RING_POWER || h.accessory == IT_RING_WAR)
+        bonus += itemDef(h.accessory).power;
     return h.atk + bonus;
 }
 int heroDef(const Hero& h) {
     int bonus = (h.armor >= 0) ? itemDef(h.armor).power : 0;
-    if (h.accessory == IT_SHIELD_WOOD || h.accessory == IT_SHIELD_IRON)
+    if (h.accessory == IT_SHIELD_WOOD || h.accessory == IT_SHIELD_IRON ||
+        h.accessory == IT_SHIELD_KITE || h.accessory == IT_AMULET_GUARD)
         bonus += itemDef(h.accessory).power;
     return h.def + bonus;
 }
 int heroMag(const Hero& h) {
     int bonus = 0;
-    if (h.accessory == IT_AMULET_MANA) bonus += itemDef(h.accessory).power;
+    if (h.accessory == IT_AMULET_MANA || h.accessory == IT_RING_SAGE)
+        bonus += itemDef(h.accessory).power;
+    // Spellwoven armour and staves carry their own magic edge.
+    if (h.armor == IT_ROBE_SILK) bonus += 4;
+    else if (h.armor == IT_ROBE_ARCHMAGE) bonus += 10;
+    if (h.weapon == IT_STAFF_OAK) bonus += 3;
+    else if (h.weapon == IT_ROD_IRON) bonus += 7;
+    else if (h.weapon == IT_STAFF_SAGE) bonus += 15;
+    else if (h.weapon == IT_MACE_BRASS) bonus += 2;
+    else if (h.weapon == IT_MACE_HOLY) bonus += 9;
     return h.mag + bonus;
+}
+int heroSpd(const Hero& h) {
+    int bonus = (h.accessory == IT_BOOTS_SWIFT) ? itemDef(h.accessory).power : 0;
+    return h.spd + bonus;
+}
+bool heroCanEquip(const Hero& h, int itemId) {
+    if (itemId < 0 || itemId >= IT_COUNT) return false;
+    const ItemDef& d = itemDef(itemId);
+    if (d.kind != IK_WEAPON && d.kind != IK_ARMOR && d.kind != IK_ACCESSORY) return false;
+    if (d.klassMask == KM_ANY) return true;
+    return (d.klassMask & (1 << h.klass)) != 0;
 }
 int xpToNext(const Hero& h) {
     return (int)(40.0f + 52.0f * powf((float)h.level, 1.45f));
@@ -118,6 +168,7 @@ bool equipHeroItem(int heroIdx, int slot, int itemId) {
     if (itemDef(itemId).kind != want) return false;
     if (g.inventory[itemId] <= 0) return false;
     Hero& h = g.party[heroIdx];
+    if (!heroCanEquip(h, itemId)) return false;
     int* eq = (slot == 0) ? &h.weapon : (slot == 1 ? &h.armor : &h.accessory);
     if (*eq == itemId) return false;
     if (*eq >= 0 && *eq < IT_COUNT) g.inventory[*eq]++;
@@ -189,13 +240,13 @@ static const EnemyDef ENEMIES[EN_COUNT] = {
     { "Night Rider",  190, 33, 16, 15, 260, 220, 1 << SCH_HOLY,   IT_HIPOTION,    25, 4 },
     { "Slime King",   420, 36, 16, 11, 900, 800, 1 << SCH_FIRE,   IT_CROWN,      100, 5 },
     // OpenRTP additions, introduced at the matching field-zone tier.
-    { "Bandit",        54, 15,  6, 12,  45,  38, 1 << SCH_FIRE,   IT_POTION,      18, 2 },
+    { "Bandit",        54, 15,  6, 12,  45,  38, 1 << SCH_FIRE,   IT_SMOKE_BOMB,  15, 2 },
     { "Goblin",        43, 14,  5, 14,  42,  30, 1 << SCH_FIRE,   IT_ANTIDOTE,    20, 2 },
     { "Reaper",        76, 20,  9, 13,  84,  68, 1 << SCH_HOLY,   IT_ETHER,       18, 3 },
     { "Faerie",        38, 12,  4, 16,  45,  38, 1 << SCH_FIRE,   IT_POTION,      15, 2 },
     { "Drake",        178, 31, 18, 13, 250, 190, 1 << SCH_STORM,  IT_HIETHER,     18, 4 },
     { "Naga",         138, 27, 14, 15, 182, 135, 1 << SCH_STORM,  IT_HIETHER,     18, 4 },
-    { "Shade",         84, 22,  9, 15,  98,  76, 1 << SCH_HOLY,   IT_ETHER,       20, 3 },
+    { "Shade",         84, 22,  9, 15,  98,  76, 1 << SCH_HOLY,   IT_REMEDY,      18, 3 },
     { "Dread Knight", 205, 33, 23, 11, 310, 250, 1 << SCH_HOLY,   IT_HIPOTION,    18, 4 },
     { "Archfiend",    280, 40, 24, 16, 445, 360, 1 << SCH_HOLY,   IT_ELIXIR,      10, 5 },
     { "Tiger",         92, 24, 10, 16, 113,  86, 1 << SCH_FIRE,   IT_POTION,      15, 3 },
@@ -212,11 +263,13 @@ static const char* QUEST_TITLES[QUEST_COUNT] = {
     "Turnip Trouble",
     "The Lost Locket",
     "The Crown of Elm",
+    "Ember of the Deep",
 };
 static const char* QUEST_GOALS[QUEST_COUNT] = {
     "Thin out 6 slimes in the meadow for Farmer Hedrick.",
     "Find Tamsin's locket at the Standing Stones SE of Elmswick.",
     "Defeat the Slime King at the Northern Castle and return the Crown.",
+    "Recover Star Metal from a cavern's deepest vault.",
 };
 const char* questTitle(int id) {
     if (id < 0 || id >= QUEST_COUNT) return "";
@@ -381,6 +434,10 @@ bool loadAllAssets() {
     a.castle = loadTex(d, "sprites/castle.png");
     a.tower = loadTex(d, "sprites/tower.png");
     a.gate = loadTex(d, "sprites/gate.png");
+    a.smithy = loadTex(d, "sprites/smithy.png");
+    a.caveMouth = loadTex(d, "sprites/cave_mouth.png");
+    a.stairDown = loadTex(d, "sprites/stair_down.png");
+    a.stairUp = loadTex(d, "sprites/stair_up.png");
 
     // --- heroes
     const char* heroes[3] = { "sprites/hero_knight.png", "sprites/hero_mage.png", "sprites/hero_cleric.png" };
@@ -439,6 +496,9 @@ bool loadAllAssets() {
         "icons/sword_0.png", "icons/sword_1.png", "icons/sword_2.png",
         "icons/armor_0.png", "icons/armor_1.png", "icons/armor_2.png", "icons/armor_3.png",
         "icons/shield.png", "icons/ring.png", "icons/key.png", "icons/crown.png",
+        "icons/staff.png", "icons/axe.png", "icons/spear.png", "icons/bow.png",
+        "icons/mace.png", "icons/boots.png", "icons/robe.png", "icons/remedy.png",
+        "icons/bomb.png", "icons/star_metal.png",
     };
     for (int i = 0; i < ICON_COUNT; i++) a.icon[i] = loadTex(d, icons[i], false);
 
@@ -733,6 +793,8 @@ bool applyConsumable(int itemId, int heroIdx) {
                            h.hp = std::min(h.maxHp, h.hp + 60); break;
         case IT_HIPOTION:  if (h.ko || h.hp >= h.maxHp) return false;
                            h.hp = std::min(h.maxHp, h.hp + 180); break;
+        case IT_MEGAPOTION:if (h.ko || h.hp >= h.maxHp) return false;
+                           h.hp = std::min(h.maxHp, h.hp + 400); break;
         case IT_ETHER:     if (h.ko || h.mp >= h.maxMp) return false;
                            h.mp = std::min(h.maxMp, h.mp + 30); break;
         case IT_HIETHER:   if (h.ko || h.mp >= h.maxMp) return false;
@@ -745,6 +807,13 @@ bool applyConsumable(int itemId, int heroIdx) {
                            if (h.poisoned) h.poisoned = false;
                            else h.hp = std::min(h.maxHp, h.hp + 20);
                            break;
+        case IT_REMEDY:    if (h.ko || (!h.poisoned && h.hp >= h.maxHp)) return false;
+                           h.poisoned = false;
+                           h.hp = std::min(h.maxHp, h.hp + 30);
+                           break;
+        case IT_SMOKE_BOMB:
+                           // Usable only mid-battle; battle.cpp intercepts this id.
+                           return false;
         default: return false;
     }
     g.inventory[itemId]--;
@@ -775,15 +844,48 @@ struct SaveBlob {
     uint64_t defeatedMonsters[SAVE_MAX_IDS];
     uint32_t checksum;
 };
+// Version 4 layout (22 items, 3 quests) — kept so pre-dungeon saves migrate.
+struct SaveBlobV4 {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t worldSeed;
+    float px, py;
+    float runTime;
+    int32_t gil, defeatedCount, slimesSlain;
+    int32_t inventory[22];
+    struct HS {
+        int32_t klass, level, xp, hp, mp, maxHp, maxMp, atk, def, spd, mag;
+        int32_t weapon, armor, accessory, ko, row, poisoned;
+    } heroes[3];
+    int32_t questState[3], questProgress[3], questGoal[3];
+    uint32_t flags;
+    int32_t openedChestCount;
+    uint64_t openedChests[SAVE_MAX_IDS];
+    int32_t defeatedMonsterCount;
+    uint64_t defeatedMonsters[SAVE_MAX_IDS];
+    uint32_t checksum;
+};
 static const uint32_t SAVE_MAGIC = 0x41504641;   // 'APFA'
-static const uint32_t SAVE_VERSION = 4;
+static const uint32_t SAVE_VERSION = 5;
 
-static uint32_t blobChecksum(const SaveBlob& b) {
+template <typename T>
+static uint32_t blobChecksumOf(const T& b) {
     uint32_t h = 2166136261u;
     const uint8_t* p = (const uint8_t*)&b;
-    size_t n = offsetof(SaveBlob, checksum);
+    size_t n = offsetof(T, checksum);
     for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 16777619u; }
     return h;
+}
+static uint32_t blobChecksum(const SaveBlob& b) { return blobChecksumOf(b); }
+
+// v4 ItemId -> v5 ItemId (old saves keep every item they owned).
+static int migrateItemIdV4(int id) {
+    static const int kMap[22] = {
+        0, 1, 3, 4, 5, 6, 8, 10, 11, 13, 14,
+        24, 25, 27, 28, 31, 32, 34, 35, 40, 41, 42
+    };
+    if (id < 0 || id >= 22) return -1;
+    return kMap[id];
 }
 std::string saveFilePath() {
     const char* env = getenv("APFA_SAVE");
@@ -848,12 +950,61 @@ bool loadGame() {
     int size = 0;
     unsigned char* data = LoadFileData(saveFilePath().c_str(), &size);
     if (!data) return false;
-    if (size != (int)sizeof(SaveBlob)) { UnloadFileData(data); return false; }
-    SaveBlob b;
-    memcpy(&b, data, sizeof(b));
-    UnloadFileData(data);
-    if (b.magic != SAVE_MAGIC || b.version != SAVE_VERSION || blobChecksum(b) != b.checksum)
+
+    SaveBlob b{};
+    bool fromV4 = false;
+    if (size == (int)sizeof(SaveBlob)) {
+        memcpy(&b, data, sizeof(b));
+        UnloadFileData(data);
+        if (b.magic != SAVE_MAGIC || b.version != SAVE_VERSION || blobChecksum(b) != b.checksum)
+            return false;
+    } else if (size == (int)sizeof(SaveBlobV4)) {
+        // Pre-dungeon save: migrate inventory & quests to the v5 layout.
+        SaveBlobV4 o;
+        memcpy(&o, data, sizeof(o));
+        UnloadFileData(data);
+        if (o.magic != SAVE_MAGIC || o.version != 4 || blobChecksumOf(o) != o.checksum)
+            return false;
+        fromV4 = true;
+        b.magic = SAVE_MAGIC;
+        b.version = SAVE_VERSION;
+        b.worldSeed = o.worldSeed;
+        b.px = o.px; b.py = o.py; b.runTime = o.runTime;
+        b.gil = o.gil; b.defeatedCount = o.defeatedCount; b.slimesSlain = o.slimesSlain;
+        for (int i = 0; i < 22; i++) {
+            int mapped = migrateItemIdV4(i);
+            if (mapped >= 0) b.inventory[mapped] = o.inventory[i];
+        }
+        for (int i = 0; i < 3; i++) {
+            const SaveBlobV4::HS& s = o.heroes[i];
+            SaveBlob::HS& d = b.heroes[i];
+            d.klass = s.klass; d.level = s.level; d.xp = s.xp;
+            d.hp = s.hp; d.mp = s.mp; d.maxHp = s.maxHp; d.maxMp = s.maxMp;
+            d.atk = s.atk; d.def = s.def; d.spd = s.spd; d.mag = s.mag;
+            d.weapon    = migrateItemIdV4(s.weapon);
+            d.armor     = migrateItemIdV4(s.armor);
+            d.accessory = migrateItemIdV4(s.accessory);
+            d.ko = s.ko; d.row = s.row; d.poisoned = s.poisoned;
+        }
+        for (int q = 0; q < 3; q++) {
+            b.questState[q] = o.questState[q];
+            b.questProgress[q] = o.questProgress[q];
+            b.questGoal[q] = o.questGoal[q];
+        }
+        b.questState[QUEST_DEEP] = QS_OFFERED;   // new quest, fresh in the log
+        b.questProgress[QUEST_DEEP] = 0;
+        b.questGoal[QUEST_DEEP] = 1;
+        b.flags = o.flags;
+        b.openedChestCount = o.openedChestCount;
+        memcpy(b.openedChests, o.openedChests, sizeof(b.openedChests));
+        b.defeatedMonsterCount = o.defeatedMonsterCount;
+        memcpy(b.defeatedMonsters, o.defeatedMonsters, sizeof(b.defeatedMonsters));
+        b.checksum = blobChecksum(b);
+    } else {
+        UnloadFileData(data);
         return false;
+    }
+    (void)fromV4;
 
     g.worldSeed = b.worldSeed;
     g.px = b.px; g.py = b.py;
@@ -890,6 +1041,7 @@ bool loadGame() {
     g.quests[QUEST_SLIMES].goal = 6;
     g.quests[QUEST_LOCKET].goal = 1;
     g.quests[QUEST_CROWN].goal = 1;
+    g.quests[QUEST_DEEP].goal = 1;
 
     g.bossDefeated     = (b.flags & (1u << 0)) != 0;
     g.locketFound      = (b.flags & (1u << 1)) != 0;
@@ -957,6 +1109,7 @@ void newGameState(uint32_t seed) {
     g.quests[QUEST_SLIMES] = { QS_OFFERED, 0, 6 };
     g.quests[QUEST_LOCKET] = { QS_OFFERED, 0, 1 };
     g.quests[QUEST_CROWN]  = { QS_OFFERED, 0, 1 };
+    g.quests[QUEST_DEEP]   = { QS_OFFERED, 0, 1 };
 
     g.defeatedMonsters.clear();
     g.openedChests.clear();
@@ -979,6 +1132,8 @@ void newGameState(uint32_t seed) {
     g.startVillageSeen = false;
     g.menuPage = 0;
     g.menuReturn = MODE_OVERWORLD;
+    g.battleReturn = MODE_OVERWORLD;
+    g.shopForge = false;
     g.introT = 0;
 }
 

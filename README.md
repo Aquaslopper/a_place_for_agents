@@ -59,8 +59,9 @@ to listen to the score without roaming the wilds.
 ## In the field
 
 - **A place to start.** Elmswick has a cobbled plaza, well, shop, inn, temple,
-cottages, gardens, fences, torches, a campfire, neighbours, a farmer with a
-request, a dog and a signpost.
+Aldwin's Forge, a market quarter, ridge and orchard cottages, a graveyard,
+gardens, fences, torches, a campfire, neighbours, a farmer with a request, a
+dog and a signpost. Generated villages also grow a smithy of their own.
 - **Seven regions.** Meadows, evergreen woods, autumn forests, fen, heath,
 frozen highlands and dunes have different ground, plants, encounter pools and
 battle horizons. Corner-masked ground transitions, banks, cliffs and river
@@ -71,18 +72,26 @@ Frozenreach and leaves move through Amberwood. A slow day/night wash, warm
 village windows and footstep dust give places a changing mood.
 - **Places worth finding.** Deterministic villages, inns, shops, temples,
 houses, camps, ruins, stone circles, towers, castles and chests appear across
-the generated world. Interiors have their own small scenes.
-- **Three quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
-locket, and recover the Crown of Elm from the Slime King. The quest log tracks
-progress and points toward story destinations.
+the generated world. Interiors have their own small scenes. Stone mouths in
+the hills open into **procedurally generated cavern dungeons**: BSP-cut room
+networks with loops, dressing, roaming inhabitants, treasure off the main
+path, multiple floors and a deep vault — always the same layout for the same
+seed. Hollow Hill west of Elmswick runs four floors deep.
+- **Four quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
+locket, recover the Crown of Elm from the Slime King, and bring star metal up
+from the deep vaults for Nell at the forge. The quest log tracks progress and
+points toward story destinations.
 - **Field encounters and a party.** Aldric (Knight), Iris (Mage) and Pip
   (Cleric) have distinct strengths. Twenty-three enemy species roam the world
   (plus the Slime King); walking into a visible field monster starts that fight.
   The expanded OpenRTP roster includes bandits, goblins, spirits, dragons and
   wilderness beasts.
-- **22 items and equipment slots.** Potions, ethers, revival items, weapons,
-armour, shields, accessories and quest items. Shops buy and sell; equip weapons,
-armour and accessories per hero.
+- **44 items and equipment slots.** Tiered potions, ethers, smoke bombs,
+remedies, eight weapon lines (swords, axes, polearms, daggers, bows, maces,
+rods, staves), five armour sets, robes, shields, stat rings and quest items.
+Mira sells sundries; Aldwin's Forge sells weapons and armour only, with better
+gear unlocking as the story advances. Equip weapons, armour and accessories per
+hero — class-restricted gear only fits its class.
 
 ### Battles and progression
 
@@ -185,6 +194,7 @@ src/render.cpp    field renderer, HUD, title, intro and game-over screens
 src/dialog.cpp    dialogue, shops, pause menu and options
 src/room.cpp      building interiors
 src/battle.cpp    battle update, commands, effects and presentation
+src/dungeon.cpp   procedural cavern dungeons (BSP floors, loot, descent)
 src/core.cpp      asset loading, UI primitives, saves and game tables
 src/main.cpp      window, pixel-perfect presentation, mode loop
 assets/           runtime pixel art, font and audio
@@ -196,9 +206,9 @@ tools/            art generation, importers and score rendering
 An endless SNES-style JRPG in C++17 with [raylib](https://github.com/raysan5/raylib) 5.5.
 You start in the hand-authored village **Elmswick** and the world generates
 procedurally around you: seven biomes, generated villages, landmarks, chests,
-field monsters, ATB battles, three quests, shops/inns/temples, interiors,
-save/load, and a 13-cue streamed score. Current version: **0.2.0** (see
-`CMakeLists.txt`).
+field monsters, ATB battles, four quests, shops/inns/temples/forge, procedural
+cavern dungeons, interiors, save/load, and a 13-cue streamed score. Current
+version: **0.2.0** (see `CMakeLists.txt`).
 
 ## Build & run
 

@@ -5,3 +5,4 @@ assets/audio/*.wav
 __pycache__/
 *.pyc
 build/
+.deps/

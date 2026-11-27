@@ -22,13 +22,34 @@ constexpr int VRES_H = 288;      // reference 16:9 layout height
 constexpr int TILE = 16;
 
 // ============================================================== items
+// klassMask: bit0 knight, bit1 mage, bit2 cleric; 0 = any class may equip.
+enum KlassMask { KM_ANY = 0, KM_KNIGHT = 1, KM_MAGE = 2, KM_CLERIC = 4 };
 enum ItemId {
-    IT_POTION = 0, IT_HIPOTION, IT_ETHER, IT_HIETHER, IT_ELIXIR, IT_ANTIDOTE, IT_PHOENIX,
-    IT_SWORD_BRONZE, IT_SWORD_IRON, IT_SWORD_MYTHRIL, IT_SWORD_DRAGON,
-    IT_ARMOR_LEATHER, IT_ARMOR_CHAIN, IT_ARMOR_MYTHRIL, IT_ARMOR_DRAGON,
-    IT_SHIELD_WOOD, IT_SHIELD_IRON,
+    // consumables
+    IT_POTION = 0, IT_HIPOTION, IT_MEGAPOTION,
+    IT_ETHER, IT_HIETHER, IT_ELIXIR,
+    IT_ANTIDOTE, IT_REMEDY,
+    IT_PHOENIX, IT_SMOKE_BOMB,
+    // weapons — knightly steel
+    IT_SWORD_BRONZE, IT_SWORD_IRON, IT_SWORD_STEEL,
+    IT_SWORD_MYTHRIL, IT_SWORD_DRAGON,
+    IT_WAR_AXE, IT_HALBERD,
+    // weapons — arcane
+    IT_STAFF_OAK, IT_ROD_IRON, IT_STAFF_SAGE,
+    // weapons — devotional
+    IT_MACE_BRASS, IT_MACE_HOLY,
+    // weapons — light & ranged (any class)
+    IT_DAGGER, IT_HUNTER_BOW,
+    // armour
+    IT_ARMOR_LEATHER, IT_ARMOR_CHAIN, IT_ARMOR_PLATE,
+    IT_ARMOR_MYTHRIL, IT_ARMOR_DRAGON,
+    IT_ROBE_SILK, IT_ROBE_ARCHMAGE,
+    // shields & accessories
+    IT_SHIELD_WOOD, IT_SHIELD_IRON, IT_SHIELD_KITE,
     IT_RING_POWER, IT_AMULET_MANA,
-    IT_RUSTY_KEY, IT_LOCKET, IT_CROWN,
+    IT_RING_WAR, IT_RING_SAGE, IT_AMULET_GUARD, IT_BOOTS_SWIFT,
+    // key items
+    IT_RUSTY_KEY, IT_LOCKET, IT_CROWN, IT_STAR_METAL,
     IT_COUNT
 };
 enum ItemKind { IK_CONSUMABLE, IK_WEAPON, IK_ARMOR, IK_ACCESSORY, IK_KEY };
@@ -40,6 +61,7 @@ struct ItemDef {
     int power;          // heal amount / attack or defence or magic bonus
     int icon;           // index into the loaded icon atlas
     bool sells;
+    uint8_t klassMask;  // KM_* bits; 0 = any class
 };
 
 const ItemDef& itemDef(int id);
@@ -59,6 +81,8 @@ struct Hero {
 int  heroAtk(const Hero& h);
 int  heroDef(const Hero& h);
 int  heroMag(const Hero& h);
+int  heroSpd(const Hero& h);
+bool heroCanEquip(const Hero& h, int itemId);
 int  xpToNext(const Hero& h);
 const char* klassName(int klass);
 const char* heroName(int klass);
@@ -110,6 +134,9 @@ enum IconId {
     ICON_SWORD0, ICON_SWORD1, ICON_SWORD2,
     ICON_ARMOR0, ICON_ARMOR1, ICON_ARMOR2, ICON_ARMOR3,
     ICON_SHIELD, ICON_RING, ICON_KEY, ICON_CROWN,
+    // dungeon & equipment expansion
+    ICON_STAFF, ICON_AXE, ICON_SPEAR, ICON_BOW, ICON_MACE,
+    ICON_BOOTS, ICON_ROBE, ICON_REMEDY, ICON_BOMB, ICON_STAR,
     ICON_COUNT
 };
 
@@ -142,7 +169,9 @@ struct Assets {
     Texture2D chestClosed{}, chestOpen{}, stump{}, bed{};
     Texture2D cloud{};
     // buildings
-    Texture2D house[5]{}, shop{}, inn{}, temple{}, manor{}, castle{}, tower{}, gate{};
+    Texture2D house[5]{}, shop{}, inn{}, temple{}, manor{}, castle{}, tower{}, gate{}, smithy{};
+    // dungeon entrance & stairs
+    Texture2D caveMouth{}, stairDown{}, stairUp{};
     // characters
     Texture2D heroWalk[3]{};
     Texture2D npc[NS_KIND_COUNT]{};
@@ -199,7 +228,8 @@ struct WorldProp { PropKind kind = P_NONE; uint8_t variant = 0; };
 
 struct Village;
 struct Building {
-    int kind = 0;         // 0..4 house variants, 5 shop, 6 inn, 7 temple, 8 manor
+    int kind = 0;         // 0..4 house variants, 5 shop, 6 inn, 7 temple, 8 manor,
+                          // 9 castle (landmark use), 10 smithy/forge
     int tx = 0, ty = 0;   // anchor tile: footprint bottom-centre, door below
     int w = 4, h = 3;     // footprint in tiles
     int sprite = 0;       // texture selector
@@ -274,10 +304,13 @@ void chestsLoadFor(float x, float y);
 extern std::vector<Chest> gChestsInView;
 
 // landmarks
-enum LandmarkKind { LK_NONE = 0, LK_RUINS, LK_TOWER, LK_CASTLE, LK_STONES, LK_CAMP };
+enum LandmarkKind { LK_NONE = 0, LK_RUINS, LK_TOWER, LK_CASTLE, LK_STONES, LK_CAMP, LK_CAVERN };
 struct Landmark { LandmarkKind kind = LK_NONE; int tx = 0, ty = 0; uint32_t seed = 0; };
 bool landmarkNear(int tx, int ty, Landmark& out);
 bool inBossArena(float x, float y);
+
+// dungeon entrances (world.cpp) — deterministic cavern mouths in the wilds
+bool startCavernSite(int& outTx, int& outTy);              // Hollow Hill, always present
 
 // field monsters
 struct FieldMonster {
@@ -298,7 +331,7 @@ float smoothNoise(float x, float y, uint32_t seed);
 float fbm(float x, float y, uint32_t seed, int octaves);
 
 // ============================================================== quests
-enum QuestId { QUEST_SLIMES = 0, QUEST_LOCKET, QUEST_CROWN, QUEST_COUNT };
+enum QuestId { QUEST_SLIMES = 0, QUEST_LOCKET, QUEST_CROWN, QUEST_DEEP, QUEST_COUNT };
 enum QuestState { QS_UNKNOWN = 0, QS_OFFERED, QS_ACTIVE, QS_DONE };
 struct Quest {
     int state = QS_UNKNOWN;
@@ -309,7 +342,7 @@ const char* questTitle(int id);
 const char* questGoalText(int id);
 
 // ============================================================== interior
-enum RoomKind { ROOM_SHOP = 0, ROOM_INN, ROOM_TEMPLE, ROOM_HOUSE };
+enum RoomKind { ROOM_SHOP = 0, ROOM_INN, ROOM_TEMPLE, ROOM_HOUSE, ROOM_FORGE };
 struct RoomProp { int tex; float x, y; bool solid; float w, h; };
 struct Room {
     RoomKind kind = ROOM_SHOP;
@@ -327,7 +360,7 @@ bool roomBlocked(const Room& room, float x, float y, float r);
 // ============================================================== modes
 enum Mode {
     MODE_TITLE = 0, MODE_OVERWORLD, MODE_BATTLE, MODE_MENU, MODE_DIALOG,
-    MODE_ROOM, MODE_GAMEOVER, MODE_INTRO
+    MODE_ROOM, MODE_GAMEOVER, MODE_INTRO, MODE_DUNGEON
 };
 
 // ============================================================== dialog
@@ -340,7 +373,8 @@ enum DialogAction {
     DLG_NONE = 0, DLG_SHOP, DLG_INN, DLG_TEMPLE, DLG_START_QUEST_SLIMES,
     DLG_FINISH_QUEST_SLIMES, DLG_START_QUEST_LOCKET, DLG_FINISH_QUEST_LOCKET,
     DLG_START_QUEST_CROWN, DLG_GIVE_KEY, DLG_HEAL, DLG_CROWN_REWARD,
-    DLG_BOSS_SLIME_KING, DLG_SAVE_TIP
+    DLG_BOSS_SLIME_KING, DLG_SAVE_TIP,
+    DLG_START_QUEST_DEEP, DLG_FINISH_QUEST_DEEP
 };
 void startDialog(const std::vector<DialogLine>& lines, DialogAction action = DLG_NONE);
 
@@ -435,6 +469,7 @@ struct Game {
     int shopScroll = 0;
     std::string shopTitle;
     std::string innTitle;
+    bool shopForge = false;        // true = smithy stock (equipment only)
 
     // inn
     int innCost = 20;
@@ -460,6 +495,7 @@ struct Game {
 
     // camera & effects
     float camX = 0, camY = 0;
+    Mode battleReturn = MODE_OVERWORLD;   // where a battle sends you on victory
     float shakeT = 0, shakeMag = 0;
     float fade = 0;
     int fadeDir = 0;
@@ -561,6 +597,15 @@ void enterBuilding(int buildingIndex);
 void exitRoom();
 void roomUpdate(float dt);
 void roomDraw();
+
+// dungeon.cpp — procedurally generated cavern dungeons
+void enterDungeon(int siteTx, int siteTy, bool startCavern);
+void exitDungeon();
+void dungeonUpdate(float dt);
+void dungeonDraw();
+const char* dungeonPrompt();          // bottom interaction hint, or nullptr
+bool dungeonActive();                 // true while MODE_DUNGEON state is live
+void dungeonLeaveToOverworld();       // climb out (restores field position)
 
 // sound helper
 void playSoundIf(Sound& s);

@@ -369,6 +369,53 @@ float villageDecoCenterX(const Village::Deco& d) {
 }
 
 // ================================================================ landmarks
+// Hollow Hill — the story cavern west of Elmswick on the Old Watchtower road.
+// Found by a pure, order-independent search so rendering, collision and
+// interaction always agree on the same mouth cell.
+bool startCavernSite(int& outTx, int& outTy) {
+    static int cacheTx = 0, cacheTy = 0;
+    static uint32_t cacheSeed = ~0u;
+    static bool cacheDone = false, cacheOk = false;
+    if (cacheDone && cacheSeed == g.worldSeed) { outTx = cacheTx; outTy = cacheTy; return cacheOk; }
+
+    int bestTx = -34, bestTy = 0;
+    uint32_t bestH = ~0u;
+    bool found = false;
+    auto consider = [&](int tx, int ty, bool relax) {
+        float d2 = (float)(tx * tx + ty * ty);
+        if (d2 < 26.0f * 26.0f || d2 > 70.0f * 70.0f) return;
+        if (!relax && tx > -18) return;                   // keep it on the west road
+        if (abs(tx - TOWER_SITE_TX) < 14 && abs(ty - TOWER_SITE_TY) < 14) return;
+        if (abs(tx - LOCKET_SITE_TX) < 14 && abs(ty - LOCKET_SITE_TY) < 14) return;
+        if (!relax && nearTrail(tx, ty, 2)) return;       // beside the road, not on it
+        GroundKind gk = sampleGround(tx, ty).kind;
+        if (!groundWalkable(gk) || gk == G_ICE) return;
+        GroundKind gk2 = sampleGround(tx, ty + 1).kind;
+        if (!groundWalkable(gk2) || gk2 == G_ICE) return; // stand cell stays open
+        uint32_t h = hash2i(tx, ty, g.worldSeed ^ 0x57acu);
+        if (!found || h < bestH || (h == bestH && (tx < bestTx || (tx == bestTx && ty < bestTy)))) {
+            bestH = h; bestTx = tx; bestTy = ty; found = true;
+        }
+    };
+    for (int pass = 0; pass < 2 && !found; pass++) {
+        for (int r = 0; r <= 36; r++) {
+            int n = (r == 0) ? 1 : r * 8;
+            for (int i = 0; i < n; i++) {
+                float ang = (float)i / (float)n * 6.2831853f;
+                consider(-36 + (int)roundf(cosf(ang) * (float)r),
+                         (int)roundf(sinf(ang) * (float)r * 0.7f), pass == 1);
+            }
+        }
+    }
+    if (!found) { bestTx = -34; bestTy = 4; }             // last-resort mouth cell
+    cacheDone = true;
+    cacheOk = found;
+    cacheSeed = g.worldSeed;
+    cacheTx = bestTx; cacheTy = bestTy;
+    outTx = cacheTx; outTy = cacheTy;
+    return cacheOk;
+}
+
 static bool proceduralLandmark(int sx, int sy, Landmark& out) {
     const int sector = 128;
     uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
@@ -379,13 +426,15 @@ static bool proceduralLandmark(int sx, int sy, Landmark& out) {
     if ((abs(lx - BOSS_CASTLE_TX) < 20 && abs(ly - BOSS_CASTLE_TY) < 20) ||
         (abs(lx - LOCKET_SITE_TX) < 16 && abs(ly - LOCKET_SITE_TY) < 16) ||
         (abs(lx - TOWER_SITE_TX) < 15 && abs(ly - TOWER_SITE_TY) < 15)) return false;
+    int scx, scy;
+    if (startCavernSite(scx, scy) && abs(lx - scx) < 16 && abs(ly - scy) < 16) return false;
     if (g.villageLoaded) {
         float dx = (float)lx - g.village.cx, dy = (float)ly - g.village.cy;
         if (dx * dx + dy * dy < 24.0f * 24.0f) return false;
     }
     GroundKind ground = sampleGround(lx, ly).kind;
     if (!groundWalkable(ground) || ground == G_ICE) return false;
-    out = { (LandmarkKind)(1 + (h >> 6) % 5), lx, ly, h };
+    out = { (LandmarkKind)(1 + (h >> 6) % 6), lx, ly, h };   // now includes LK_CAVERN
     return true;
 }
 
@@ -455,6 +504,12 @@ void expandLandmarkParts(const Landmark& lm, std::vector<LandmarkPart>& out) {
             out.push_back({ LP_CAULDRON, lm.tx + 2, lm.ty,     1 });
             out.push_back({ LP_BARREL,   lm.tx - 3, lm.ty,     1 });
             break;
+        case LK_CAVERN:
+            out.push_back({ LP_CAVE, lm.tx, lm.ty, 3 });
+            // A previous expedition's abandoned kit flanks the mouth.
+            out.push_back({ LP_BARREL, lm.tx - 2, lm.ty + 1, 1 });
+            out.push_back({ LP_TORCH,  lm.tx + 2, lm.ty + 1, 1 });
+            break;
         default:
             break;
     }
@@ -466,6 +521,8 @@ static bool partBlocksCell(const LandmarkPart& p, int tx, int ty) {
             return tx >= p.tx - 2 && tx <= p.tx + 2 && ty >= p.ty - 3 && ty <= p.ty;
         case LP_TOWER:
             return tx >= p.tx - 1 && tx <= p.tx + 1 && ty >= p.ty - 1 && ty <= p.ty;
+        case LP_CAVE:
+            return ty == p.ty && tx >= p.tx - 1 && tx <= p.tx + 1;
         case LP_TENT:
             return tx >= p.tx - 1 && tx <= p.tx + 1 && ty >= p.ty - 1 && ty <= p.ty;
         case LP_RUIN_ARCH:
@@ -584,6 +641,10 @@ PropKind propAt(int tx, int ty) {
 
     Landmark lm;
     if (proceduralLandmarkNear(tx, ty, 5, lm)) return P_NONE;
+    {
+        int cx, cy;
+        if (startCavernSite(cx, cy) && abs(tx - cx) <= 4 && abs(ty - cy) <= 3) return P_NONE;
+    }
     if (nearTrail(tx, ty, 1)) return P_NONE;
 
     GroundTile gt = sampleGround(tx, ty);
@@ -927,6 +988,13 @@ void buildStartVillage(Village& v, uint32_t seed) {
     addBuilding(2, -12, 4);     // 5: Weaver's Cottage (West Lane)        [-14..-11, 2.. 4], door (-12,5)
     addBuilding(4, -5,  8);     // 6: Farmer Hedrick's Farmhouse (SW)     [ -7..-4,  6.. 8], door (-5, 9)
     addBuilding(3,  6,  8);     // 7: Shepherd's Cottage (SE Pasture)     [  4.. 7,  6.. 8], door ( 6, 9)
+    // Village 2.0 — the market quarter grows west, homes climb the ridges,
+    // and Aldwin's Forge takes the old yard by the west lane.
+    addBuilding(10, -14, -5);   // 8: Aldwin's Forge (Smithy)             [-16..-12, -7..-5], door (-14,-4)
+    addBuilding(0,  13, -7);    // 9: Cooper's Cottage (NE Lane)          [ 11..14, -9..-7], door (13,-6)
+    addBuilding(2, -15, -9);    // 10: Ridge Cottage (NW Bluff)           [-17..-14,-11..-9], door (-15,-8)
+    addBuilding(3,  -5, -10);   // 11: Chapel-side Cottage                [ -7..-4,-12..-10], door (-5,-9)
+    addBuilding(1,  10,  5);    // 12: Orchard Cottage (SE Lane)          [  8..11,  3.. 5], door (10,6)
 
     // Cut-stone sanctuary terrace in front of the Chapel
     for (int ty = -9; ty <= -7; ty++)
@@ -954,6 +1022,14 @@ void buildStartVillage(Village& v, uint32_t seed) {
     paveStreetL(v.paths, 0, 4, 0, 14, false);      // South Millbrook Highway -> Bridge
     paveStreetL(v.paths, -8, 9, 0, 9, true);       // Hedrick's Farmhouse & Turnip Croft Gate -> South Road
     paveStreetL(v.paths, 1, 9, 8, 9, true);        // South Road -> Shepherd's Cottage & Sheep Paddock Gate
+    // Village 2.0 lanes — market quarter, ridges and the orchard row
+    paveStreetL(v.paths, -14, -4, -14, 0, false);  // Forge door -> West Mirefen Gate lane
+    paveStreetL(v.paths, -15, -8, -13, -4, true);  // Ridge Cottage -> Forge doorstep
+    paveStreetL(v.paths, -5, -9, -3, -7, true);    // Chapel-side Cottage -> Chapel steps
+    paveStreetL(v.paths, 13, -6, 15, -6, true);    // Cooper's Cottage -> east verge
+    paveStreetL(v.paths, 15, -6, 15, 2, false);    // East verge -> Plaza/East Highway
+    paveStreetL(v.paths, 10, 6, 13, 6, true);      // Orchard Cottage -> south verge
+    paveStreetL(v.paths, 13, 6, 13, 2, false);     // South verge -> Plaza/East Highway
 
     // Doorstep welcome aprons
     for (const Building& b : v.buildings) {
@@ -1058,6 +1134,30 @@ void buildStartVillage(Village& v, uint32_t seed) {
     deco(VD_FENCE_V,-2, 13);
     deco(VD_FENCE_V, 3, 13);
 
+    // --- Village 2.0: the quiet dead in the eastern woodland belt
+    deco(VD_URN,     15, 6);
+    deco(VD_URN,     17, 6);
+    deco(VD_URN,     15, 8);
+    deco(VD_URN,     17, 8);
+    deco(VD_STATUE,  16, 7);
+    deco(VD_FLOWERBED, 16, 10);
+    deco(VD_TORCH,   14, 7);
+
+    // --- Market quarter trestles by the west gate lane
+    deco(VD_TABLE,   -11, 1);
+    deco(VD_CRATE,   -12, 2);
+    deco(VD_BARREL,   -6,  2);
+    deco(VD_BENCH,     5,  3);
+    deco(VD_FLOWERBED, 6, -3);
+
+    // --- Orchard rows & garden corners
+    for (int x = 6; x <= 8; x += 2) {
+        if (!cellReservedInVillage(v, x, 12, 1)) {
+            v.grassDark.push_back({ x, 12 });
+            deco(VD_SHADE_TREE, x, 12, (x >> 1) % 3);
+        }
+    }
+
     // --- Dense SNES Perimeter Woodland Belt & Shaded Turf (frames the entire town!)
     // Leaves crisp gateways for North (x=0..4, y<=-14), West (y=0..1), East (y=2..3), and South (x=-1..2, y>=12)
     for (int ty = -17; ty <= 15; ty++) {
@@ -1113,7 +1213,8 @@ void buildStartVillage(Village& v, uint32_t seed) {
     // Interior garden shade trees & wildflower accents tucked beside cottages and fences
     const std::pair<int, int> innerTrees[] = {
         { -6, -9 }, { -13, -10 }, { 5, -10 }, { 12, -9 },
-        { -15, 6 }, { -12, 13 }, { 12, 14 }
+        { -15, 6 }, { -12, 13 }, { 12, 14 },
+        { -16, -4 }, { 16, -2 }, { -4, -13 }, { 7, -13 }, { 11, 7 }
     };
     for (auto [tx, ty] : innerTrees) {
         if (!cellReservedInVillage(v, tx, ty, 1)) {
@@ -1125,7 +1226,8 @@ void buildStartVillage(Village& v, uint32_t seed) {
     const std::pair<int, int> flowerSpots[] = {
         { -6, -5 }, { -4, -8 }, { 2, -8 }, { 6, -5 }, { 11, -4 },
         { -11, 5 }, { -4, 9 }, { 8, 7 }, { 10, 10 }, { 12, 12 },
-        { -3, 12 }, { 3, 12 }
+        { -3, 12 }, { 3, 12 },
+        { -16, -6 }, { -12, -8 }, { 6, -14 }, { 15, 4 }, { -7, 3 }, { 12, -5 }
     };
     for (auto [tx, ty] : flowerSpots) {
         if (!cellReservedInVillage(v, tx, ty, 0)) v.flowers.push_back({ tx, ty });
@@ -1156,7 +1258,7 @@ static void layoutVillage(Village& v) {
     int plan = (int)(rs % 3);
     int side = (rs & 8) ? 1 : -1;
 
-    // 5-tile wide service buildings (shop, inn, temple) + staggered residential cottages
+    // 5-tile wide service buildings (shop, inn, temple, forge) + staggered cottages
     Building shop{ 5, v.cx + 7 * side, v.cy + (plan == 0 ? 0 : -2), 5, 3, 5 };
     Building inn{ 6, v.cx - 7 * side, v.cy + (plan == 1 ? 3 : 1), 5, 3, 6 };
     Building temple{ 7, v.cx + (plan == 2 ? -2 * side : 0), v.cy - 9, 5, 4, 7 };
@@ -1166,10 +1268,12 @@ static void layoutVillage(Village& v) {
 
     const std::pair<int, int> slots[] = {
         { -9 * side, -6 }, { 9 * side, -6 }, { -10 * side, 6 },
-        { 8 * side, 7 },   { -4 * side, 8 }, { 4 * side, 9 }
+        { 8 * side, 7 },   { -4 * side, 8 }, { 4 * side, 9 },
+        { -6 * side, -7 }, { 11 * side, -3 }, { -12 * side, -3 },
+        { 6 * side, -8 }
     };
-    int targetHouses = 3 + (int)(rs % 3);
-    for (int i = 0; i < 6 && (int)v.buildings.size() < 3 + targetHouses; i++) {
+    int targetHouses = 4 + (int)(rs % 4);
+    for (int i = 0; i < 10 && (int)v.buildings.size() < 3 + targetHouses; i++) {
         int jx = (int)(hash2i(i, 17, rs) % 3) - 1;
         int jy = (int)(hash2i(i, 29, rs) % 2);
         Building b;
@@ -1184,6 +1288,16 @@ static void layoutVillage(Village& v) {
             if (buildingsOverlap(b, ex, 2)) { bad = true; break; }
         }
         if (!bad) v.buildings.push_back(b);
+    }
+
+    // The village smithy: every settlement that ships weapons has a forge.
+    if ((rs % 4u) != 3u) {
+        Building smithy{ 10, v.cx - 6 * side, v.cy + 6, 5, 3, 10 };
+        bool bad = (abs(smithy.tx - v.cx) <= 5 && abs(smithy.ty - v.cy) <= 4);
+        for (const auto& ex : v.buildings) {
+            if (buildingsOverlap(smithy, ex, 2)) { bad = true; break; }
+        }
+        if (!bad) v.buildings.push_back(smithy);
     }
 
     // Temple forecourt flagstones
@@ -1345,20 +1459,27 @@ static const char* VILLAGER_LINES[] = {
     "Every map in this house is a lie. Beautiful, useless lies.",
     "The slimes are thick in the south meadow. Steady work for a sword.",
     "My grandmother sold potions to a hero once. He never came back for the change.",
+    "Stone mouths open in the hills if you know where to look. Mind what goes in before you follow it down.",
+    "Nell at the forge pays well for star metal. Says the deep vaults still hold it.",
+    "The old road west passes hollows that breathe. Torchlight and a level blade, that's the rule.",
+    "Caverns keep their own weather. Down there it's always autumn, and always dark.",
 };
 static const char* ELDER_LINES[] = {
     "You have the look of someone the road has been waiting for.",
     "Old kings built towers to be remembered. The towers remember them better than we do.",
     "When the moon is fat, the wisps walk the frozen reach. Keep your ether close.",
+    "Listen: under the hills west of here, older halls than ours still stand. Bring light.",
 };
 static const char* CHILD_LINES[] = {
     "Are you an adventurer? Do you have a SWORD? Can I see it?",
     "I caught a slime once! It was mostly jelly. Mum made me put it back.",
     "The well echoes if you shout into it. The echo knows your name.",
+    "The bad caves are the ones that echo back when you hum.",
 };
 static const char* GUARD_LINES[] = {
     "Keep your blade sheathed in town and we'll get along fine.",
     "North road climbs to the old castle. West lies a ruined watchtower.",
+    "West of the causeway the ground opens into hollows. Nobody posts a guard at a hole in the earth.",
 };
 static const char* SHOP_LINES[] = {
     "Steel, salves and sundries. No credit, no haggling, no exceptions.",
@@ -1387,11 +1508,11 @@ const char* npcLine(const Npc& npc, int index) {
     if (npc.sprite == NS_COW) return "Moo. She flicks her tail and keeps chewing the meadow grass.";
     if (npc.sprite == NS_HORSE) return "The horse snorts softly, eager for the road beyond the village.";
     const char** set = VILLAGER_LINES;
-    int n = 8;
+    int n = 12;
     switch (npc.role) {
-        case NPC_ELDER: set = ELDER_LINES; n = 3; break;
-        case NPC_CHILD: set = CHILD_LINES; n = 3; break;
-        case NPC_GUARD: set = GUARD_LINES; n = 2; break;
+        case NPC_ELDER: set = ELDER_LINES; n = 4; break;
+        case NPC_CHILD: set = CHILD_LINES; n = 4; break;
+        case NPC_GUARD: set = GUARD_LINES; n = 3; break;
         case NPC_SHOPKEEP: set = SHOP_LINES; n = 1; break;
         case NPC_INNKEEP: set = INN_LINES; n = 1; break;
         case NPC_PRIEST: set = PRIEST_LINES; n = 1; break;
@@ -1455,6 +1576,9 @@ void npcsLoadFor(float x, float y, bool force) {
             else if (b.kind == 7)
                 add(NS_PRIEST, FACE_ELDER, NPC_PRIEST, (float)(dtx + 2) + 0.5f, (float)dty + 0.5f,
                     v.startVillage ? "Father Osric" : "Shrine Keeper", 0);
+            else if (b.kind == 10)
+                add(NS_SMITH, FACE_SMITH, NPC_SHOPKEEP, (float)(dtx - 2) + 0.5f, (float)dty + 0.5f,
+                    v.startVillage ? "Aldwin the Smith" : "Village Smith", 0);
         }
 
         if (v.startVillage) {
@@ -1466,6 +1590,8 @@ void npcsLoadFor(float x, float y, bool force) {
             add(NS_COW,     -1,       NPC_ANIMAL,  -13.5f, 10.5f, "Daisy",    0);
             add(NS_CAT,     -1,       NPC_ANIMAL,   11.5f,  2.5f, "Inn Cat",  0);
             add(NS_DOG,     FACE_DOG, NPC_ANIMAL,    2.5f,  1.5f, "Town Dog", 0);
+            add(NS_HORSE,   -1,       NPC_ANIMAL,   12.5f,  5.5f, "Dobbin",   0);
+            add(NS_CHICKEN, -1,       NPC_ANIMAL,   -9.5f, 12.5f, "Biddy",    2);
 
             // Named Elmswick townsfolk & questgivers in their district spots
             add(NS_ELDER,     FACE_ELDER,     NPC_ELDER,     1.5f, -1.5f, "Old Maren",       0, QUEST_CROWN);
@@ -1476,6 +1602,14 @@ void npcsLoadFor(float x, float y, bool force) {
             add(NS_VILLAGER2, FACE_VILLAGER2, NPC_VILLAGER,  6.5f,  3.5f, "Sable",           5);
             add(NS_VILLAGER3, FACE_VILLAGER3, NPC_VILLAGER, -8.5f, -5.5f, "Wren",            6);
             add(NS_FARMER,    FACE_SMITH,     NPC_QUEST,    -6.5f, 10.5f, "Farmer Hedrick",  0, QUEST_SLIMES);
+            // Village 2.0 — the forge quarter and the road wardens
+            add(NS_VILLAGER5, FACE_VILLAGER5, NPC_QUEST,   -11.5f, -3.5f, "Nell the Apprentice", 7, QUEST_DEEP);
+            add(NS_RANGER,    FACE_RANGER,    NPC_VILLAGER, 15.5f, -1.5f, "Warden Yara",     8);
+            add(NS_SOLDIER,   FACE_GUARD,     NPC_VILLAGER,-15.5f,  1.5f, "Corporal Fenn",   9);
+            add(NS_VILLAGER6, FACE_VILLAGER6, NPC_VILLAGER, 11.5f,  6.5f, "Maren the Weaver",10);
+            add(NS_VILLAGER7, FACE_VILLAGER7, NPC_VILLAGER, -2.5f, -8.5f, "Brother Cuthbert",11);
+            add(NS_VILLAGER8, FACE_VILLAGER8, NPC_CHILD,    12.5f, -4.5f, "Little Tam",      2);
+            add(NS_VILLAGER9, FACE_VILLAGER9, NPC_VILLAGER,-16.5f, -6.5f, "Old Geordie",     5);
         } else {
             const int sprites[] = {
                 NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_VILLAGER4,
@@ -1486,7 +1620,7 @@ void npcsLoadFor(float x, float y, bool force) {
                 FACE_VILLAGER5, FACE_VILLAGER6, FACE_VILLAGER7, FACE_VILLAGER8, FACE_VILLAGER9,
             };
             const char* names[] = { "Elin", "Corin", "Mina", "Tomas", "Nessa", "Rook", "Sable", "Wren", "Tarin", "Lio" };
-            int n = 5 + (int)(v.seed % 3);
+            int n = 7 + (int)(v.seed % 4);
             for (int i = 0; i < n; i++) {
                 float ang = hashf(i, 11, v.seed) * 6.2831853f;
                 float r = 2.5f + hashf(i, 13, v.seed) * 5.0f;
@@ -1500,6 +1634,13 @@ void npcsLoadFor(float x, float y, bool force) {
                                    (role == NPC_CHILD ? "Kip" :
                                    (role == NPC_GUARD ? "Guard Bram" : names[person]));
                 add(sprite, face, role, px, py, name, i);
+            }
+            // The forge apprentice offers the deep-vault errand in every village.
+            bool hasSmithy = false;
+            for (const auto& b : v.buildings) if (b.kind == 10) { hasSmithy = true; break; }
+            if (hasSmithy) {
+                add(NS_VILLAGER5, FACE_VILLAGER5, NPC_QUEST,
+                    (float)v.cx - 4.5f, (float)v.cy + 5.5f, "Forge Apprentice", 7, QUEST_DEEP);
             }
             add(NS_DOG, FACE_DOG, NPC_ANIMAL, (float)v.cx + 2.5f, (float)v.cy + 1.5f, "Village Dog", 0);
             switch (v.seed % 3u) {
@@ -1574,6 +1715,13 @@ bool landmarkNear(int tx, int ty, Landmark& out) {
         out = { LK_TOWER, TOWER_SITE_TX, TOWER_SITE_TY, 0x703e2u };
         return true;
     }
+    {
+        int cx, cy;
+        if (startCavernSite(cx, cy) && abs(tx - cx) <= 6 && abs(ty - cy) <= 5) {
+            out = { LK_CAVERN, cx, cy, 0x57acu };
+            return true;
+        }
+    }
     if (!proceduralLandmarkNear(tx, ty, 8, out)) return false;
     return true;
 }
@@ -1587,6 +1735,10 @@ void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out)
     maybeAdd(LK_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, 0xca571eu);
     maybeAdd(LK_STONES, LOCKET_SITE_TX, LOCKET_SITE_TY, 0x10c4e7u);
     maybeAdd(LK_TOWER,  TOWER_SITE_TX,  TOWER_SITE_TY,  0x703e2u);
+    {
+        int cx, cy;
+        if (startCavernSite(cx, cy)) maybeAdd(LK_CAVERN, cx, cy, 0x57acu);
+    }
 
     const int SECTOR = 128;
     int sx0 = (int)floorf((float)(x0 - 8) / SECTOR);

@@ -205,6 +205,7 @@ static void updateFieldMonsters(float dt) {
 
 // ================================================================ interaction
 static void setVillageServiceNames() {
+    g.shopForge = false;                 // smiths re-arm this when talked to
     if (g.villageLoaded && !g.village.startVillage) {
         g.shopTitle = g.village.name + " Sundries";
         g.innTitle  = g.village.name + " Inn";
@@ -228,7 +229,13 @@ static void talkToNpc(int npcIdx) {
     DialogAction action = DLG_NONE;
     setVillageServiceNames();
 
-    if (n.role == NPC_SHOPKEEP) {
+    if (n.sprite == NS_SMITH) {
+        g.shopForge = true;
+        g.shopTitle = (g.villageLoaded && !g.village.startVillage)
+                          ? g.village.name + " Forge" : std::string("Aldwin's Forge");
+        lines.push_back({ n.face, n.name, "\"Ore, ash and honest work. Weapons and armour, if you've the coin.\"" });
+        action = DLG_SHOP;
+    } else if (n.role == NPC_SHOPKEEP) {
         lines.push_back({ n.face, n.name, "\"Steel, salves and sundries. Buying or selling?\"" });
         action = DLG_SHOP;
     } else if (n.role == NPC_INNKEEP) {
@@ -290,6 +297,24 @@ static void talkToNpc(int npcIdx) {
             lines.push_back({ n.face, n.name, "\"The Slime King seized the old Castle of Elm — and with it, our village's ancient Crown.\"" });
             lines.push_back({ n.face, n.name, "\"When you are strong enough, follow the North Road and bring back the Crown of Elm.\"" });
             action = DLG_START_QUEST_CROWN;
+        }
+    } else if (n.quest == QUEST_DEEP) {
+        auto& q = g.quests[QUEST_DEEP];
+        if (q.state == QS_DONE) {
+            lines.push_back({ n.face, n.name, "\"The forge still sings with that star metal. Elmswick won't forget what you brought back.\"" });
+        } else if (q.state == QS_ACTIVE && itemCount(IT_STAR_METAL) > 0) {
+            lines.push_back({ n.face, n.name, "\"That glow in your pack... is that star metal? Don't just stand there — let me see it!\"" });
+            action = DLG_FINISH_QUEST_DEEP;
+        } else if (q.state == QS_ACTIVE) {
+            int stx = 0, sty = 0;
+            std::string hint = startCavernSite(stx, sty)
+                ? compassHint(g.px, g.py, (float)stx, (float)sty) : std::string("somewhere west");
+            lines.push_back({ n.face, n.name, "\"The old vaults still hold star metal. The stone mouth west of town (" + hint + ") is the way down.\"" });
+            lines.push_back({ n.face, n.name, "\"Bring me one shard and Aldwin will owe you a smith's favour. And mind the dark.\"" });
+        } else {
+            lines.push_back({ n.face, n.name, "\"Aldwin needs star metal for a blade that won't break. The hills west of town open into old vaults.\"" });
+            lines.push_back({ n.face, n.name, "\"Find a shard in the deepest chamber and I'll make it worth your while.\"" });
+            action = DLG_START_QUEST_DEEP;
         }
     } else if (n.role == NPC_GUARD && n.name.find("Odo") != std::string::npos) {
         if (itemCount(IT_RUSTY_KEY) == 0 && !g.towerChestOpened) {
@@ -376,7 +401,23 @@ static void interactWithNearest() {
         }
     }
 
-    // 4. Nearby NPC
+    // 4. Cavern mouths — descend into a procedurally cut dungeon
+    {
+        Landmark lm;
+        int mtx = (int)floorf(g.px), mty = (int)floorf(g.py);
+        if (landmarkNear(mtx, mty, lm) && lm.kind == LK_CAVERN) {
+            float dx = (lm.tx + 0.5f) - g.px, dy = (lm.ty + 1.4f) - g.py;
+            if (dx * dx + dy * dy < 2.4f * 2.4f) {
+                int stx = 0, sty = 0;
+                bool start = startCavernSite(stx, sty) && stx == lm.tx && sty == lm.ty;
+                enterDungeon(lm.tx, lm.ty, start);
+                g.interactT = 0.3f;
+                return;
+            }
+        }
+    }
+
+    // 5. Nearby NPC
     int npc = npcNear(g.px, g.py, 1.55f);
     if (npc >= 0) {
         talkToNpc(npc);
@@ -428,6 +469,7 @@ static void interactWithNearest() {
                 if (d.kind == VD_NOTICEBOARD) {
                     lines.push_back({ -1, "", "ELMSWICK FIELD BOARD — Posted notices:" });
                     lines.push_back({ -1, "", "'Wanted: six fewer meadow slimes (see Farmer Hedrick). Lost: one silver locket near the Standing Stones (see Tamsin).'" });
+                    lines.push_back({ -1, "", "'The stone mouths west of town are open again. Nell at the forge pays well for star metal (see Nell).'" });
                 } else if (g.village.startVillage) {
                     lines.push_back({ -1, "", "ELMSWICK — 'Where the meadow begins.'" });
                     lines.push_back({ -1, "", "North past the chapel: Briarwood and the castle. West past the shop: the marsh and Old Watchtower." });
@@ -722,6 +764,18 @@ const char* interactionPrompt() {
         if (i >= 0) {
             snprintf(buf, sizeof(buf), "SPACE: talk to %s", g.npcs[i].name.c_str());
             return buf;
+        }
+    }
+    {
+        Landmark lm;
+        int mtx = (int)floorf(g.px), mty = (int)floorf(g.py);
+        if (landmarkNear(mtx, mty, lm) && lm.kind == LK_CAVERN) {
+            float dx = (lm.tx + 0.5f) - g.px, dy = (lm.ty + 1.4f) - g.py;
+            if (dx * dx + dy * dy < 2.4f * 2.4f) {
+                int stx = 0, sty = 0;
+                bool start = startCavernSite(stx, sty) && stx == lm.tx && sty == lm.ty;
+                return start ? "SPACE: enter Hollow Hill" : "SPACE: enter the cavern";
+            }
         }
     }
     for (const auto& c : gChestsInView) {
