@@ -1,5 +1,6 @@
 // world.cpp — noise, biomes, villages, props, npcs, chests, landmarks, A*
 #include "world.hpp"
+#include "commons.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -442,6 +443,8 @@ bool villageDecoSolid(int kind) {
         case VD_NOTICEBOARD:
         case VD_ROCK:
         case VD_STUMP:
+        case VD_STATUS_STONE:
+        case VD_EMPTY_PLOT:
             return true;
         default:
             return false; // VD_PLANT, VD_BUSH, VD_FLOWER_BUSH, VD_LADDER stay walkable/brushable
@@ -450,6 +453,7 @@ bool villageDecoSolid(int kind) {
 
 float villageDecoCenterX(const Village::Deco& d) {
     int dx = (int)floorf(d.x + 0.5f);
+    if (d.kind == VD_STATUS_STONE || d.kind == VD_EMPTY_PLOT) return (float)((dx + 0.5f) * TILE);
     if (d.kind == VD_WELL || d.kind == VD_BENCH || d.kind == VD_FLOWERBED || d.kind == VD_FENCE_GATE) {
         // 2-tile wide [dx-1 .. dx]: exact pixel midpoint is dx * TILE
         return (float)(dx * TILE);
@@ -637,6 +641,9 @@ bool cellWalkable(int tx, int ty) {
                 if (ty == dy && (tx == dx || tx == dx - 1)) return false;
             } else if (d.kind == VD_LONGTABLE || d.kind == VD_GATE) {
                 if (ty == dy && tx >= dx - 1 && tx <= dx + 1) return false;
+            } else if (d.kind == VD_STATUS_STONE) {
+                // 30x44 stone drawn on the two tiles it stands between.
+                if (ty == dy && (tx == dx || tx == dx - 1)) return false;
             } else {
                 if (tx == dx && ty == dy) return false;
             }
@@ -686,7 +693,8 @@ static bool coniferSlot(int tx, int ty, float grove, float hf) {
 }
 
 PropKind propAt(int tx, int ty) {
-    if (g.villageLoaded && inVillage((float)tx + 0.5f, (float)ty + 0.5f)) return P_NONE;
+    if (g.villageLoaded && (inVillage((float)tx + 0.5f, (float)ty + 0.5f) || inCommons((float)tx + 0.5f, (float)ty + 0.5f)))
+        return P_NONE;
 
     // Sacred ring of ancient amber oaks framing the Standing Stones glade
     {
@@ -901,6 +909,8 @@ void villageDecoTexture(int kind, int variant, Texture2D*& tex, int& w, int& h) 
         case VD_FLOWER_BUSH: t = &g.assets.bush[0]; break;
         case VD_ROCK: t = &g.assets.rock[(variant >= 0 ? variant : 0) % 3]; break;
         case VD_STUMP: t = &g.assets.stump; break;
+        case VD_STATUS_STONE: t = &g.assets.statusStone[(variant % 3 + 3) % 3]; break;
+        case VD_EMPTY_PLOT: t = nullptr; break;   // a prepared footing: nothing stands here yet
         default: break;
     }
     tex = t;
@@ -1330,6 +1340,18 @@ void buildStartVillage(Village& v, uint32_t seed) {
     dedupCells(v.soil);
     dedupCells(v.flowers);
     dedupCells(v.rocks);
+
+    // The Seed: the Agents' Commons on the meadow east of the village. It is
+    // stamped last so it owns its ground and nothing overwrites its floor; its
+    // content (which stones stand, which plots wait) comes from the chronicle
+    // table in commons.cpp, never from here.
+    commonsBuild(v);
+    dedupCells(v.paths);
+    dedupCells(v.plaza);
+    dedupCells(v.court);
+    dedupCells(v.grassDark);
+    dedupCells(v.flowers);
+    dedupCells(v.rocks);
 }
 
 // Route a two-cell-wide lane around architecture. Stamping Ls through whatever
@@ -1629,6 +1651,17 @@ static const char* SHEEP_LINES[] = {
 static const char* QUEST_LINES[] = {
     "Those slimes are eating my turnips. Thin them out and I'll make it worth your while.",
 };
+// The Commons keeper speaks a stone at a time; the chronicle table itself
+// holds the real content (src/commons.cpp) and the full briefing lives in
+// overworld.cpp, where the quest actions are resolved.
+static const char* KEEPER_LINES[] = {
+    "Mind the ring. Those stones are the only full record of what was built here.",
+    "Each stone has a name, and under the name the thing itself: a road, a song, a cellar.",
+    "The empty plots matter more than the stones. They are the ones still owed to us.",
+    "The brazier is cold. I'll keep it that way until the ring is tended again.",
+    "Agents come, survey, build one thing well, and chronicle it. Then the ring is one wider.",
+    "I am the keeper. I do not write the Chronicle. I only make sure it is read.",
+};
 
 const char* npcLine(const Npc& npc, int index) {
     if (npc.sprite == NS_CAT) return "The cat blinks slowly, then looks away.";
@@ -1647,6 +1680,7 @@ const char* npcLine(const Npc& npc, int index) {
         case NPC_PRIEST: set = PRIEST_LINES; n = 1; break;
         case NPC_ANIMAL: set = ANIMAL_LINES; n = 4; break;
         case NPC_QUEST: set = QUEST_LINES; n = 1; break;
+        case NPC_KEEPER: set = KEEPER_LINES; n = 6; break;
         default: break;
     }
     return set[(unsigned)index % (unsigned)n];
@@ -1662,6 +1696,7 @@ const char* npcRoleName(int role) {
         case NPC_PRIEST: return "Priest";
         case NPC_ANIMAL: return "Animal";
         case NPC_QUEST: return "Villager";
+        case NPC_KEEPER: return "Keeper";
         default: return "Villager";
     }
 }
@@ -1739,6 +1774,11 @@ void npcsLoadFor(float x, float y, bool force) {
             add(NS_VILLAGER7, FACE_VILLAGER7, NPC_VILLAGER, -2.5f, -8.5f, "Brother Cuthbert",11);
             add(NS_VILLAGER8, FACE_VILLAGER8, NPC_CHILD,    12.5f, -4.5f, "Little Tam",      2);
             add(NS_VILLAGER9, FACE_VILLAGER9, NPC_VILLAGER,-16.5f, -6.5f, "Old Geordie",     5);
+            // The Seed's one living voice: the keeper at the Commons gate, in
+            // an OpenRTP People1 walking slot no other villager uses.
+            add(NS_KEEPER, FACE_KEEPER, NPC_KEEPER,
+                (float)COMMONS_CX, (float)COMMONS_CY + 7.0f, "Sable, Keeper of the Commons",
+                0, QUEST_COMMONS);
         } else {
             const int sprites[] = {
                 NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_VILLAGER4,
@@ -1997,6 +2037,7 @@ int zoneLevelAt(float x, float y) {
 
 const char* zoneNameAt(float x, float y) {
     if (fabsf(x) < 11 && y > 15 && y < 24) return "Millbrook Crossing";
+    if (inCommons(x, y) && g.villageLoaded) return "The Agents' Commons";
     if (inVillage(x, y) && g.villageLoaded) return g.village.name.c_str();
     if (inBossArena(x, y)) return "Castle of Elm";
     if (fabsf(x - LOCKET_SITE_TX) < 10.0f && fabsf(y - LOCKET_SITE_TY) < 10.0f) return "The Standing Stones";

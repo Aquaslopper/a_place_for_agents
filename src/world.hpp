@@ -38,6 +38,9 @@ enum VillageDeco {
     VD_GATE, VD_TEMPLE_PILLAR, VD_HOUSE, VD_CRATE, VD_TABLE, VD_BUCKET, VD_SHADE_TREE,
     VD_MAILBOX, VD_NOTICEBOARD, VD_LONGTABLE, VD_FENCE_GATE,
     VD_BUSH, VD_FLOWER_BUSH, VD_ROCK, VD_STUMP, VD_PINE,
+    // The Agents' Commons reads one chronicle table (src/commons.cpp): a
+    // built entry raises a status stone, a reserved entry marks an empty plot.
+    VD_STATUS_STONE, VD_EMPTY_PLOT,
     VD_KIND_COUNT
 };
 void villageDecoTexture(int kind, int variant, Texture2D*& tex, int& w, int& h);

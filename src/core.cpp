@@ -71,6 +71,7 @@ static const ItemDef ITEMS[IT_COUNT] = {
     { "Lost Locket",  "A silver locket from the standing stones.",0,IK_KEY, 0, ICON_RING, false, KM_ANY },
     { "Crown of Elm", "The old crown of the first village.",    0,  IK_KEY, 0, ICON_CROWN,false, KM_ANY },
     { "Star Metal",   "Ore from the deep vault. The forge wants it.",0, IK_KEY, 0, ICON_STAR, false, KM_ANY },
+    { "Commonplace",  "The keeper's blank codex: where the next agent's work is written.",0, IK_KEY, 0, ICON_BOOK, false, KM_ANY },
 };
 const ItemDef& itemDef(int id) {
     static const ItemDef none{ "Nothing", "", 0, IK_KEY, 0, ICON_GEM, false, KM_ANY };
@@ -264,12 +265,14 @@ static const char* QUEST_TITLES[QUEST_COUNT] = {
     "The Lost Locket",
     "The Crown of Elm",
     "Ember of the Deep",
+    "The Kept Light",
 };
 static const char* QUEST_GOALS[QUEST_COUNT] = {
     "Thin out 6 slimes in the meadow for Farmer Hedrick.",
     "Find Tamsin's locket at the Standing Stones SE of Elmswick.",
     "Defeat the Slime King at the Northern Castle and return the Crown.",
     "Recover Star Metal from a cavern's deepest vault.",
+    "Tend the Agents' Commons for its keeper: still the Wisp in the hedge, then light the brazier.",
 };
 const char* questTitle(int id) {
     if (id < 0 || id >= QUEST_COUNT) return "";
@@ -508,6 +511,10 @@ bool loadAllAssets() {
     a.forgeHearth = loadTex(d, "sprites/forge_hearth.png");
     a.forgeAnvil = loadTex(d, "sprites/forge_anvil.png");
     a.caveMouth = loadTex(d, "sprites/cave_mouth.png");
+    a.crystalCluster = loadTex(d, "sprites/cave_crystal_cluster.png");
+    a.statusStone[0] = loadTex(d, "sprites/commons_stone.png");
+    a.statusStone[1] = loadTex(d, "sprites/commons_stone_tall.png");
+    a.statusStone[2] = loadTex(d, "sprites/commons_stone_low.png");
     a.stairDown = loadTex(d, "sprites/stair_down.png");
     a.stairUp = loadTex(d, "sprites/stair_up.png");
 
@@ -525,6 +532,7 @@ bool loadAllAssets() {
         "sprites/npc_villager4.png", "sprites/npc_villager5.png", "sprites/npc_villager6.png",
         "sprites/npc_villager7.png", "sprites/npc_villager8.png", "sprites/npc_villager9.png",
         "sprites/npc_ranger.png", "sprites/npc_cow.png", "sprites/npc_horse.png",
+        "sprites/npc_keeper.png",
     };
     for (int i = 0; i < NS_KIND_COUNT; i++) a.npc[i] = loadTex(d, npcs[i]);
 
@@ -542,6 +550,7 @@ bool loadAllAssets() {
         "sprites/face_demon.png", "sprites/face_dog.png",
         "sprites/face_villager4.png", "sprites/face_villager5.png", "sprites/face_villager6.png",
         "sprites/face_villager7.png", "sprites/face_villager8.png", "sprites/face_villager9.png",
+        "sprites/face_keeper.png",
     };
     for (int i = 0; i < FACE_COUNT; i++) a.face[i] = loadTex(d, faces[i]);
 
@@ -957,6 +966,36 @@ struct SaveBlobV4 {
     uint64_t defeatedMonsters[SAVE_MAX_IDS];
     uint32_t checksum;
 };
+// Version 5a layout: the four-quest save written before the Agents' Commons.
+// The checksum cover is identical (it ends at the same fields), so an old blob
+// is byte-for-byte readable as a SaveBlob once the missing quest row is zeroed.
+struct SaveBlobV5 {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t worldSeed;
+    float px, py;
+    float runTime;
+    int32_t gil, defeatedCount, slimesSlain;
+    int32_t inventory[IT_COUNT];
+    struct HS {
+        int32_t klass, level, xp, hp, mp, maxHp, maxMp, atk, def, spd, mag;
+        int32_t weapon, armor, accessory, ko, row, poisoned;
+    } heroes[3];
+    int32_t questState[4], questProgress[4], questGoal[4];
+    uint32_t flags;
+    int32_t openedChestCount;
+    uint64_t openedChests[SAVE_MAX_IDS];
+    int32_t defeatedMonsterCount;
+    uint64_t defeatedMonsters[SAVE_MAX_IDS];
+    uint32_t checksum;
+};
+// Everything up to the quest table is byte-identical; the only difference is
+// the number of quest rows, and the old checksum covers exactly its own bytes.
+static_assert(offsetof(SaveBlobV5, questState) == offsetof(SaveBlob, questState),
+              "fields before the quest table must not move");
+static_assert(sizeof(SaveBlobV5::HS) == sizeof(SaveBlob::HS), "hero rows must not move");
+static_assert(sizeof(SaveBlobV5) != sizeof(SaveBlob), "old and new saves must not collide");
+
 static const uint32_t SAVE_MAGIC = 0x41504641;   // 'APFA'
 static const uint32_t SAVE_VERSION = 5;
 
@@ -1050,6 +1089,29 @@ bool loadGame() {
         UnloadFileData(data);
         if (b.magic != SAVE_MAGIC || b.version != SAVE_VERSION || blobChecksum(b) != b.checksum)
             return false;
+    } else if (size == (int)sizeof(SaveBlobV5)) {
+        // Saves written before the Agents' Commons: same fields, one fewer
+        // quest row. Copy the covered bytes and open the new errand fresh.
+        SaveBlobV5 o;
+        memcpy(&o, data, sizeof(o));
+        UnloadFileData(data);
+        if (o.magic != SAVE_MAGIC || o.version != SAVE_VERSION || blobChecksumOf(o) != o.checksum)
+            return false;
+        memcpy(&b, &o, offsetof(SaveBlob, questState));          // magic .. heroes
+        memcpy(b.inventory, o.inventory, sizeof(b.inventory) < sizeof(o.inventory) ? sizeof(b.inventory) : sizeof(o.inventory));
+        for (int q = 0; q < 4; q++) {
+            b.questState[q] = o.questState[q];
+            b.questProgress[q] = o.questProgress[q];
+            b.questGoal[q] = o.questGoal[q];
+        }
+        b.flags = o.flags;
+        b.openedChestCount = o.openedChestCount;
+        memcpy(b.openedChests, o.openedChests, sizeof(b.openedChests));
+        b.defeatedMonsterCount = o.defeatedMonsterCount;
+        memcpy(b.defeatedMonsters, o.defeatedMonsters, sizeof(b.defeatedMonsters));
+        b.questState[QUEST_COMMONS] = QS_OFFERED;
+        b.questProgress[QUEST_COMMONS] = 0;
+        b.questGoal[QUEST_COMMONS] = 1;
     } else if (size == (int)sizeof(SaveBlobV4)) {
         // Pre-dungeon save: migrate inventory & quests to the v5 layout.
         SaveBlobV4 o;
@@ -1086,6 +1148,9 @@ bool loadGame() {
         b.questState[QUEST_DEEP] = QS_OFFERED;   // new quest, fresh in the log
         b.questProgress[QUEST_DEEP] = 0;
         b.questGoal[QUEST_DEEP] = 1;
+        b.questState[QUEST_COMMONS] = QS_OFFERED; // and the keeper's errand
+        b.questProgress[QUEST_COMMONS] = 0;
+        b.questGoal[QUEST_COMMONS] = 1;
         b.flags = o.flags;
         b.openedChestCount = o.openedChestCount;
         memcpy(b.openedChests, o.openedChests, sizeof(b.openedChests));
@@ -1134,6 +1199,7 @@ bool loadGame() {
     g.quests[QUEST_LOCKET].goal = 1;
     g.quests[QUEST_CROWN].goal = 1;
     g.quests[QUEST_DEEP].goal = 1;
+    g.quests[QUEST_COMMONS].goal = 1;
 
     g.bossDefeated     = (b.flags & (1u << 0)) != 0;
     g.locketFound      = (b.flags & (1u << 1)) != 0;
@@ -1202,6 +1268,7 @@ void newGameState(uint32_t seed) {
     g.quests[QUEST_LOCKET] = { QS_OFFERED, 0, 1 };
     g.quests[QUEST_CROWN]  = { QS_OFFERED, 0, 1 };
     g.quests[QUEST_DEEP]   = { QS_OFFERED, 0, 1 };
+    g.quests[QUEST_COMMONS] = { QS_OFFERED, 0, 1 };
 
     g.defeatedMonsters.clear();
     g.openedChests.clear();
@@ -1223,6 +1290,8 @@ void newGameState(uint32_t seed) {
     g.towerChestOpened = false;
     g.startVillageSeen = false;
     g.menuPage = 0;
+    g.journalTab = 0;
+    g.commonsJournalSel = 0;
     g.menuReturn = MODE_OVERWORLD;
     g.battleReturn = MODE_OVERWORLD;
     g.shopForge = false;

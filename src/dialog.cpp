@@ -1,5 +1,6 @@
 // dialog.cpp — conversation box, pause menu (Party/Items/Equip/Quests/Options), Shop & Inn
 #include "game.hpp"
+#include "commons.hpp"
 #include "world.hpp"
 #include "battle.hpp"
 #include <algorithm>
@@ -110,6 +111,23 @@ void resolveDialogAction(DialogAction a) {
             g.quests[QUEST_DEEP].progress = itemCount(IT_STAR_METAL) > 0 ? 1 : 0;
             playSoundIf(g.assets.confirm);
             pushToast("Quest started: Ember of the Deep");
+            break;
+        case DLG_START_QUEST_COMMONS:
+            questSetState(QUEST_COMMONS, QS_ACTIVE);
+            g.quests[QUEST_COMMONS].goal = 2;
+            g.quests[QUEST_COMMONS].progress = 0;
+            playSoundIf(g.assets.confirm);
+            pushToast("Quest started: The Kept Light");
+            break;
+        case DLG_FINISH_QUEST_COMMONS:
+            questSetState(QUEST_COMMONS, QS_DONE);
+            g.quests[QUEST_COMMONS].progress = 2;
+            g.gil += 40;
+            addItem(IT_CODEX, 1, true);
+            addItem(IT_ETHER, 2, true);
+            commonsRefreshFlame();          // variant 4 = the kept flame
+            playSoundIf(g.assets.levelup);
+            pushToast("The brazier is lit! Received the Commonplace, 2x Ether, 40 gil.");
             break;
         case DLG_FINISH_QUEST_DEEP:
             questSetState(QUEST_DEEP, QS_DONE);
@@ -655,10 +673,29 @@ void menuUpdate(float dt) {
         return;
     }
 
-    // ---- Page 3: Quests
+    // ---- Page 3: Quests + the Agents' Commons chronicle
     if (g.menuPage == 3) {
-        if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.menuIndex = (g.menuIndex + QUEST_COUNT - 1) % QUEST_COUNT; playSoundIf(g.assets.cursor); }
-        if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.menuIndex = (g.menuIndex + 1) % QUEST_COUNT; playSoundIf(g.assets.cursor); }
+        if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT)) { g.journalTab = 0; playSoundIf(g.assets.cursor); }
+        if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) { g.journalTab = 1; playSoundIf(g.assets.cursor); }
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            Vector2 m = getVirtualMouse();
+            for (int i = 0; i < 2; i++) {
+                if (CheckCollisionPointRec(m, { uiOx() + 122 + i * 96.0f, uiOy() + 18, 90, 16 })) {
+                    g.journalTab = i;
+                    playSoundIf(g.assets.cursor);
+                    return;
+                }
+            }
+        }
+        if (g.journalTab == 0) {
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.menuIndex = (g.menuIndex + QUEST_COUNT - 1) % QUEST_COUNT; playSoundIf(g.assets.cursor); }
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.menuIndex = (g.menuIndex + 1) % QUEST_COUNT; playSoundIf(g.assets.cursor); }
+        } else {
+            // The Commons page scrolls the real chronicle table (src/commons.cpp).
+            int maxSel = std::max(0, commonsBuiltStones() - 3);
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.commonsJournalSel = std::max(0, g.commonsJournalSel - 1); g.menuIndex = g.commonsJournalSel; playSoundIf(g.assets.cursor); }
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.commonsJournalSel = std::min(maxSel, g.commonsJournalSel + 1); g.menuIndex = g.commonsJournalSel; playSoundIf(g.assets.cursor); }
+        }
         return;
     }
 
@@ -1029,13 +1066,30 @@ void drawMenuScreen() {
                  ox + 122, oy + BASE_VH - 22.0f, Color{ 170, 185, 225, 230 }, 8);
     }
 
-    // ---- Page 3: Quests
+    // ---- Page 3: Quests + the Commons chronicle
     else if (g.menuPage == 3) {
-        drawText("JOURNAL / QUESTS", ox + 124, oy + 20, Color{ 255, 232, 150, 255 }, 8);
+        // Two views of the same journal: the errands, and the place that
+        // remembers the work behind them. A/D or a click switches.
+        const char* jt[2] = { "QUESTS", "THE COMMONS" };
+        for (int i = 0; i < 2; i++) {
+            Rectangle tr{ ox + 122 + i * 96.0f, oy + 18, 90, 16 };
+            bool sel = (i == g.journalTab);
+            drawPixelPanel(tr, sel ? Color{ 56, 86, 164, 255 } : Color{ 22, 32, 74, 220 },
+                           sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 200 });
+            drawTextCentered(jt[i], tr.x + tr.width * 0.5f, tr.y + 4,
+                             sel ? Color{ 255, 236, 176, 255 } : Color{ 190, 202, 232, 255 }, 8);
+        }
+        if (g.journalTab == 1) {
+            commonsJournalDraw(ox, oy);
+            return;
+        }
+        drawText("JOURNAL / QUESTS", ox + 124, oy + 38, Color{ 255, 232, 150, 255 }, 8);
+        // Five errands share a 288px window: 44px rows on a 45px pitch, so the
+        // last one ends at oy+269 and the footer keeps its own line at oy+268.
         for (int q = 0; q < QUEST_COUNT; q++) {
-            float y = oy + 40.0f + q * 61.0f;
+            float y = oy + 52.0f + q * 45.0f;
             bool sel = (q == g.menuIndex);
-            drawPixelPanel({ ox + 122, y, 366, 56 },
+            drawPixelPanel({ ox + 122, y, 366, 44 },
                              sel ? Color{ 36, 54, 116, 240 } : Color{ 22, 32, 74, 210 },
                              sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 200 });
             int st = g.quests[q].state;
@@ -1043,11 +1097,11 @@ void drawMenuScreen() {
                               : (st == QS_ACTIVE ? "ACTIVE" : "AVAILABLE");
             Color bc = (st == QS_DONE) ? Color{ 120, 240, 150, 255 }
                      : (st == QS_ACTIVE ? Color{ 255, 225, 110, 255 } : Color{ 175, 190, 220, 255 });
-            drawText(questTitle(q), ox + 130, y + 6, WHITE, 8);
+            drawText(questTitle(q), ox + 130, y + 4, WHITE, 8);
             Vector2 bsz = measureText(badge, 8);
-            drawText(badge, ox + 480 - bsz.x, y + 6, bc, 8);
+            drawText(badge, ox + 480 - bsz.x, y + 4, bc, 8);
 
-            drawTextWrapped(questGoalText(q), ox + 130, y + 19, 348, 10, Color{ 200, 212, 240, 255 }, 8);
+            drawTextWrapped(questGoalText(q), ox + 130, y + 16, 348, 9, Color{ 200, 212, 240, 255 }, 8);
 
             std::string prog;
             if (q == QUEST_SLIMES && st == QS_ACTIVE)
@@ -1059,13 +1113,18 @@ void drawMenuScreen() {
                 prog = (itemCount(IT_CROWN) > 0 || g.bossDefeated)
                      ? "Crown reclaimed! Return to Old Maren."
                      : "Castle of Elm: " + compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
-            if (!prog.empty()) drawText(prog.c_str(), ox + 130, y + 43, Color{ 155, 235, 185, 255 }, 8);
+            else if (q == QUEST_COMMONS && st == QS_ACTIVE)
+                prog = (g.quests[q].progress >= 2)
+                     ? "Hedge cleared! Return to Sable at the Commons brazier."
+                     : "Hedge wisps: " + std::to_string(std::min(2, g.quests[q].progress)) + " / 2  |  "
+                       + compassHint(g.px, g.py, 26.5f, 9.5f);
+            if (!prog.empty()) drawText(prog.c_str(), ox + 130, y + 31, Color{ 155, 235, 185, 255 }, 8);
         }
         char stat[96];
         int mins = (int)(g.runTime / 60.0f), secs = (int)g.runTime % 60;
         snprintf(stat, sizeof(stat), "Time %02d:%02d  |  Foes: %d  |  Chests: %d",
                  mins, secs, g.defeatedCount, (int)g.openedChests.size() + (g.towerChestOpened ? 1 : 0));
-        drawText(stat, ox + 124, oy + 240, Color{ 185, 200, 235, 255 }, 8);
+        drawText(stat, ox + 124, oy + 268, Color{ 185, 200, 235, 255 }, 8);
     }
 
     // ---- Page 4: Options & Save/Load
