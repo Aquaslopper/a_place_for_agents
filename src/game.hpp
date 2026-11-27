@@ -15,8 +15,10 @@
 #include <unordered_map>
 #include <algorithm>
 
-constexpr int VRES_W = 512;      // virtual framebuffer; presented aspect-correct
-constexpr int VRES_H = 288;
+constexpr int BASE_VW = 512;     // minimum virtual framebuffer dimensions (16:9 base)
+constexpr int BASE_VH = 288;
+constexpr int VRES_W = 512;      // reference 16:9 layout width
+constexpr int VRES_H = 288;      // reference 16:9 layout height
 constexpr int TILE = 16;
 
 // ============================================================== items
@@ -115,7 +117,7 @@ enum MusicCue { MUS_NONE = -1, MUS_TITLE, MUS_VILLAGE, MUS_FIELD, MUS_WOOD, MUS_
 
 enum NpcSprite { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_ELDER, NS_MAYOR,
     NS_WOMAN, NS_CHILD, NS_GUARD, NS_SOLDIER, NS_KNIGHT, NS_MERCHANT, NS_SMITH,
-    NS_PRIEST, NS_FARMER, NS_DOG, NS_CAT, NS_CHICKEN, NS_KIND_COUNT };
+    NS_PRIEST, NS_FARMER, NS_DOG, NS_CAT, NS_CHICKEN, NS_SHEEP, NS_KIND_COUNT };
 
 struct Assets {
     Texture2D landscape{}, relief{}, bridge{}, lilies{}, turnips{};
@@ -130,7 +132,8 @@ struct Assets {
     Texture2D well{}, sign{}, bench{}, torch{}, campfire{}, cauldron{}, bucket{}, flowerbed{};
     Texture2D fence{}, fencePost{}, fenceGate{}, ladder{};
     Texture2D statue{}, pillar{}, ruinShrine{}, ruinArch{}, tent{};
-    Texture2D barrel{}, table{}, counter{}, lantern{}, candle{}, keg{}, plate{}, shelf{};
+    Texture2D barrel{}, table{}, longtable{}, counter{}, lantern{}, candle{}, keg{}, plate{}, shelf{};
+    Texture2D mailbox{}, noticeboard{};
     Texture2D chestClosed{}, chestOpen{}, stump{}, bed{};
     Texture2D cloud{};
     // buildings
@@ -207,6 +210,11 @@ struct Village {
     std::vector<Deco> decos;
     std::vector<std::pair<int, int>> paths;               // road tiles (dirt)
     std::vector<std::pair<int, int>> plaza;               // cobbled tiles
+    std::vector<std::pair<int, int>> court;               // cut-stone flagstones
+    std::vector<std::pair<int, int>> grassDark;           // shaded woodland/orchard turf
+    std::vector<std::pair<int, int>> soil;                // tilled garden rows (with crops)
+    std::vector<std::pair<int, int>> flowers;             // village flower patches
+    std::vector<std::pair<int, int>> rocks;               // cliff/escarpment cells framing village
     bool startVillage = false;
 };
 
@@ -335,6 +343,14 @@ struct Game {
     Mode mode = MODE_TITLE;
     Assets assets;
     RenderTexture2D rt{};
+    RenderTexture2D upscaleRt{};
+    int vw = BASE_VW;              // active virtual framebuffer width (>= 512)
+    int vh = BASE_VH;              // active virtual framebuffer height (>= 288)
+    int winRestoreW = 1024;
+    int winRestoreH = 576;
+    int winRestoreX = 80;
+    int winRestoreY = 60;
+    bool borderlessFs = false;
 
     uint32_t worldSeed = 0;
     float runTime = 0;             // seconds of play this run
@@ -462,6 +478,7 @@ extern Game g;
 extern float gAnimTime;
 Vector2 getVirtualMouse();
 Rectangle getPresentationRect();
+void toggleFullscreenClean();
 void pushToast(const std::string& msg);
 void shakeScreen(float mag, float t);
 void returnToTitle();
@@ -477,6 +494,7 @@ void drawWindowBlue(Rectangle r);
 void drawText(const char* text, float x, float y, Color c, int size = 8);
 void drawTextCentered(const char* text, float cx, float y, Color c, int size = 8);
 void drawTextWrapped(const char* text, float x, float y, float maxW, float lineH, Color c, int size = 8);
+void drawWorldLabel(const char* text, float cx, float y, Color c, int size = 8);
 Vector2 measureText(const char* text, int size = 8);
 void drawBar(float x, float y, float w, float h, float frac, Color fill, Color back);
 void drawItemIcon(int itemId, float x, float y, float size = 16);

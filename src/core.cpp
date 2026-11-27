@@ -346,12 +346,15 @@ bool loadAllAssets() {
     a.ruinArch = loadTex(d, "sprites/ruin_arch.png");
     a.barrel = loadTex(d, "sprites/barrel.png");
     a.table = loadTex(d, "sprites/table.png");
+    a.longtable = loadTex(d, "sprites/longtable.png", false);
     a.counter = loadTex(d, "sprites/counter.png");
     a.lantern = loadTex(d, "sprites/lantern.png");
     a.candle = loadTex(d, "sprites/candle.png");
     a.keg = loadTex(d, "sprites/keg.png");
     a.plate = loadTex(d, "sprites/plate.png");
     a.shelf = loadTex(d, "sprites/shelf.png", false);
+    a.mailbox = loadTex(d, "sprites/mailbox.png", false);
+    a.noticeboard = loadTex(d, "sprites/noticeboard.png", false);
     a.chestClosed = loadTex(d, "sprites/chest_closed.png");
     a.chestOpen = loadTex(d, "sprites/chest_open.png");
     a.bed = loadTex(d, "sprites/bed.png", false);
@@ -377,6 +380,7 @@ bool loadAllAssets() {
         "sprites/npc_soldier.png", "sprites/npc_knight.png", "sprites/npc_merchant.png",
         "sprites/npc_smith.png", "sprites/npc_priest.png", "sprites/npc_farmer.png",
         "sprites/npc_dog.png", "sprites/npc_cat.png", "sprites/npc_chicken.png",
+        "sprites/npc_sheep.png",
     };
     for (int i = 0; i < NS_KIND_COUNT; i++) a.npc[i] = loadTex(d, npcs[i]);
 
@@ -481,33 +485,61 @@ static Color lerpCol(Color a, Color b, float t) {
 }
 
 void drawWindow(Rectangle r, bool dimInside) {
-    (void)dimInside;
-    DrawRectangleRounded({ r.x + 2, r.y + 3, r.width, r.height }, 0.14f, 5, Fade(BLACK, 0.35f));
-    for (int i = 0; i < (int)r.height; i++) {
-        float t = (float)i / std::max(1.0f, r.height - 1.0f);
-        Color c = lerpCol(Color{ 26, 42, 116, 236 }, Color{ 10, 16, 54, 244 }, t);
-        DrawRectangle((int)r.x, (int)r.y + i, (int)r.width, 1, c);
+    int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
+    int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
+    DrawRectangle(rx + 2, ry + 3, rw, rh, Fade(BLACK, 0.42f));
+    if (dimInside) {
+        for (int i = 0; i < rh; i++) {
+            float t = (float)i / std::max(1.0f, (float)rh - 1.0f);
+            Color c = lerpCol(Color{ 28, 44, 118, 250 }, Color{ 10, 16, 52, 252 }, t);
+            DrawRectangle(rx, ry + i, rw, 1, c);
+        }
+    } else {
+        DrawRectangle(rx, ry, rw, rh, Color{ 14, 20, 56, 236 });
     }
-    DrawRectangleRoundedLinesEx({ r.x + 0.5f, r.y + 0.5f, r.width - 1, r.height - 1 }, 0.14f, 5,
-                                1.4f, Color{ 236, 240, 255, 255 });
-    DrawRectangleRoundedLinesEx({ r.x + 2.5f, r.y + 2.5f, r.width - 5, r.height - 5 }, 0.12f, 5,
-                                1.0f, Color{ 96, 118, 208, 255 });
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
+    if (rw > 4 && rh > 4) {
+        DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
+                             1.0f, Color{ 236, 240, 255, 255 });
+    }
+    if (rw > 6 && rh > 6) {
+        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
+                             1.0f, Color{ 96, 118, 208, 255 });
+    }
 }
 
 void drawWindowBlue(Rectangle r) {
-    DrawRectangleRounded({ r.x + 2, r.y + 3, r.width, r.height }, 0.14f, 5, Fade(BLACK, 0.35f));
-    DrawRectangleRounded(r, 0.14f, 5, Color{ 16, 20, 48, 240 });
-    DrawRectangleRoundedLinesEx(r, 0.14f, 5, 1.4f, Color{ 255, 214, 130, 255 });
+    int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
+    int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
+    DrawRectangle(rx + 2, ry + 3, rw, rh, Fade(BLACK, 0.42f));
+    DrawRectangle(rx, ry, rw, rh, Color{ 16, 20, 48, 250 });
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
+    if (rw > 4 && rh > 4) {
+        DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
+                             1.0f, Color{ 255, 214, 130, 255 });
+    }
+    if (rw > 6 && rh > 6) {
+        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
+                             1.0f, Color{ 118, 96, 56, 255 });
+    }
 }
 
 Vector2 measureText(const char* text, int size) {
-    Font f = (size >= 24) ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8);
+    if (!text || !text[0]) return { 0.0f, (float)size };
+    Font f = (size >= 32) ? g.assets.font32 : (size >= 24 ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8));
     return MeasureTextEx(f, text, (float)size, 1.0f);
 }
 
 static void drawLine(const char* s, float x, float y, Color c, int size) {
-    Font f = (size >= 24) ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8);
-    DrawTextEx(f, s, { x, y }, (float)size, 1.0f, c);
+    if (!s || !s[0]) return;
+    Font f = (size >= 32) ? g.assets.font32 : (size >= 24 ? g.assets.font24 : (size >= 16 ? g.assets.font16 : g.assets.font8));
+    float px = floorf(x);
+    float py = floorf(y);
+    if ((int)c.r + (int)c.g + (int)c.b >= 45 && c.a > 24) {
+        unsigned char sa = (unsigned char)((int)c.a * 230 / 255);
+        DrawTextEx(f, s, { px + 1.0f, py + 1.0f }, (float)size, 1.0f, Color{ 6, 8, 18, sa });
+    }
+    DrawTextEx(f, s, { px, py }, (float)size, 1.0f, c);
 }
 
 void drawText(const char* text, float x, float y, Color c, int size) {
@@ -515,7 +547,21 @@ void drawText(const char* text, float x, float y, Color c, int size) {
 }
 void drawTextCentered(const char* text, float cx, float y, Color c, int size) {
     Vector2 s = measureText(text, size);
-    drawLine(text, floorf(cx - s.x * 0.5f), y, c, size);
+    drawLine(text, floorf(cx - s.x * 0.5f), floorf(y), c, size);
+}
+void drawWorldLabel(const char* text, float cx, float y, Color c, int size) {
+    if (!text || !text[0]) return;
+    Vector2 s = measureText(text, size);
+    int tx = (int)floorf(cx - s.x * 0.5f);
+    int ty = (int)floorf(y);
+    int pw = (int)ceilf(s.x) + 6;
+    int ph = size + 4;
+    unsigned char ba = (unsigned char)((int)c.a * 220 / 255);
+    unsigned char la = (unsigned char)((int)c.a * 175 / 255);
+    DrawRectangle(tx - 3, ty - 2, pw, ph, Color{ 10, 14, 28, ba });
+    DrawRectangleLinesEx({ (float)(tx - 3), (float)(ty - 2), (float)pw, (float)ph },
+                         1.0f, Color{ 112, 128, 196, la });
+    drawLine(text, (float)tx, (float)ty, c, size);
 }
 
 void drawTextWrapped(const char* text, float x, float y, float maxW, float lineH, Color c, int size) {

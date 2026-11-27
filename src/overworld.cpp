@@ -11,25 +11,22 @@ static const float WALK_SPEED = 4.4f;     // tiles / second
 static const float RUN_SPEED  = 7.2f;
 
 Vector2 getVirtualMouse() {
-    // Convert through the exact same aspect-preserving viewport used to draw
-    // the framebuffer. A pointer in the letterbox remains outside the canvas,
-    // so clicks there cannot trigger world movement or invisible UI buttons.
     Vector2 m = GetMousePosition();
     Rectangle dst = getPresentationRect();
     if (dst.width <= 0.0f || dst.height <= 0.0f) return { -1.0f, -1.0f };
-    return { (m.x - dst.x) * VRES_W / dst.width,
-             (m.y - dst.y) * VRES_H / dst.height };
+    return { (m.x - dst.x) * (float)g.vw / dst.width,
+             (m.y - dst.y) * (float)g.vh / dst.height };
 }
 
 static bool mouseInVirtual() {
     Vector2 m = getVirtualMouse();
-    return m.x >= 0 && m.x < VRES_W && m.y >= 0 && m.y < VRES_H;
+    return m.x >= 0 && m.x < g.vw && m.y >= 0 && m.y < g.vh;
 }
 
 // ================================================================ camera
 static void updateCamera(float dt) {
-    float targetX = g.px * TILE - VRES_W * 0.5f;
-    float targetY = g.py * TILE - VRES_H * 0.5f;
+    float targetX = g.px * TILE - g.vw * 0.5f;
+    float targetY = g.py * TILE - g.vh * 0.5f;
     float k = 1.0f - powf(0.0004f, dt);     // frame-rate independent smoothing
     g.camX += (targetX - g.camX) * k;
     g.camY += (targetY - g.camY) * k;
@@ -38,8 +35,8 @@ static void updateCamera(float dt) {
 }
 
 void overworldSnapCamera() {
-    g.camX = g.px * TILE - VRES_W * 0.5f;
-    g.camY = g.py * TILE - VRES_H * 0.5f;
+    g.camX = g.px * TILE - g.vw * 0.5f;
+    g.camY = g.py * TILE - g.vh * 0.5f;
 }
 
 // ================================================================ encounters
@@ -413,8 +410,8 @@ static void interactWithNearest() {
     if (g.villageLoaded) {
         for (size_t i = 0; i < g.village.buildings.size(); i++) {
             const Building& b = g.village.buildings[i];
-            float dx = (float)b.tx + 0.5f - g.px;
-            float dy = (float)b.ty + 1.4f - g.py;
+            float dx = (float)buildingDoorTx(b) + 0.5f - g.px;
+            float dy = (float)buildingDoorTy(b) + 0.4f - g.py;
             if (dx * dx + dy * dy < 1.75f * 1.75f) {
                 enterBuilding((int)i);
                 return;
@@ -422,13 +419,16 @@ static void interactWithNearest() {
         }
     }
 
-    // 7. Village signs & wells
+    // 7. Village signs, noticeboards, mailboxes & wells
     if (g.villageLoaded && inVillage(g.px, g.py)) {
         for (const auto& d : g.village.decos) {
             float dx = (d.x + 0.5f) - g.px, dy = (d.y + 0.5f) - g.py;
-            if (d.kind == VD_SIGN && dx * dx + dy * dy < 1.85f * 1.85f) {
+            if ((d.kind == VD_SIGN || d.kind == VD_NOTICEBOARD) && dx * dx + dy * dy < 1.85f * 1.85f) {
                 std::vector<DialogLine> lines;
-                if (g.village.startVillage) {
+                if (d.kind == VD_NOTICEBOARD) {
+                    lines.push_back({ -1, "", "ELMSWICK FIELD BOARD — Posted notices:" });
+                    lines.push_back({ -1, "", "'Wanted: six fewer meadow slimes (see Farmer Hedrick). Lost: one silver locket near the Standing Stones (see Tamsin).'" });
+                } else if (g.village.startVillage) {
                     lines.push_back({ -1, "", "ELMSWICK — 'Where the meadow begins.'" });
                     lines.push_back({ -1, "", "North past the chapel: Briarwood and the castle. West past the shop: the marsh and Old Watchtower." });
                     lines.push_back({ -1, "", "South across Millbrook: east for the Standing Stones, southwest for the Sunscorch Flats." });
@@ -440,7 +440,12 @@ static void interactWithNearest() {
                 g.interactT = 0.2f;
                 return;
             }
-            if (d.kind == VD_WELL && dx * dx + dy * dy < 2.1f * 2.1f) {
+            if (d.kind == VD_MAILBOX && dx * dx + dy * dy < 1.6f * 1.6f) {
+                pushToast("Tied with twine: field dispatches and seed catalogues.");
+                g.interactT = 0.15f;
+                return;
+            }
+            if (d.kind == VD_WELL && dx * dx + dy * dy < 2.2f * 2.2f) {
                 bool healed = false;
                 for (auto& h : g.party) {
                     if (!h.ko && h.hp < h.maxHp) {
@@ -479,11 +484,11 @@ static void clickToMove() {
     if (g.villageLoaded) {
         for (size_t i = 0; i < g.village.buildings.size(); i++) {
             const Building& b = g.village.buildings[i];
-            float x0 = (float)(b.tx - b.w / 2) * TILE - g.camX;
-            float y0 = (float)(b.ty - b.h + 1) * TILE - g.camY;
+            float x0 = (float)buildingX0(b) * TILE - g.camX;
+            float y0 = (float)buildingY0(b) * TILE - g.camY;
             float bw = (float)b.w * TILE, bh = (float)(b.h + 1) * TILE;
             if (CheckCollisionPointRec(m, { x0, y0, bw, bh })) {
-                int doorTx = b.tx, doorTy = b.ty + 1;
+                int doorTx = buildingDoorTx(b), doorTy = buildingDoorTy(b);
                 float ddx = (doorTx + 0.5f) - g.px, ddy = (doorTy + 0.5f) - g.py;
                 if (ddx * ddx + ddy * ddy < 1.3f * 1.3f) {
                     enterBuilding((int)i);
@@ -726,14 +731,16 @@ const char* interactionPrompt() {
     }
     if (g.villageLoaded) {
         for (const auto& b : g.village.buildings) {
-            float dx = (float)b.tx + 0.5f - g.px, dy = (float)b.ty + 1.4f - g.py;
+            float dx = (float)buildingDoorTx(b) + 0.5f - g.px, dy = (float)buildingDoorTy(b) + 0.4f - g.py;
             if (dx * dx + dy * dy < 1.75f * 1.75f) return "SPACE: go inside";
         }
         if (inVillage(g.px, g.py)) {
             for (const auto& d : g.village.decos) {
                 float dx = (d.x + 0.5f) - g.px, dy = (d.y + 0.5f) - g.py;
+                if (d.kind == VD_NOTICEBOARD && dx * dx + dy * dy < 1.85f * 1.85f) return "SPACE: read notices";
                 if (d.kind == VD_SIGN && dx * dx + dy * dy < 1.85f * 1.85f) return "SPACE: read sign";
-                if (d.kind == VD_WELL && dx * dx + dy * dy < 2.1f * 2.1f) return "SPACE: look in well";
+                if (d.kind == VD_MAILBOX && dx * dx + dy * dy < 1.6f * 1.6f) return "SPACE: check mailbox";
+                if (d.kind == VD_WELL && dx * dx + dy * dy < 2.2f * 2.2f) return "SPACE: look in well";
             }
         }
     }

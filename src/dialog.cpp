@@ -2,7 +2,12 @@
 #include "game.hpp"
 #include "world.hpp"
 #include "battle.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
+
+static inline float uiOx() { return floorf((g.vw - BASE_VW) * 0.5f); }
+static inline float uiOy() { return floorf((g.vh - BASE_VH) * 0.5f); }
 
 // ================================================================ dialog
 void startDialog(const std::vector<DialogLine>& lines, DialogAction action) {
@@ -109,7 +114,6 @@ void dialogUpdate(float dt) {
     const DialogLine& line = g.dialog[std::min<int>(g.dialogIndex, (int)g.dialog.size() - 1)];
     g.dialogReveal += dt * 44.0f;
     int chars = (int)g.dialogReveal;
-    // Soft typewriter blip every 3rd revealed character (no per-frame cursor spam!)
     if (chars < (int)line.text.size() && (chars / 3) != g.dialogLastBlip) {
         g.dialogLastBlip = chars / 3;
         playSoundIf(g.assets.cursor);
@@ -180,12 +184,11 @@ static std::vector<int> equippableForSlot(int slot) {
     return out;
 }
 
-// Shared shop/inn geometry constants
 static const int SHOP_VISIBLE = 9;
 static const float SHOP_ROW_Y0 = 56.0f;
 static const float SHOP_ROW_H  = 17.0f;
-static const Rectangle INN_BTN_STAY  = { 150, 164, 96, 24 };
-static const Rectangle INN_BTN_LEAVE = { 266, 164, 96, 24 };
+static inline Rectangle innBtnStay()  { return { uiOx() + 146.0f, uiOy() + 180.0f, 100.0f, 24.0f }; }
+static inline Rectangle innBtnLeave() { return { uiOx() + 266.0f, uiOy() + 180.0f, 100.0f, 24.0f }; }
 
 static void clampShopScroll(int count) {
     if (count <= 0) { g.shopIndex = 0; g.shopScroll = 0; return; }
@@ -245,8 +248,9 @@ static void innRest() {
     }
 }
 
-// ================================================================ shop & inn updates (pure logic)
+// ================================================================ shop & inn updates
 static void shopUpdateInternal() {
+    float ox = uiOx(), oy = uiOy();
     auto stock = shopStock();
     auto owned = ownedItems();
     int count = (g.shopTab == 0) ? (int)stock.size() : (int)owned.size();
@@ -289,17 +293,17 @@ static void shopUpdateInternal() {
 
     Vector2 m = getVirtualMouse();
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        if (CheckCollisionPointRec(m, { 26, 30, 80, 18 })) {
+        if (CheckCollisionPointRec(m, { ox + 26, oy + 30, 80, 18 })) {
             g.shopTab = 0; g.shopIndex = 0; g.shopScroll = 0; playSoundIf(g.assets.cursor);
-        } else if (CheckCollisionPointRec(m, { 112, 30, 80, 18 })) {
+        } else if (CheckCollisionPointRec(m, { ox + 112, oy + 30, 80, 18 })) {
             g.shopTab = 1; g.shopIndex = 0; g.shopScroll = 0; playSoundIf(g.assets.cursor);
-        } else if (CheckCollisionPointRec(m, { VRES_W - 88.0f, 30, 62, 18 })) {
+        } else if (CheckCollisionPointRec(m, { ox + BASE_VW - 88.0f, oy + 30, 62, 18 })) {
             g.mode = g.menuReturn; g.menuPage = 0; playSoundIf(g.assets.cancel);
         } else {
             for (int row = 0; row < SHOP_VISIBLE; row++) {
                 int idx = g.shopScroll + row;
                 if (idx >= count) break;
-                Rectangle rr{ 24, SHOP_ROW_Y0 + row * SHOP_ROW_H, VRES_W - 48.0f, SHOP_ROW_H - 1.0f };
+                Rectangle rr{ ox + 24, oy + SHOP_ROW_Y0 + row * SHOP_ROW_H, BASE_VW - 48.0f, SHOP_ROW_H - 1.0f };
                 if (CheckCollisionPointRec(m, rr)) {
                     g.shopIndex = idx;
                     if (g.shopTab == 0) buyShopItem(stock[idx]);
@@ -331,55 +335,65 @@ static void innUpdateInternal() {
     }
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 m = getVirtualMouse();
-        if (CheckCollisionPointRec(m, INN_BTN_STAY)) { g.innChoice = 0; innRest(); }
-        else if (CheckCollisionPointRec(m, INN_BTN_LEAVE)) { g.mode = g.menuReturn; g.menuPage = 0; playSoundIf(g.assets.cancel); }
+        if (CheckCollisionPointRec(m, innBtnStay())) { g.innChoice = 0; innRest(); }
+        else if (CheckCollisionPointRec(m, innBtnLeave())) { g.mode = g.menuReturn; g.menuPage = 0; playSoundIf(g.assets.cancel); }
     }
 }
 
-// ================================================================ pause menu update (NO drawing!)
+// ================================================================ pause menu update
 static bool gShowControlsModal = false;
 
-// Sound Room uses the normal director (including the music preference), not
-// a second player on top of the game. Browsing is deliberately non-persistent.
-static Rectangle trackRow(int i) { return {35.f+(i/7)*224, 57.f+(i%7)*21, 214, 18}; }
-static const Rectangle soundBack{382,238,89,21};
-static void soundRoomUpdate() {
-    Vector2 m=getVirtualMouse(); bool click=IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_TAB) || (click && CheckCollisionPointRec(m,soundBack))) {
-        g.menuPage=4; playSoundIf(g.assets.cancel); return;
-    }
-    int sel=g.audition;
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) sel=(sel+MUS_COUNT-1)%MUS_COUNT;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) sel=(sel+1)%MUS_COUNT;
-    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D))
-        sel=sel>=7 ? sel-7 : std::min(sel+7,(int)MUS_COUNT-1);
-    if (click) for (int i=0;i<MUS_COUNT;++i) if (CheckCollisionPointRec(m,trackRow(i))) sel=i;
-    if (sel!=g.audition) { g.audition=(MusicCue)sel; playSoundIf(g.assets.cursor); }
+static Rectangle trackRow(int i) {
+    return { uiOx() + 35.f + (i / 7) * 224.f, uiOy() + 57.f + (i % 7) * 21.f, 214.f, 18.f };
 }
-static void drawSoundRoom() {
-    DrawRectangle(0,0,VRES_W,VRES_H,Fade(BLACK,0.72f)); drawWindow({23,15,466,256});
-    drawText("SOUND ROOM",36,27,Color{255,231,166,255},16);
-    drawText("OpenRTP / 13 cues",301,31,Color{190,205,229,255},8);
-    for (int i=0;i<MUS_COUNT;++i) {
-        Rectangle r=trackRow(i); bool sel=g.audition==i; char n[4]; snprintf(n,sizeof(n),"%02d",i+1);
-        DrawRectangleRec(r,sel ? Color{64,80,122,255} : Color{26,37,74,230});
-        if (sel) DrawRectangle((int)r.x,(int)r.y,2,(int)r.height,Color{245,210,136,255});
-        drawText(n,r.x+7,r.y+5,Color{205,186,142,255},8);
-        drawText(cueTitle((MusicCue)i),r.x+32,r.y+5,sel?WHITE:Color{195,208,232,255},8);
+static inline Rectangle soundBackRect() { return { uiOx() + 382.f, uiOy() + 238.f, 89.f, 21.f }; }
+
+static void soundRoomUpdate() {
+    Vector2 m = getVirtualMouse();
+    bool click = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_TAB) || (click && CheckCollisionPointRec(m, soundBackRect()))) {
+        g.menuPage = 4; playSoundIf(g.assets.cancel); return;
     }
-    Music m=g.assets.score[g.audition]; bool valid=IsMusicValid(m) && m.stream.buffer;
-    float time=valid ? GetMusicTimePlayed(m):0.f, len=valid ? GetMusicTimeLength(m):0.f;
-    char info[96]; snprintf(info,sizeof(info),"%s  %d:%02d / %d:%02d",cueTitle(g.audition),
-            (int)time/60,(int)time%60,(int)len/60,(int)len%60);
-    drawText(!valid?"No audio device or stream":g.musicOn?info:"Music is off in Options",37,212,WHITE,8);
-    drawBar(37,226,432,4,len>0?time/len:0,Color{223,189,123,255},Color{38,51,84,255});
-    drawText("Arrows or click to listen",37,245,Color{185,201,224,255},8);
-    drawButton("Back",soundBack,8,false);
+    int sel = g.audition;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) sel = (sel + MUS_COUNT - 1) % MUS_COUNT;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) sel = (sel + 1) % MUS_COUNT;
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D))
+        sel = sel >= 7 ? sel - 7 : std::min(sel + 7, (int)MUS_COUNT - 1);
+    if (click) for (int i = 0; i < MUS_COUNT; ++i) if (CheckCollisionPointRec(m, trackRow(i))) sel = i;
+    if (sel != g.audition) { g.audition = (MusicCue)sel; playSoundIf(g.assets.cursor); }
+}
+
+static void drawSoundRoom() {
+    float ox = uiOx(), oy = uiOy();
+    DrawRectangle(0, 0, g.vw, g.vh, Fade(BLACK, 0.76f));
+    drawWindow({ ox + 23, oy + 15, 466, 256 });
+    drawText("SOUND ROOM", ox + 36, oy + 27, Color{ 255, 231, 166, 255 }, 16);
+    drawText("OpenRTP / 13 cues", ox + 301, oy + 31, Color{ 190, 205, 229, 255 }, 8);
+    for (int i = 0; i < MUS_COUNT; ++i) {
+        Rectangle r = trackRow(i);
+        bool sel = g.audition == i;
+        char n[4]; snprintf(n, sizeof(n), "%02d", i + 1);
+        DrawRectangleRec(r, sel ? Color{ 64, 80, 122, 255 } : Color{ 26, 37, 74, 230 });
+        if (sel) DrawRectangle((int)r.x, (int)r.y, 2, (int)r.height, Color{ 245, 210, 136, 255 });
+        drawText(n, r.x + 7, r.y + 5, Color{ 205, 186, 142, 255 }, 8);
+        drawText(cueTitle((MusicCue)i), r.x + 32, r.y + 5, sel ? WHITE : Color{ 195, 208, 232, 255 }, 8);
+    }
+    Music m = g.assets.score[g.audition];
+    bool valid = IsMusicValid(m) && m.stream.buffer;
+    float time = valid ? GetMusicTimePlayed(m) : 0.f, len = valid ? GetMusicTimeLength(m) : 0.f;
+    char info[96];
+    snprintf(info, sizeof(info), "%s  %d:%02d / %d:%02d", cueTitle(g.audition),
+             (int)time / 60, (int)time % 60, (int)len / 60, (int)len % 60);
+    drawText(!valid ? "No audio device or stream" : g.musicOn ? info : "Music is off in Options",
+             ox + 37, oy + 212, WHITE, 8);
+    drawBar(ox + 37, oy + 226, 432, 4, len > 0 ? time / len : 0, Color{ 223, 189, 123, 255 }, Color{ 38, 51, 84, 255 });
+    drawText("Arrows or click to listen", ox + 37, oy + 245, Color{ 185, 201, 224, 255 }, 8);
+    drawButton("Back", soundBackRect(), 8, false);
 }
 
 void menuUpdate(float dt) {
     (void)dt;
-    // Shop & Inn live as pages 5 and 6 of MODE_MENU
+    float ox = uiOx(), oy = uiOy();
     if (g.menuPage == 7) { soundRoomUpdate(); return; }
     if (g.menuPage == 5) { shopUpdateInternal(); return; }
     if (g.menuPage == 6) { innUpdateInternal(); return; }
@@ -426,10 +440,9 @@ void menuUpdate(float dt) {
     Vector2 m = getVirtualMouse();
     bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
-    // Sidebar tab clicks
     if (clicked) {
         for (int i = 0; i < 5; i++) {
-            if (CheckCollisionPointRec(m, { 16, (float)(42 + i * 26), 84, 22 })) {
+            if (CheckCollisionPointRec(m, { ox + 16, oy + 42.0f + i * 26.0f, 84, 22 })) {
                 g.menuPage = i;
                 g.menuIndex = 0; g.menuItem = -1; g.equipIndex = -1;
                 playSoundIf(g.assets.cursor);
@@ -438,7 +451,7 @@ void menuUpdate(float dt) {
         }
     }
 
-    // ---- Page 0: Party (Front/Back row toggle)
+    // ---- Page 0: Party
     if (g.menuPage == 0) {
         if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.menuIndex = (g.menuIndex + 2) % 3; playSoundIf(g.assets.cursor); }
         if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.menuIndex = (g.menuIndex + 1) % 3; playSoundIf(g.assets.cursor); }
@@ -448,7 +461,7 @@ void menuUpdate(float dt) {
         }
         if (clicked) {
             for (int i = 0; i < 3; i++) {
-                if (CheckCollisionPointRec(m, { 118, (float)(20 + i * 80), 376, 72 })) {
+                if (CheckCollisionPointRec(m, { ox + 118, oy + 20.0f + i * 78.0f, 376, 72 })) {
                     g.menuIndex = i;
                     g.party[i].row = 1 - g.party[i].row;
                     playSoundIf(g.assets.confirm);
@@ -479,7 +492,7 @@ void menuUpdate(float dt) {
             if (clicked) {
                 int scroll = std::max(0, g.menuIndex - 8);
                 for (int row = 0; row < 10 && scroll + row < n; row++) {
-                    if (CheckCollisionPointRec(m, { 122, (float)(42 + row * 17), 366, 16 })) {
+                    if (CheckCollisionPointRec(m, { ox + 122, oy + 42.0f + row * 17.0f, 366, 16 })) {
                         g.menuIndex = scroll + row;
                         int id = items[g.menuIndex];
                         const ItemDef& d = itemDef(id);
@@ -507,7 +520,7 @@ void menuUpdate(float dt) {
             }
             if (clicked) {
                 for (int i = 0; i < 3; i++) {
-                    if (CheckCollisionPointRec(m, { 140, (float)(96 + i * 32), 232, 26 })) {
+                    if (CheckCollisionPointRec(m, { ox + 110, oy + 90.0f + i * 32.0f, 292, 26 })) {
                         g.menuUseHero = i;
                         if (applyConsumable(g.menuItem, i)) {
                             playSoundIf(g.assets.heal);
@@ -541,19 +554,19 @@ void menuUpdate(float dt) {
             }
             if (clicked) {
                 for (int i = 0; i < 3; i++) {
-                    if (CheckCollisionPointRec(m, { (float)(122 + i * 122), 24, 116, 22 })) {
+                    if (CheckCollisionPointRec(m, { ox + 122.0f + i * 122.0f, oy + 24, 116, 22 })) {
                         g.equipHero = i; playSoundIf(g.assets.cursor); return;
                     }
                 }
                 for (int s = 0; s < 3; s++) {
-                    if (CheckCollisionPointRec(m, { 122, (float)(74 + s * 28), 186, 24 })) {
+                    if (CheckCollisionPointRec(m, { ox + 122, oy + 74.0f + s * 28.0f, 186, 24 })) {
                         g.equipSlot = s; g.equipIndex = 0; playSoundIf(g.assets.confirm); return;
                     }
                 }
             }
         } else {
             auto cands = equippableForSlot(g.equipSlot);
-            int total = (int)cands.size() + 1; // last row = [Unequip]
+            int total = (int)cands.size() + 1;
             if (g.equipIndex >= total) g.equipIndex = 0;
             if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.equipIndex = (g.equipIndex + total - 1) % total; playSoundIf(g.assets.cursor); }
             if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.equipIndex = (g.equipIndex + 1) % total; playSoundIf(g.assets.cursor); }
@@ -569,7 +582,7 @@ void menuUpdate(float dt) {
             }
             if (clicked) {
                 for (int i = 0; i < total && i < 8; i++) {
-                    if (CheckCollisionPointRec(m, { 316, (float)(74 + i * 20), 174, 18 })) {
+                    if (CheckCollisionPointRec(m, { ox + 316, oy + 74.0f + i * 20.0f, 174, 18 })) {
                         if (i < (int)cands.size()) {
                             equipHeroItem(g.equipHero, g.equipSlot, cands[i]);
                             playSoundIf(g.assets.confirm);
@@ -620,7 +633,7 @@ void menuUpdate(float dt) {
                 g.waitBattle = !g.waitBattle;
                 playSoundIf(g.assets.confirm);
             } else if (idx == 4) {
-                ToggleFullscreen();
+                toggleFullscreenClean();
                 playSoundIf(g.assets.confirm);
             } else if (idx == 5) {
                 g.crtOn = !g.crtOn;
@@ -629,7 +642,7 @@ void menuUpdate(float dt) {
                 gShowControlsModal = true;
                 playSoundIf(g.assets.confirm);
             } else if (idx == 7) {
-                g.audition = playingCue()==MUS_NONE ? MUS_VILLAGE : playingCue();
+                g.audition = playingCue() == MUS_NONE ? MUS_VILLAGE : playingCue();
                 g.menuPage = 7; playSoundIf(g.assets.confirm);
             } else if (idx == 8) {
                 returnToTitle();
@@ -638,7 +651,7 @@ void menuUpdate(float dt) {
         if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) act(g.optionsIndex);
         if (clicked) {
             for (int i = 0; i < NOPT; i++) {
-                if (CheckCollisionPointRec(m, { 130, (float)(42 + i * 25), 346, 22 })) {
+                if (CheckCollisionPointRec(m, { ox + 126, oy + 40.0f + i * 24.0f, 360, 21 })) {
                     g.optionsIndex = i; act(i); break;
                 }
             }
@@ -648,19 +661,20 @@ void menuUpdate(float dt) {
 
 // ================================================================ shop / inn / pause menu render
 static void drawShopPage() {
+    float ox = uiOx(), oy = uiOy();
     auto stock = shopStock();
     auto owned = ownedItems();
     int count = (g.shopTab == 0) ? (int)stock.size() : (int)owned.size();
     clampShopScroll(count);
 
-    DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{ 8, 12, 26, 255 }, 0.85f));
-    drawWindow({ 14, 10, VRES_W - 28.0f, VRES_H - 20.0f });
+    DrawRectangle(0, 0, g.vw, g.vh, Fade(Color{ 8, 12, 26, 255 }, 0.85f));
+    drawWindow({ ox + 14, oy + 10, BASE_VW - 28.0f, BASE_VH - 20.0f });
 
     const char* title = g.shopTitle.empty() ? "Mira's Sundries" : g.shopTitle.c_str();
-    drawText(title, 26, 17, Color{ 255, 232, 150, 255 }, 8);
+    drawText(title, ox + 26, oy + 17, Color{ 255, 232, 150, 255 }, 8);
     char gbuf[48]; snprintf(gbuf, sizeof(gbuf), "Gil: %d", g.gil);
     Vector2 gsz = measureText(gbuf, 8);
-    drawText(gbuf, VRES_W - 26.0f - gsz.x, 17, Color{ 255, 232, 150, 255 }, 8);
+    drawText(gbuf, ox + BASE_VW - 26.0f - gsz.x, oy + 17, Color{ 255, 232, 150, 255 }, 8);
 
     auto drawTab = [&](Rectangle r, const char* label, bool active) {
         DrawRectangleRounded(r, 0.35f, 4, active ? Color{ 62, 92, 170, 255 } : Color{ 26, 36, 78, 255 });
@@ -669,47 +683,48 @@ static void drawShopPage() {
         drawTextCentered(label, r.x + r.width * 0.5f, r.y + 5,
                          active ? Color{ 255, 240, 180, 255 } : Color{ 185, 200, 235, 255 }, 8);
     };
-    drawTab({ 26, 30, 80, 18 }, "BUY",  g.shopTab == 0);
-    drawTab({ 112, 30, 80, 18 }, "SELL", g.shopTab == 1);
-    drawTab({ VRES_W - 88.0f, 30, 62, 18 }, "EXIT", false);
+    drawTab({ ox + 26, oy + 30, 80, 18 }, "BUY",  g.shopTab == 0);
+    drawTab({ ox + 112, oy + 30, 80, 18 }, "SELL", g.shopTab == 1);
+    drawTab({ ox + BASE_VW - 88.0f, oy + 30, 62, 18 }, "EXIT", false);
 
     if (count == 0) {
-        drawText("Your bag is empty.", 34, 80, Color{ 180, 190, 220, 255 }, 8);
+        drawText("Your bag is empty.", ox + 34, oy + 80, Color{ 180, 190, 220, 255 }, 8);
     } else {
         for (int row = 0; row < SHOP_VISIBLE; row++) {
             int idx = g.shopScroll + row;
             if (idx >= count) break;
-            float y = SHOP_ROW_Y0 + row * SHOP_ROW_H;
+            float y = oy + SHOP_ROW_Y0 + row * SHOP_ROW_H;
             bool sel = (idx == g.shopIndex);
             if (sel) {
-                DrawRectangle(24, (int)y, VRES_W - 48, (int)SHOP_ROW_H - 1, Color{ 52, 76, 152, 230 });
-                DrawRectangleLines(24, (int)y, VRES_W - 48, (int)SHOP_ROW_H - 1, Color{ 255, 232, 150, 200 });
+                DrawRectangle((int)ox + 24, (int)y, BASE_VW - 48, (int)SHOP_ROW_H - 1, Color{ 52, 76, 152, 230 });
+                DrawRectangleLines((int)ox + 24, (int)y, BASE_VW - 48, (int)SHOP_ROW_H - 1, Color{ 255, 232, 150, 200 });
             }
             int id = (g.shopTab == 0) ? stock[idx] : owned[idx];
             const ItemDef& d = itemDef(id);
-            drawItemIcon(id, 30, y + 1, 14);
-            drawText(d.name, 50, y + 4, WHITE, 8);
-            if (sel) drawCursor(26, y + 5);
+            if (sel) drawCursor(ox + 27, y + 4);
+            drawItemIcon(id, ox + 38, y + 1, 14);
+            drawText(d.name, ox + 56, y + 4, WHITE, 8);
 
             if (g.shopTab == 0) {
                 int own = itemCount(id);
                 if (own > 0) {
                     char obuf[24]; snprintf(obuf, sizeof(obuf), "Own:%d", own);
-                    drawText(obuf, 260, y + 4, Color{ 165, 210, 255, 255 }, 8);
+                    drawText(obuf, ox + 272, y + 4, Color{ 165, 210, 255, 255 }, 8);
                 }
                 char pbuf[24]; snprintf(pbuf, sizeof(pbuf), "%d g", d.price);
                 Color pc = (g.gil >= d.price) ? Color{ 255, 232, 150, 255 } : Color{ 220, 110, 110, 255 };
                 Vector2 psz = measureText(pbuf, 8);
-                drawText(pbuf, VRES_W - 32.0f - psz.x, y + 4, pc, 8);
+                drawText(pbuf, ox + BASE_VW - 32.0f - psz.x, y + 4, pc, 8);
             } else {
                 char qbuf[24]; snprintf(qbuf, sizeof(qbuf), "x%d", itemCount(id));
-                drawText(qbuf, 270, y + 4, Color{ 180, 200, 240, 255 }, 8);
+                drawText(qbuf, ox + 276, y + 4, Color{ 180, 200, 240, 255 }, 8);
                 if (!d.sells || d.kind == IK_KEY || d.price <= 0) {
-                    drawText("Key item", VRES_W - 100.0f, y + 4, Color{ 160, 170, 200, 255 }, 8);
+                    Vector2 ksz = measureText("Key item", 8);
+                    drawText("Key item", ox + BASE_VW - 32.0f - ksz.x, y + 4, Color{ 160, 170, 200, 255 }, 8);
                 } else {
                     char sbuf[24]; snprintf(sbuf, sizeof(sbuf), "+%d g", std::max(1, d.price / 2));
                     Vector2 ssz = measureText(sbuf, 8);
-                    drawText(sbuf, VRES_W - 32.0f - ssz.x, y + 4, Color{ 150, 240, 170, 255 }, 8);
+                    drawText(sbuf, ox + BASE_VW - 32.0f - ssz.x, y + 4, Color{ 150, 240, 170, 255 }, 8);
                 }
             }
         }
@@ -718,37 +733,47 @@ static void drawShopPage() {
             snprintf(sc, sizeof(sc), "%d-%d / %d", g.shopScroll + 1,
                      std::min(count, g.shopScroll + SHOP_VISIBLE), count);
             Vector2 ssz = measureText(sc, 8);
-            drawText(sc, VRES_W - 32.0f - ssz.x, 212, Color{ 170, 185, 225, 255 }, 8);
+            drawText(sc, ox + BASE_VW - 32.0f - ssz.x, oy + 212, Color{ 170, 185, 225, 255 }, 8);
         }
     }
 
-    DrawLine(24, 224, VRES_W - 24, 224, Color{ 90, 110, 160, 180 });
+    DrawLine((int)ox + 24, (int)oy + 224, (int)ox + BASE_VW - 24, (int)oy + 224, Color{ 90, 110, 160, 180 });
     if (count > 0 && g.shopIndex >= 0 && g.shopIndex < count) {
         int id = (g.shopTab == 0) ? stock[g.shopIndex] : owned[g.shopIndex];
-        drawTextWrapped(itemDef(id).desc, 28, 232, VRES_W - 56.0f, 11, Color{ 225, 235, 255, 255 }, 8);
+        drawTextWrapped(itemDef(id).desc, ox + 28, oy + 232, BASE_VW - 56.0f, 11, Color{ 225, 235, 255, 255 }, 8);
     }
-    drawText("UP/DN: select  LEFT/RIGHT: Buy/Sell  SPACE/CLICK: confirm  ESC: leave",
-             28, VRES_H - 22, Color{ 170, 185, 225, 230 }, 8);
+    drawText("Arrows: select  L/R: tab  SPACE: trade  ESC: exit",
+             ox + 28, oy + BASE_VH - 22.0f, Color{ 170, 185, 225, 230 }, 8);
     drawToast();
 }
 
 static void drawInnPage() {
-    DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{ 8, 12, 26, 255 }, 0.80f));
-    drawWindow({ 116, 68, 280, 142 });
+    float ox = uiOx(), oy = uiOy();
+    DrawRectangle(0, 0, g.vw, g.vh, Fade(Color{ 8, 12, 26, 255 }, 0.82f));
+    drawWindow({ ox + 66, oy + 46, 380, 174 });
     const char* title = g.innTitle.empty() ? "The Sleeping Stag" : g.innTitle.c_str();
-    drawTextCentered(title, VRES_W * 0.5f, 80, Color{ 255, 232, 150, 255 }, 8);
+    drawTextCentered(title, g.vw * 0.5f, oy + 58, Color{ 255, 232, 150, 255 }, 8);
 
     char buf[96];
     snprintf(buf, sizeof(buf), "Rest until dawn for %d gil?  (Gil: %d)", g.innCost, g.gil);
-    drawTextCentered(buf, VRES_W * 0.5f, 100, WHITE, 8);
-    drawTextCentered("Restores all HP, MP, KO, and Poison.", VRES_W * 0.5f, 116, Color{ 185, 205, 240, 255 }, 8);
+    drawTextCentered(buf, g.vw * 0.5f, oy + 78, WHITE, 8);
+    drawTextCentered("Restores all HP, MP, KO, and Poison.", g.vw * 0.5f, oy + 94, Color{ 185, 205, 240, 255 }, 8);
 
+    // 3 spacious hero status cards (no collision at any HP digit count!)
     for (int i = 0; i < 3; i++) {
         const Hero& h = g.party[i];
-        float x = 130.0f + i * 86.0f;
+        Rectangle card{ ox + 80.0f + i * 120.0f, oy + 114.0f, 112.0f, 52.0f };
+        DrawRectangleRounded(card, 0.2f, 4, Color{ 20, 30, 68, 225 });
+        DrawRectangleRoundedLinesEx(card, 0.2f, 4, 1.0f, Color{ 84, 104, 162, 200 });
+        drawTextCentered(heroName(h.klass), card.x + card.width * 0.5f, card.y + 7,
+                         h.ko ? Color{ 240, 130, 130, 255 } : Color{ 255, 236, 176, 255 }, 8);
         char hp[32];
-        snprintf(hp, sizeof(hp), "%s %d/%d", heroName(h.klass), h.hp, h.maxHp);
-        drawText(hp, x, 138, h.ko ? Color{ 240, 120, 120, 255 } : Color{ 165, 235, 175, 255 }, 8);
+        snprintf(hp, sizeof(hp), "HP %d/%d", h.hp, h.maxHp);
+        drawTextCentered(hp, card.x + card.width * 0.5f, card.y + 22,
+                         h.ko ? Color{ 240, 120, 120, 255 } : Color{ 155, 235, 175, 255 }, 8);
+        char mp[32];
+        snprintf(mp, sizeof(mp), "MP %d/%d", h.mp, h.maxMp);
+        drawTextCentered(mp, card.x + card.width * 0.5f, card.y + 36, Color{ 165, 205, 255, 255 }, 8);
     }
 
     auto drawBtn = [&](Rectangle r, const char* label, bool sel, bool dis) {
@@ -759,29 +784,31 @@ static void drawInnPage() {
                       : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
         drawTextCentered(label, r.x + r.width * 0.5f, r.y + 8, c, 8);
     };
-    drawBtn(INN_BTN_STAY,  "STAY",  g.innChoice == 0, g.gil < g.innCost);
-    drawBtn(INN_BTN_LEAVE, "LEAVE", g.innChoice == 1, false);
+    drawBtn(innBtnStay(),  "STAY",  g.innChoice == 0, g.gil < g.innCost);
+    drawBtn(innBtnLeave(), "LEAVE", g.innChoice == 1, false);
     drawToast();
 }
 
 static void drawHeroPicker(const char* title, int sel) {
-    DrawRectangle(0, 0, VRES_W, VRES_H, Fade(BLACK, 0.45f));
-    drawWindow({ 126, 68, 260, 146 });
-    drawTextCentered(title, VRES_W * 0.5f, 78, Color{ 255, 232, 150, 255 }, 8);
+    float ox = uiOx(), oy = uiOy();
+    DrawRectangle(0, 0, g.vw, g.vh, Fade(BLACK, 0.52f));
+    drawWindow({ ox + 96, oy + 62, 320, 156 });
+    drawTextCentered(title, g.vw * 0.5f, oy + 72, Color{ 255, 232, 150, 255 }, 8);
     for (int i = 0; i < 3; i++) {
         const Hero& h = g.party[i];
-        Rectangle r{ 140, (float)(96 + i * 32), 232, 26 };
+        Rectangle r{ ox + 110, oy + 90.0f + i * 32.0f, 292, 26 };
         bool s = (i == sel);
         DrawRectangleRounded(r, 0.3f, 4, s ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 255 });
         DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
                                     s ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
+        if (s) drawCursor(r.x + 5, r.y + 9);
         char buf[96];
-        snprintf(buf, sizeof(buf), "%s  HP %d/%d  MP %d/%d%s",
+        snprintf(buf, sizeof(buf), "%-6s HP %d/%d  MP %d/%d%s",
                  heroName(h.klass), h.hp, h.maxHp, h.mp, h.maxMp,
-                 h.ko ? " [KO]" : (h.poisoned ? " [PSN]" : ""));
-        drawText(buf, r.x + 8, r.y + 9, h.ko ? Color{ 240, 120, 120, 255 } : WHITE, 8);
+                 h.ko ? " KO" : (h.poisoned ? " PSN" : ""));
+        drawText(buf, r.x + 15, r.y + 9, h.ko ? Color{ 240, 120, 120, 255 } : WHITE, 8);
     }
-    drawTextCentered("ESC: cancel", VRES_W * 0.5f, 198, Color{ 180, 195, 230, 255 }, 8);
+    drawTextCentered("SPACE/Click: confirm  |  ESC: cancel", g.vw * 0.5f, oy + 196, Color{ 180, 195, 230, 255 }, 8);
 }
 
 void drawMenuScreen() {
@@ -789,100 +816,115 @@ void drawMenuScreen() {
     if (g.menuPage == 5) { drawShopPage(); return; }
     if (g.menuPage == 6) { drawInnPage(); return; }
 
-    DrawRectangle(0, 0, VRES_W, VRES_H, Fade(Color{ 8, 12, 26, 255 }, 0.85f));
-    drawWindow({ 10, 10, 96, VRES_H - 20.0f });
-    drawTextCentered("MENU", 58, 19, Color{ 255, 232, 150, 255 }, 8);
+    float ox = uiOx(), oy = uiOy();
+    DrawRectangle(0, 0, g.vw, g.vh, Fade(Color{ 8, 12, 26, 255 }, 0.85f));
+    drawWindow({ ox + 10, oy + 10, 96, BASE_VH - 20.0f });
+    drawTextCentered("MENU", ox + 58, oy + 19, Color{ 255, 232, 150, 255 }, 8);
 
     const char* tabs[5] = { "Party", "Items", "Equip", "Quests", "Options" };
     for (int i = 0; i < 5; i++) {
         bool sel = (i == g.menuPage);
-        Rectangle r{ 16, (float)(42 + i * 26), 84, 22 };
+        Rectangle r{ ox + 16, oy + 42.0f + i * 26.0f, 84, 22 };
         if (sel) {
             DrawRectangleRounded(r, 0.35f, 4, Color{ 56, 86, 164, 255 });
             DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f, Color{ 255, 232, 150, 255 });
         }
-        drawText(tabs[i], 24, r.y + 7, sel ? Color{ 255, 236, 176, 255 } : Color{ 215, 225, 248, 255 }, 8);
+        drawText(tabs[i], ox + 24, r.y + 7, sel ? Color{ 255, 236, 176, 255 } : Color{ 215, 225, 248, 255 }, 8);
     }
     char gbuf[32]; snprintf(gbuf, sizeof(gbuf), "%d g", g.gil);
-    drawText("Gil", 22, VRES_H - 46, Color{ 170, 185, 225, 255 }, 8);
-    drawText(gbuf, 22, VRES_H - 34, Color{ 255, 232, 150, 255 }, 8);
+    drawText("Gil", ox + 20, oy + BASE_VH - 46.0f, Color{ 170, 185, 225, 255 }, 8);
+    drawText(gbuf, ox + 20, oy + BASE_VH - 34.0f, Color{ 255, 232, 150, 255 }, 8);
 
-    drawWindow({ 110, 10, VRES_W - 120.0f, VRES_H - 20.0f });
+    drawWindow({ ox + 110, oy + 10, BASE_VW - 120.0f, BASE_VH - 20.0f });
 
     // ---- Page 0: Party
     if (g.menuPage == 0) {
         for (int i = 0; i < 3; i++) {
             const Hero& h = g.party[i];
-            float y = 20.0f + i * 80.0f;
+            float y = oy + 20.0f + i * 78.0f;
             bool sel = (i == g.menuIndex);
-            DrawRectangleRounded({ 118, y, 376, 72 }, 0.16f, 4,
+            DrawRectangleRounded({ ox + 118, y, 376, 72 }, 0.16f, 4,
                                  sel ? Color{ 34, 52, 114, 245 } : Color{ 22, 32, 74, 215 });
-            DrawRectangleRoundedLinesEx({ 118, y, 376, 72 }, 0.16f, 4, 1.0f,
+            DrawRectangleRoundedLinesEx({ ox + 118, y, 376, 72 }, 0.16f, 4, 1.0f,
                                         sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 220 });
             Texture2D& f = g.assets.face[i == 0 ? FACE_KNIGHT : (i == 1 ? FACE_MAGE : FACE_CLERIC)];
             if (f.id) DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height },
-                                     { 126, y + 10, 48, 48 }, { 0, 0 }, 0.0f,
+                                     { ox + 126, y + 12, 48, 48 }, { 0, 0 }, 0.0f,
                                      h.ko ? Color{ 130, 130, 160, 255 } : WHITE);
             char line[96];
-            snprintf(line, sizeof(line), "%s (%s)  Lv.%d", heroName(h.klass), klassName(h.klass), h.level);
-            drawText(line, 182, y + 8, Color{ 255, 236, 176, 255 }, 8);
+            snprintf(line, sizeof(line), "%s (%s) Lv.%d", heroName(h.klass), klassName(h.klass), h.level);
+            drawText(line, ox + 182, y + 8, Color{ 255, 236, 176, 255 }, 8);
 
             const char* rowLabel = (h.row == 0) ? "[FRONT]" : "[BACK]";
-            drawText(rowLabel, 434, y + 8, h.row == 0 ? Color{ 150, 235, 175, 255 } : Color{ 160, 200, 255, 255 }, 8);
-            if (h.ko) drawText("K.O.", 456, y + 24, Color{ 255, 110, 110, 255 }, 8);
-            else if (h.poisoned) drawText("PSN", 458, y + 24, Color{ 195, 130, 255, 255 }, 8);
+            float rw = measureText(rowLabel, 8).x;
+            drawText(rowLabel, ox + 486.0f - rw, y + 8,
+                     h.row == 0 ? Color{ 150, 235, 175, 255 } : Color{ 160, 200, 255, 255 }, 8);
+
+            if (h.ko) {
+                float kw = measureText("K.O.", 8).x;
+                drawText("K.O.", ox + 486.0f - kw, y + 23, Color{ 255, 110, 110, 255 }, 8);
+            } else if (h.poisoned) {
+                float pw = measureText("PSN", 8).x;
+                drawText("PSN", ox + 486.0f - pw, y + 23, Color{ 195, 130, 255, 255 }, 8);
+            }
 
             snprintf(line, sizeof(line), "HP %d/%d", h.hp, h.maxHp);
-            drawText(line, 182, y + 24, WHITE, 8);
-            drawBar(276, y + 26, 92, 6, (float)h.hp / std::max(1, h.maxHp),
+            drawText(line, ox + 182, y + 23, WHITE, 8);
+            drawBar(ox + 282, y + 25, 88, 6, (float)h.hp / std::max(1, h.maxHp),
                     Color{ 96, 220, 120, 255 }, Color{ 24, 34, 70, 255 });
 
             snprintf(line, sizeof(line), "MP %d/%d", h.mp, h.maxMp);
-            drawText(line, 182, y + 38, Color{ 180, 210, 255, 255 }, 8);
-            drawBar(276, y + 40, 92, 6, (float)h.mp / std::max(1, h.maxMp),
+            drawText(line, ox + 182, y + 38, Color{ 180, 210, 255, 255 }, 8);
+            drawBar(ox + 282, y + 40, 88, 6, (float)h.mp / std::max(1, h.maxMp),
                     Color{ 96, 160, 255, 255 }, Color{ 24, 34, 70, 255 });
 
-            snprintf(line, sizeof(line), "ATK %d  DEF %d  MAG %d  SPD %d  XP %d/%d",
-                     heroAtk(h), heroDef(h), heroMag(h), h.spd, h.xp, xpToNext(h));
-            drawText(line, 182, y + 54, Color{ 195, 210, 240, 255 }, 8);
+            snprintf(line, sizeof(line), "XP %d/%d", h.xp, xpToNext(h));
+            float xw = measureText(line, 8).x;
+            drawText(line, ox + 486.0f - xw, y + 38, Color{ 215, 224, 248, 255 }, 8);
+
+            snprintf(line, sizeof(line), "ATK %d   DEF %d   MAG %d   SPD %d",
+                     heroAtk(h), heroDef(h), heroMag(h), h.spd);
+            drawText(line, ox + 182, y + 54, Color{ 195, 210, 240, 255 }, 8);
         }
-        drawText("SPACE / CLICK hero: switch Front/Back row  |  ESC: close",
-                 122, VRES_H - 22, Color{ 170, 185, 225, 230 }, 8);
+        drawText("SPACE/Click: switch row  |  ESC: close",
+                 ox + 122, oy + BASE_VH - 22.0f, Color{ 170, 185, 225, 230 }, 8);
     }
 
     // ---- Page 1: Items
     else if (g.menuPage == 1) {
-        drawText("BAG / ITEMS", 124, 20, Color{ 255, 232, 150, 255 }, 8);
+        drawText("BAG / ITEMS", ox + 124, oy + 20, Color{ 255, 232, 150, 255 }, 8);
         auto items = ownedItems();
         int n = (int)items.size();
         if (n == 0) {
-            drawText("Your bag is empty.", 130, 60, Color{ 180, 190, 220, 255 }, 8);
+            drawText("Your bag is empty.", ox + 130, oy + 60, Color{ 180, 190, 220, 255 }, 8);
         } else {
             int scroll = std::max(0, g.menuIndex - 8);
             for (int row = 0; row < 10 && scroll + row < n; row++) {
                 int idx = scroll + row;
                 int id = items[idx];
-                float y = 42.0f + row * 17.0f;
+                float y = oy + 42.0f + row * 17.0f;
                 bool sel = (idx == g.menuIndex);
                 if (sel) {
-                    DrawRectangle(122, (int)y, 366, 16, Color{ 52, 76, 152, 230 });
-                    DrawRectangleLines(122, (int)y, 366, 16, Color{ 255, 232, 150, 200 });
+                    DrawRectangle((int)ox + 122, (int)y, 366, 16, Color{ 52, 76, 152, 230 });
+                    DrawRectangleLines((int)ox + 122, (int)y, 366, 16, Color{ 255, 232, 150, 200 });
+                    drawCursor(ox + 125, y + 4);
                 }
                 const ItemDef& d = itemDef(id);
-                drawItemIcon(id, 126, y + 1, 14);
-                drawText(d.name, 146, y + 4, WHITE, 8);
+                drawItemIcon(id, ox + 135, y + 1, 14);
+                drawText(d.name, ox + 153, y + 4, WHITE, 8);
                 const char* tag = (d.kind == IK_CONSUMABLE) ? "Use"
                                 : (d.kind == IK_KEY ? "Key" : "Gear");
-                drawText(tag, 386, y + 4, Color{ 165, 195, 235, 255 }, 8);
+                drawText(tag, ox + 388, y + 4, Color{ 165, 195, 235, 255 }, 8);
                 char qbuf[16]; snprintf(qbuf, sizeof(qbuf), "x%d", itemCount(id));
-                drawText(qbuf, 456, y + 4, Color{ 255, 232, 150, 255 }, 8);
+                float qw = measureText(qbuf, 8).x;
+                drawText(qbuf, ox + 482.0f - qw, y + 4, Color{ 255, 232, 150, 255 }, 8);
             }
-            DrawLine(122, 222, 488, 222, Color{ 90, 110, 160, 180 });
+            DrawLine((int)ox + 122, (int)oy + 220, (int)ox + 488, (int)oy + 220, Color{ 90, 110, 160, 180 });
             if (g.menuIndex >= 0 && g.menuIndex < n)
-                drawTextWrapped(itemDef(items[g.menuIndex]).desc, 124, 230, 362, 11, Color{ 225, 235, 255, 255 }, 8);
+                drawTextWrapped(itemDef(items[g.menuIndex]).desc, ox + 124, oy + 228, 362, 11, Color{ 225, 235, 255, 255 }, 8);
         }
-        drawText("SPACE/CLICK: use consumable  |  LEFT/RIGHT: tab",
-                 122, VRES_H - 22, Color{ 170, 185, 225, 230 }, 8);
+        drawText("SPACE/Click: use item  |  L/R: tab",
+                 ox + 122, oy + BASE_VH - 22.0f, Color{ 170, 185, 225, 230 }, 8);
         if (g.menuItem >= 0) {
             std::string t = std::string("Use ") + itemDef(g.menuItem).name + " on:";
             drawHeroPicker(t.c_str(), g.menuUseHero);
@@ -894,7 +936,7 @@ void drawMenuScreen() {
         g.equipHero = std::max(0, std::min(2, g.equipHero));
         g.equipSlot = std::max(0, std::min(2, g.equipSlot));
         for (int i = 0; i < 3; i++) {
-            Rectangle r{ (float)(122 + i * 122), 24, 116, 22 };
+            Rectangle r{ ox + 122.0f + i * 122.0f, oy + 24, 116, 22 };
             bool sel = (i == g.equipHero);
             DrawRectangleRounded(r, 0.35f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 });
             DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f,
@@ -906,12 +948,12 @@ void drawMenuScreen() {
         char stats[96];
         snprintf(stats, sizeof(stats), "ATK %d   DEF %d   MAG %d   SPD %d",
                  heroAtk(h), heroDef(h), heroMag(h), h.spd);
-        drawText(stats, 124, 54, Color{ 165, 235, 180, 255 }, 8);
+        drawText(stats, ox + 124, oy + 54, Color{ 165, 235, 180, 255 }, 8);
 
         const char* sname[3] = { "Weapon", "Armor", "Accessory" };
         int cur[3] = { h.weapon, h.armor, h.accessory };
         for (int s = 0; s < 3; s++) {
-            Rectangle r{ 122, (float)(74 + s * 28), 186, 24 };
+            Rectangle r{ ox + 122, oy + 74.0f + s * 28.0f, 186, 24 };
             bool sel = (g.equipSlot == s);
             DrawRectangleRounded(r, 0.25f, 4, sel ? Color{ 50, 74, 146, 240 } : Color{ 24, 34, 72, 220 });
             DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.0f,
@@ -922,110 +964,110 @@ void drawMenuScreen() {
         }
 
         auto cands = equippableForSlot(g.equipSlot);
-        drawText(g.equipIndex >= 0 ? "Choose gear:" : "Available in bag:", 318, 60, Color{ 255, 232, 150, 255 }, 8);
+        drawText(g.equipIndex >= 0 ? "Choose gear:" : "Available in bag:", ox + 318, oy + 60, Color{ 255, 232, 150, 255 }, 8);
         int total = (int)cands.size() + 1;
         for (int i = 0; i < total && i < 8; i++) {
-            Rectangle r{ 316, (float)(74 + i * 20), 174, 18 };
+            Rectangle r{ ox + 316, oy + 74.0f + i * 20.0f, 174, 18 };
             bool sel = (g.equipIndex >= 0 && i == g.equipIndex);
             if (sel) {
                 DrawRectangleRounded(r, 0.25f, 4, Color{ 56, 86, 164, 255 });
                 DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.0f, Color{ 255, 232, 150, 255 });
             }
             if (i < (int)cands.size()) {
-                drawItemIcon(cands[i], r.x + 2, r.y + 2, 14);
-                drawText(itemDef(cands[i]).name, r.x + 20, r.y + 5, WHITE, 8);
+                drawItemIcon(cands[i], r.x + 4, r.y + 2, 14);
+                drawText(itemDef(cands[i]).name, r.x + 22, r.y + 5, WHITE, 8);
             } else {
                 drawText("[Unequip]", r.x + 8, r.y + 5, Color{ 225, 165, 165, 255 }, 8);
             }
         }
-        drawText("A/D or CLICK: hero  |  UP/DN: slot  |  SPACE: equip",
-                 122, VRES_H - 22, Color{ 170, 185, 225, 230 }, 8);
+        drawText("A/D: hero  |  UP/DN: slot  |  SPACE: equip",
+                 ox + 122, oy + BASE_VH - 22.0f, Color{ 170, 185, 225, 230 }, 8);
     }
 
     // ---- Page 3: Quests
     else if (g.menuPage == 3) {
-        drawText("JOURNAL / QUESTS", 124, 20, Color{ 255, 232, 150, 255 }, 8);
+        drawText("JOURNAL / QUESTS", ox + 124, oy + 20, Color{ 255, 232, 150, 255 }, 8);
         for (int q = 0; q < QUEST_COUNT; q++) {
-            float y = 42.0f + q * 60.0f;
+            float y = oy + 40.0f + q * 61.0f;
             bool sel = (q == g.menuIndex);
-            DrawRectangleRounded({ 122, y, 366, 54 }, 0.16f, 4,
+            DrawRectangleRounded({ ox + 122, y, 366, 56 }, 0.16f, 4,
                                  sel ? Color{ 36, 54, 116, 240 } : Color{ 22, 32, 74, 210 });
-            DrawRectangleRoundedLinesEx({ 122, y, 366, 54 }, 0.16f, 4, 1.0f,
+            DrawRectangleRoundedLinesEx({ ox + 122, y, 366, 56 }, 0.16f, 4, 1.0f,
                                         sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 200 });
             int st = g.quests[q].state;
             const char* badge = (st == QS_DONE) ? "COMPLETE"
                               : (st == QS_ACTIVE ? "ACTIVE" : "AVAILABLE");
             Color bc = (st == QS_DONE) ? Color{ 120, 240, 150, 255 }
                      : (st == QS_ACTIVE ? Color{ 255, 225, 110, 255 } : Color{ 175, 190, 220, 255 });
-            drawText(questTitle(q), 130, y + 7, WHITE, 8);
+            drawText(questTitle(q), ox + 130, y + 6, WHITE, 8);
             Vector2 bsz = measureText(badge, 8);
-            drawText(badge, 480 - bsz.x, y + 7, bc, 8);
+            drawText(badge, ox + 480 - bsz.x, y + 6, bc, 8);
 
-            drawTextWrapped(questGoalText(q), 130, y + 20, 350, 10, Color{ 200, 212, 240, 255 }, 8);
+            drawTextWrapped(questGoalText(q), ox + 130, y + 19, 348, 10, Color{ 200, 212, 240, 255 }, 8);
 
             std::string prog;
             if (q == QUEST_SLIMES && st == QS_ACTIVE)
                 prog = "Progress: " + std::to_string(std::min(6, g.slimesSlain)) + " / 6 slimes defeated";
             else if (q == QUEST_LOCKET && st == QS_ACTIVE)
-                prog = g.locketFound ? "Locket found! Return to Tamsin in Elmswick."
+                prog = g.locketFound ? "Locket found! Return to Tamsin."
                                      : "Standing Stones: " + compassHint(g.px, g.py, LOCKET_PICKUP_X, LOCKET_PICKUP_Y);
             else if (q == QUEST_CROWN && st == QS_ACTIVE)
                 prog = (itemCount(IT_CROWN) > 0 || g.bossDefeated)
-                     ? "Crown reclaimed! Return to Old Maren in Elmswick."
+                     ? "Crown reclaimed! Return to Old Maren."
                      : "Castle of Elm: " + compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
-            if (!prog.empty()) drawText(prog.c_str(), 130, y + 41, Color{ 155, 235, 185, 255 }, 8);
+            if (!prog.empty()) drawText(prog.c_str(), ox + 130, y + 43, Color{ 155, 235, 185, 255 }, 8);
         }
         char stat[96];
         int mins = (int)(g.runTime / 60.0f), secs = (int)g.runTime % 60;
-        snprintf(stat, sizeof(stat), "Time %02d:%02d  |  Foes defeated: %d  |  Chests opened: %d",
+        snprintf(stat, sizeof(stat), "Time %02d:%02d  |  Foes: %d  |  Chests: %d",
                  mins, secs, g.defeatedCount, (int)g.openedChests.size() + (g.towerChestOpened ? 1 : 0));
-        drawText(stat, 124, 236, Color{ 185, 200, 235, 255 }, 8);
+        drawText(stat, ox + 124, oy + 240, Color{ 185, 200, 235, 255 }, 8);
     }
 
     // ---- Page 4: Options & Save/Load
     else if (g.menuPage == 4) {
-        drawText("OPTIONS & SAVE", 124, 20, Color{ 255, 232, 150, 255 }, 8);
+        drawText("OPTIONS & SAVE", ox + 124, oy + 20, Color{ 255, 232, 150, 255 }, 8);
         const char* rows[9] = {
             "Save Adventure to Disk",
-            g.saveExists ? "Load Last Save" : "Load Last Save (none yet)",
+            g.saveExists ? "Load Saved Adventure" : "Load Save (none yet)",
             g.musicOn ? "Music: ON" : "Music: OFF",
-            g.waitBattle ? "Battle Mode: WAIT (pauses on menus)" : "Battle Mode: ACTIVE (real-time ATB)",
-            "Toggle Fullscreen (F11)",
-            g.crtOn ? "Soft CRT: ON (subtle beam + edge shade)" : "Soft CRT: OFF (clean pixels)",
-            "Controls & Tips",
-            "Sound Room",
+            g.waitBattle ? "Battle ATB: WAIT (menu pause)" : "Battle ATB: ACTIVE (real-time)",
+            "Toggle Fullscreen (F11 / Alt+Enter)",
+            g.crtOn ? "Soft CRT: ON (scanlines)" : "Soft CRT: OFF (crisp pixels)",
+            "Controls & Field Tips",
+            "Sound Room (13 Tracks)",
             "Return to Title Screen",
         };
         for (int i = 0; i < 9; i++) {
-            Rectangle r{ 130, (float)(42 + i * 25), 346, 22 };
+            Rectangle r{ ox + 126, oy + 40.0f + i * 24.0f, 360, 21 };
             bool sel = (i == g.optionsIndex);
             DrawRectangleRounded(r, 0.3f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 220 });
             DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
                                         sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
             Color c = (i == 8) ? Color{ 255, 175, 175, 255 }
                                : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
-            drawText(rows[i], r.x + 12, r.y + 7, c, 8);
-            if (sel) drawCursor(r.x + 2, r.y + 7);
+            drawText(rows[i], r.x + 14, r.y + 6, c, 8);
+            if (sel) drawCursor(r.x + 4, r.y + 6);
         }
         if (gShowControlsModal) {
-            DrawRectangle(0, 0, VRES_W, VRES_H, Fade(BLACK, 0.55f));
-            drawWindow({ 76, 44, 360, 198 });
-            drawTextCentered("CONTROLS & TIPS", VRES_W * 0.5f, 56, Color{ 255, 232, 150, 255 }, 8);
+            DrawRectangle(0, 0, g.vw, g.vh, Fade(BLACK, 0.65f));
+            drawWindow({ ox + 22, oy + 34, 468, 218 });
+            drawTextCentered("CONTROLS & FIELD TIPS", g.vw * 0.5f, oy + 46, Color{ 255, 232, 150, 255 }, 8);
             const char* help[] = {
                 "WASD / Arrows / Click : Walk (hold Shift to run)",
-                "SPACE / E / Enter     : Talk, open chests, enter doors",
-                "ESC / TAB             : Open or close Pause Menu",
-                "In Battle             : Arrow keys or Click commands",
-                "F11                   : Toggle Fullscreen",
+                "SPACE / E / Enter     : Talk, chests, doors",
+                "ESC / TAB             : Open / close Pause Menu",
+                "In Battle             : Arrows or Click commands",
+                "F11 / Alt+Enter       : Toggle Fullscreen",
                 "",
                 "Adventure Tips:",
-                "- Talk to Hedrick, Tamsin, Old Maren, & Watchman Odo.",
-                "- Back-row heroes take less melee damage (Party tab).",
-                "- Follow the North Road to find the Castle of Elm.",
+                "- Meet Hedrick, Tamsin, Old Maren & Odo in town.",
+                "- Back-row heroes take half melee damage.",
+                "- Follow the North Road to the Castle of Elm.",
             };
             for (int i = 0; i < 10; i++)
-                drawText(help[i], 92.0f, 76.0f + i * 14.0f, Color{ 225, 235, 255, 255 }, 8);
-            drawTextCentered("SPACE or CLICK to close", VRES_W * 0.5f, 224, Color{ 255, 232, 150, 255 }, 8);
+                drawText(help[i], ox + 38.0f, oy + 68.0f + i * 14.5f, Color{ 225, 235, 255, 255 }, 8);
+            drawTextCentered("SPACE or CLICK to close", g.vw * 0.5f, oy + 232, Color{ 255, 232, 150, 255 }, 8);
         }
     }
 

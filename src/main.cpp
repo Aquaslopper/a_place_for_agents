@@ -1,8 +1,10 @@
-// main.cpp — window, virtual 512x288 canvas, pixel-perfect presentation,
+// main.cpp — window, dynamic aspect-matched virtual canvas, sharp scaling,
 // main loop, audio streams & transitions
 #include "game.hpp"
 #include "world.hpp"
 #include "battle.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 // The Windows build is a GUI-subsystem exe (WIN32 in CMake, so no console
@@ -13,6 +15,37 @@
 #if defined(_MSC_VER)
 #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 #endif
+
+static void syncVirtualCanvas() {
+    int sw = std::max(1, GetScreenWidth());
+    int sh = std::max(1, GetScreenHeight());
+    float aspect = std::clamp((float)sw / (float)sh, 1.20f, 2.60f);
+    float baseAspect = (float)BASE_VW / (float)BASE_VH;
+
+    int targetVw = BASE_VW;
+    int targetVh = BASE_VH;
+    if (aspect >= baseAspect) {
+        targetVh = BASE_VH;
+        targetVw = std::max(BASE_VW, ((int)std::lround(BASE_VH * aspect) + 1) & ~1);
+    } else {
+        targetVw = BASE_VW;
+        targetVh = std::max(BASE_VH, ((int)std::lround(BASE_VW / aspect) + 1) & ~1);
+    }
+
+    if (g.rt.id == 0 || targetVw != g.vw || targetVh != g.vh) {
+        if (g.rt.id != 0) UnloadRenderTexture(g.rt);
+        g.vw = targetVw;
+        g.vh = targetVh;
+        g.rt = LoadRenderTexture(g.vw, g.vh);
+        SetTextureFilter(g.rt.texture, TEXTURE_FILTER_POINT);
+    }
+}
+
+void toggleFullscreenClean() {
+    ToggleBorderlessWindowed();
+    g.borderlessFs = IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE) || IsWindowFullscreen();
+    syncVirtualCanvas();
+}
 
 static void titleUpdate(float dt) {
     g.titleT += dt;
@@ -50,8 +83,9 @@ static void titleUpdate(float dt) {
         return;
     }
     Vector2 m = getVirtualMouse();
+    float menuTop = std::floor(g.vh * 0.5f - 28.0f);
     for (int i = 0; i < 3; i++) {
-        Rectangle box{ VRES_W * 0.5f - 88.0f, (float)(112 + i * 24), 176.0f, 20.0f };
+        Rectangle box{ std::floor(g.vw * 0.5f - 88.0f), menuTop + i * 24.0f, 176.0f, 20.0f };
         if (CheckCollisionPointRec(m, box)) {
             g.titleIndex = i;
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -82,38 +116,49 @@ static void gameOverUpdate() {
 }
 
 Rectangle getPresentationRect() {
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
-    if (sw < 1) sw = VRES_W;
-    if (sh < 1) sh = VRES_H;
-    float scale = std::min((float)sw / VRES_W, (float)sh / VRES_H);
-    // Keep every source pixel an even-sized block on normal/large displays.
-    // Below 2x, fractional scaling is preferable to leaving a tiny 1x picture.
-    if (scale >= 2.0f) scale = floorf(scale);
-    float w = VRES_W * scale, h = VRES_H * scale;
-    return { floorf((sw - w) * 0.5f), floorf((sh - h) * 0.5f), w, h };
+    int sw = std::max(1, GetScreenWidth());
+    int sh = std::max(1, GetScreenHeight());
+    int vw = std::max(1, g.vw);
+    int vh = std::max(1, g.vh);
+    float rawAspect = (float)sw / (float)sh;
+    if (rawAspect >= 1.20f && rawAspect <= 2.60f) {
+        return { 0.0f, 0.0f, (float)sw, (float)sh };
+    }
+    float scale = std::min((float)sw / (float)vw, (float)sh / (float)vh);
+    float w = std::round((float)vw * scale);
+    float h = std::round((float)vh * scale);
+    return { std::floor((sw - w) * 0.5f), std::floor((sh - h) * 0.5f), w, h };
 }
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
-    InitWindow(1024, 576, "A Place for Agents — an endless field assignment");
+    InitWindow(1280, 720, "A Place for Agents — an endless field assignment");
+    SetWindowMinSize(640, 360);
+    int mon = GetCurrentMonitor();
+    int mw = GetMonitorWidth(mon), mh = GetMonitorHeight(mon);
+    if (mw > 0 && mh > 0) {
+        int initW = (mw >= 1440 && mh >= 840) ? 1280 : 1024;
+        int initH = (mw >= 1440 && mh >= 840) ? 720 : 576;
+        SetWindowSize(initW, initH);
+        SetWindowPosition((mw - initW) / 2, (mh - initH) / 2);
+    }
     SetExitKey(0); // ESC opens pause menu / backs out instead of abruptly quitting
     SetTargetFPS(60);
 
     InitAudioDevice();
     loadAllAssets();
+    syncVirtualCanvas();
     newGameState(1337u);
     g.mode = MODE_TITLE;
     refreshSaveExists();
 
-    g.rt = LoadRenderTexture(VRES_W, VRES_H);
-    SetTextureFilter(g.rt.texture, TEXTURE_FILTER_POINT);
-
     while (!WindowShouldClose() && !g.quitRequested) {
+        syncVirtualCanvas();
         float dt = std::min(0.05f, GetFrameTime());
-        // hotButtons is filled by last frame's draw (hover detection) and
-        // read by this frame's update, so it is cleared just before drawing.
 
-        if (IsKeyPressed(KEY_F11)) ToggleFullscreen();
+        if (IsKeyPressed(KEY_F11) || (IsKeyDown(KEY_LEFT_ALT) && IsKeyPressed(KEY_ENTER))) {
+            toggleFullscreenClean();
+        }
 
         // Fade transitions run smoothly in every mode
         if (g.fadeDir != 0) {
@@ -144,7 +189,7 @@ int main() {
         updateScore(dt);
 
         g.hotButtons = 0; // fresh hover set for the draw below
-        // ---- render to crisp 512x288 virtual framebuffer
+        // ---- render to crisp virtual framebuffer
         BeginTextureMode(g.rt);
         ClearBackground(Color{ 10, 14, 26, 255 });
         switch (g.mode) {
@@ -181,24 +226,44 @@ int main() {
         drawTransitionFx();
         EndTextureMode();
 
-        // ---- present without stretching the art or changing its aspect.
-        // Integer enlargement keeps chunky pixels even; narrow windows fall
-        // back to a smooth fractional scale rather than shrinking to 1x.
+        // ---- sharp integer-oversampled presentation filling the window cleanly
+        Rectangle dst = getPresentationRect();
+        int preScale = std::clamp((int)std::ceil(std::max(dst.width / (float)g.vw, dst.height / (float)g.vh)), 1, 4);
+        int upW = g.vw * preScale;
+        int upH = g.vh * preScale;
+        bool exactInteger = (std::abs(dst.width - (float)upW) < 0.5f && std::abs(dst.height - (float)upH) < 0.5f);
+
+        if (!exactInteger && preScale > 1) {
+            if (g.upscaleRt.id == 0 || g.upscaleRt.texture.width != upW || g.upscaleRt.texture.height != upH) {
+                if (g.upscaleRt.id != 0) UnloadRenderTexture(g.upscaleRt);
+                g.upscaleRt = LoadRenderTexture(upW, upH);
+                SetTextureFilter(g.upscaleRt.texture, TEXTURE_FILTER_BILINEAR);
+            }
+            BeginTextureMode(g.upscaleRt);
+            ClearBackground(BLACK);
+            DrawTexturePro(g.rt.texture,
+                           { 0, 0, (float)g.vw, -(float)g.vh },
+                           { 0, 0, (float)upW, (float)upH },
+                           { 0, 0 }, 0.0f, WHITE);
+            EndTextureMode();
+        }
+
         BeginDrawing();
         ClearBackground(Color{ 6, 8, 16, 255 });
-        Rectangle dst = getPresentationRect();
-        DrawTexturePro(g.rt.texture,
-                       { 0, 0, (float)VRES_W, -(float)VRES_H },
-                       dst, { 0, 0 }, 0.0f, WHITE);
+        if (!exactInteger && preScale > 1 && g.upscaleRt.id != 0) {
+            DrawTexturePro(g.upscaleRt.texture,
+                           { 0, 0, (float)upW, -(float)upH },
+                           dst, { 0, 0 }, 0.0f, WHITE);
+        } else {
+            DrawTexturePro(g.rt.texture,
+                           { 0, 0, (float)g.vw, -(float)g.vh },
+                           dst, { 0, 0 }, 0.0f, WHITE);
+        }
 
-        // The CRT option is deliberately restrained: one very faint beam
-        // shadow per source row, plus a soft edge falloff. It is aligned to
-        // the scaled image (not the desktop), so resize/fullscreen cannot
-        // turn it into thick, uneven bars. Clean pixel art is the default.
-        float pixelScale = dst.height / VRES_H;
+        float pixelScale = dst.height / (float)g.vh;
         if (g.crtOn && pixelScale >= 1.25f) {
             float bandH = std::max(1.0f, pixelScale * 0.26f);
-            for (int y = 0; y < VRES_H; ++y) {
+            for (int y = 0; y < g.vh; ++y) {
                 float bandY = dst.y + (y + 0.72f) * pixelScale;
                 DrawRectangleRec({ dst.x, bandY, dst.width, bandH }, Color{ 0, 0, 0, 15 });
             }
@@ -214,6 +279,7 @@ int main() {
         EndDrawing();
     }
 
+    if (g.upscaleRt.id != 0) UnloadRenderTexture(g.upscaleRt);
     UnloadRenderTexture(g.rt);
     unloadScore();
     CloseAudioDevice();
