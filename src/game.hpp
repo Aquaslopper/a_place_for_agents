@@ -145,6 +145,10 @@ enum MusicCue { MUS_NONE = -1, MUS_TITLE, MUS_VILLAGE, MUS_FIELD, MUS_WOOD, MUS_
     MUS_PASS, MUS_DUNES, MUS_HEARTH, MUS_CHAPEL, MUS_BATTLE, MUS_BOSS, MUS_VICTORY,
     MUS_GAMEOVER, MUS_COUNT };
 
+enum DunTheme : uint8_t { TH_MOSSY=0, TH_ROOTED, TH_AMBER, TH_MIRE, TH_HEATH, TH_FROST, TH_SUNSCORCH, TH_CRYPT, TH_COUNT };
+const char* dunThemeName(int theme);
+MusicCue dunThemeMusic(int theme);
+
 enum NpcSprite { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_ELDER, NS_MAYOR,
     NS_WOMAN, NS_CHILD, NS_GUARD, NS_SOLDIER, NS_KNIGHT, NS_MERCHANT, NS_SMITH,
     NS_PRIEST, NS_FARMER, NS_DOG, NS_CAT, NS_CHICKEN, NS_SHEEP,
@@ -157,6 +161,11 @@ struct Assets {
     Texture2D brickFloor[2]{};
     Texture2D plankFloor{}, tileFloor{}, stoneFloor{}, carpet{}, stoolTex{};
     Texture2D tuft[3]{}, flowers[2]{}, pebble{};
+    // dungeon floors — one per theme plus shared overlays (tiles/ 16×16, validator-legal)
+    Texture2D dunFloor[TH_COUNT]{};
+    Texture2D dunWall[TH_COUNT]{};
+    Texture2D dungeonFloor{}, flagstoneFloor{}, cobbleFloor{}, sandFloor{}, tundraFloor{}, iceFloor{}, snowFloor{}, swampFloor{}, arcaneFloor{}, dirtFloor{};
+    Texture2D iceCrack{};
     // objects
     Texture2D tree[3]{}, treeSnow{}, pine[3]{}, deadTree{}, amberOak{}, copperOak{}, willow{}, reeds{}, yucca{}, crate{};
     Texture2D rock[3]{}, boulder{}, crystal{};
@@ -613,6 +622,10 @@ void dungeonDraw();
 const char* dungeonPrompt();          // bottom interaction hint, or nullptr
 bool dungeonActive();                 // true while MODE_DUNGEON state is live
 void dungeonLeaveToOverworld();       // climb out (restores field position)
+int dungeonTheme();                   // TH_* or -1 when not in a dungeon
+const char* dungeonThemeName();       // e.g. "Mossy Warren" for HUD
+const char* dungeonFullName();        // e.g. "Gloam Warrens — Mire Grotto"
+MusicCue dungeonMusicCue();            // theme-aware dungeon music
 
 // sound helper
 void playSoundIf(Sound& s);

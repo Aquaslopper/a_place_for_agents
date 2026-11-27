@@ -15,11 +15,12 @@ namespace {
 // ================================================================ types
 enum DunTile : uint8_t { DT_WALL = 0, DT_FLOOR = 1 };
 
-// dungeon prop texture ids (mapped onto the shared asset sheet)
+// dungeon prop texture ids (mapped onto the shared asset sheet) — diversified per theme
 enum DunPropTex {
     DP_BARREL = 0, DP_CRATE, DP_PILLAR, DP_STATUE, DP_URN, DP_TORCH,
     DP_CANDLE, DP_LANTERN, DP_TABLE, DP_LONGTABLE, DP_STOOL, DP_KEG,
-    DP_SHELF, DP_PLANT, DP_CRYSTAL, DP_MUSHROOM, DP_COUNT
+    DP_SHELF, DP_PLANT, DP_CRYSTAL, DP_MUSHROOM,
+    DP_BOULDER, DP_REEDS, DP_BUSH, DP_STUMP, DP_COUNT
 };
 
 struct DunChest { int tx, ty; int item; int amount; int gil; uint64_t id; };
@@ -45,7 +46,9 @@ struct Dungeon {
     bool startCavern = false;
     int floor = 0, floors = 3;
     int zoneBase = 1;
+    int theme = TH_MOSSY;
     std::string name;
+    std::string themeName;
     DunFloor F;
     std::unordered_map<int, std::vector<uint8_t>> explored;
     float px = 0, py = 0;               // tile units
@@ -111,16 +114,63 @@ Texture2D* dunPropTexture(int tex) {
         case DP_PLANT:     return &g.assets.plant;
         case DP_CRYSTAL:   return &g.assets.crystal;
         case DP_MUSHROOM:  return &g.assets.mushroom;
+        case DP_BOULDER:   return &g.assets.boulder;
+        case DP_REEDS:     return &g.assets.reeds;
+        case DP_BUSH:      return &g.assets.bush[0];
+        case DP_STUMP:     return g.assets.stump.id ? &g.assets.stump : &g.assets.bush[1];
         default:           return &g.assets.barrel;
     }
 }
 bool dunPropSolid(int tex) {
     switch (tex) {
         case DP_TORCH: case DP_CANDLE: case DP_LANTERN: case DP_MUSHROOM:
+        case DP_REEDS: case DP_BUSH:
             return false;
         default:
             return true;
     }
+}
+
+// per-theme visuals: background, fog, torch glow and wall tints
+struct ThemeVis {
+    Color clear;
+    Color fog;
+    Color torchGlow;
+    Color wallLight;
+    Color wallDark;
+    Color sconceTint;
+};
+ThemeVis themeVisual(int th) {
+    switch (th) {
+        case TH_MOSSY:     return { {  8, 12, 14, 255}, {  4, 10, 10, 255}, {255,170, 60,255}, {168,176,156,255}, { 58, 62, 48,255}, WHITE };
+        case TH_ROOTED:    return { { 10,  9, 14, 255}, {  8,  8, 14, 255}, {255,180, 70,255}, {158,146,132,255}, { 52, 42, 38,255}, Color{255,210,140,255} };
+        case TH_AMBER:     return { { 14, 12,  8, 255}, { 16, 12,  6, 255}, {255,200, 90,255}, {192,178,142,255}, { 70, 58, 42,255}, Color{255,220,160,255} };
+        case TH_MIRE:      return { {  6, 10, 12, 255}, {  6, 16, 14, 255}, {150,255,130,255}, {120,148,132,255}, { 36, 52, 44,255}, Color{170,255,150,255} };
+        case TH_HEATH:     return { { 12, 12, 16, 255}, { 14, 14, 20, 255}, {255,190, 80,255}, {172,168,160,255}, { 58, 54, 62,255}, WHITE };
+        case TH_FROST:     return { {  8, 12, 22, 255}, { 10, 14, 26, 255}, {120,180,255,255}, {160,180,210,255}, { 38, 48, 72,255}, Color{180,220,255,255} };
+        case TH_SUNSCORCH: return { { 18, 14, 10, 255}, { 22, 16, 10, 255}, {255,160, 60,255}, {188,172,144,255}, { 64, 52, 38,255}, Color{255,180, 80,255} };
+        case TH_CRYPT:     return { { 10,  8, 14, 255}, { 12,  8, 16, 255}, {200,140,255,255}, {148,138,168,255}, { 42, 38, 52,255}, Color{210,180,255,255} };
+        default:           return { {  8,  8, 14, 255}, {  4,  4, 10, 255}, {255,170, 60,255}, {168,156,176,255}, { 58, 52, 72,255}, WHITE };
+    }
+}
+int themeForSite(int siteTx, int siteTy, uint32_t seed) {
+    Biome b = sampleGround(siteTx, siteTy).biome;
+    int th = TH_CRYPT;
+    switch (b) {
+        case BI_MEADOW: th = TH_MOSSY; break;
+        case BI_FOREST: th = TH_ROOTED; break;
+        case BI_AMBER:  th = TH_AMBER; break;
+        case BI_FEN:    th = TH_MIRE; break;
+        case BI_HEATH:  th = TH_HEATH; break;
+        case BI_FROST:  th = TH_FROST; break;
+        case BI_DUNES:  th = TH_SUNSCORCH; break;
+        default: break;
+    }
+    // far wilds sometimes collapse into a true crypt regardless of surface
+    int zl = zoneLevelAt((float)siteTx + 0.5f, (float)siteTy + 1.5f);
+    if (zl >= 10 && (seed % 5u) == 0u) th = TH_CRYPT;
+    if (zl >= 14 && (seed % 3u) == 0u) th = TH_CRYPT;
+    return th;
 }
 
 bool dunBlocked(float x, float y, float r) {
@@ -139,26 +189,60 @@ bool dunBlocked(float x, float y, float r) {
 
 // ================================================================ content tables
 const char* cavernNameFor(uint32_t seed) {
-    static const char* kNames[] = {
-        "Whispering Cavern", "The Bone Gallery", "Emberdeep", "Murkfall Shaft",
-        "Gloam Warrens", "The Sunken Vault", "Rook's Hollow", "Cinder Delve"
-    };
-    return kNames[(seed >> 8) % 8];
+    // theme-tinted naming: each theme has its own 8-name table, seeded deterministically
+    static const char* kMossy[] = {"Whispering Warren","Mould Hollow","Rootbreak Delve","Green Gloam","Bramble Maw","Mossvault","Thorn Warren","Fern Hollow"};
+    static const char* kRooted[] = {"Hollow Hill","Rooted Hollow","Briar Delve","Hollowed Copse","Burrowed Hollow","Deepwood Cut","Wormroot","The Undergrove"};
+    static const char* kAmber[] = {"Amber Vault","Emberdeep Hollow","Sunleaf Delve","Golden Warren","Amber Grotto","The Gilded Cut","Leafvault","Hollow of Amber"};
+    static const char* kMire[] = {"Murkfall Shaft","The Sunken Vault","Bilge Hollow","Fen Grotto","Mire Warren","Drowned Vault","Silt Hollow","The Reed Cut"};
+    static const char* kHeath[] = {"Stonevault","The Stone Cut","Heath Barrow","Windcut Hollow","Grit Warren","Stone Maw","Heathvault","Rook's Hollow"};
+    static const char* kFrost[] = {"Frostvault","Rime Hollow","Ice Maw","Snowcut Warren","Hoarfrost Delve","The White Vault","Chill Warren","Glacier Hollow"};
+    static const char* kSun[] = {"Cinder Delve","Sunscorch Cut","Dustvault","Ember Maw","Sand Warren","Sun Hollow","Scorchvault","The Dry Cut"};
+    static const char* kCrypt[] = {"The Bone Gallery","Gloam Warrens","Emberdeep","Whispering Cavern","Murkfall Shaft","The Sunken Vault","Rook's Hollow","Cinder Delve"};
+    int th = D.theme;
+    const char** tab = kCrypt;
+    if (th==TH_MOSSY) tab=kMossy; else if (th==TH_ROOTED) tab=kRooted; else if (th==TH_AMBER) tab=kAmber;
+    else if (th==TH_MIRE) tab=kMire; else if (th==TH_HEATH) tab=kHeath; else if (th==TH_FROST) tab=kFrost;
+    else if (th==TH_SUNSCORCH) tab=kSun;
+    return tab[(seed >> 8) % 8];
 }
 
 EnemyKind pickDungeonEnemy(Rng& rng, int zl) {
-    static const EnemyKind pool[] = {
-        EN_SLIME, EN_BAT, EN_IMP, EN_GOBLIN, EN_BANDIT, EN_WOLF, EN_PORCUPINE,
-        EN_SKELETON, EN_GHOST, EN_ORC, EN_SHADE, EN_REAPER, EN_TIGER,
-        EN_NIGHT_RIDER, EN_DREAD_KNIGHT, EN_GOLEM, EN_ARCHFIEND, EN_SERPENT
-    };
-    const int n = (int)(sizeof(pool) / sizeof(pool[0]));
+    // theme-weighted pools — each cavern feels like its surface biome, tier-filtered by depth
+    static const EnemyKind kMossy[] = { EN_SLIME, EN_GOBLIN, EN_BANDIT, EN_WOLF, EN_PORCUPINE, EN_SKELETON, EN_SKELETON, EN_BAT };
+    static const EnemyKind kRooted[] = { EN_BAT, EN_WOLF, EN_FAERIE, EN_GOBLIN, EN_PORCUPINE, EN_SKELETON, EN_TIGER };
+    static const EnemyKind kAmber[] = { EN_HORNET, EN_FAERIE, EN_WOLF, EN_PORCUPINE, EN_GOBLIN, EN_TIGER, EN_DRAKE };
+    static const EnemyKind kMire[] = { EN_WISP, EN_SLIME, EN_SKELETON, EN_GHOST, EN_SHADE, EN_SERPENT, EN_NAGA };
+    static const EnemyKind kHeath[] = { EN_SKELETON, EN_ORC, EN_REAPER, EN_SHADE, EN_BANDIT, EN_GOLEM, EN_PORCUPINE };
+    static const EnemyKind kFrost[] = { EN_WISP, EN_WOLF, EN_SKELETON, EN_GOLEM, EN_TIGER, EN_SHADE, EN_REAPER };
+    static const EnemyKind kSun[] = { EN_HORNET, EN_ORC, EN_SERPENT, EN_NAGA, EN_DRAKE, EN_BANDIT, EN_IMP };
+    static const EnemyKind kCrypt[] = { EN_SKELETON, EN_GHOST, EN_SHADE, EN_REAPER, EN_NIGHT_RIDER, EN_DREAD_KNIGHT, EN_ARCHFIEND, EN_GOLEM, EN_SERPENT };
+    static const EnemyKind kGeneric[] = { EN_SLIME, EN_BAT, EN_IMP, EN_GOBLIN, EN_BANDIT, EN_WOLF, EN_PORCUPINE, EN_SKELETON, EN_GHOST, EN_ORC, EN_SHADE, EN_REAPER, EN_TIGER, EN_NIGHT_RIDER, EN_DREAD_KNIGHT, EN_GOLEM, EN_ARCHFIEND, EN_SERPENT };
+    const EnemyKind* pool = kGeneric; int n = 18;
+    switch (D.theme) {
+        case TH_MOSSY: pool=kMossy; n=8; break;
+        case TH_ROOTED: pool=kRooted; n=7; break;
+        case TH_AMBER: pool=kAmber; n=7; break;
+        case TH_MIRE: pool=kMire; n=7; break;
+        case TH_HEATH: pool=kHeath; n=7; break;
+        case TH_FROST: pool=kFrost; n=7; break;
+        case TH_SUNSCORCH: pool=kSun; n=7; break;
+        case TH_CRYPT: pool=kCrypt; n=9; break;
+        default: break;
+    }
     int maxTier = std::max(1, std::min(5, 1 + (zl + D.floor) / 3));
     int minTier = std::max(1, maxTier - 2);
     int candidates[18], c = 0;
     for (int i = 0; i < n; i++) {
         int t = enemyDef(pool[i]).tier;
         if (t >= minTier && t <= maxTier) candidates[c++] = i;
+    }
+    // fallback to generic if theme filter was too narrow for this depth
+    if (c == 0) {
+        pool = kGeneric; n = 18;
+        for (int i = 0; i < n; i++) {
+            int t = enemyDef(pool[i]).tier;
+            if (t >= minTier && t <= maxTier) candidates[c++] = i;
+        }
     }
     if (c == 0) return EN_BAT;
     return pool[candidates[(int)(rng.next() % (uint32_t)c)]];
@@ -193,6 +277,43 @@ int rollDungeonLoot(uint32_t pick, bool vault) {
         IT_ARMOR_PLATE, IT_ROBE_ARCHMAGE, IT_AMULET_GUARD, IT_BOOTS_SWIFT, IT_HUNTER_BOW
     };
     return kDeep[pick % 11u];
+}
+
+int pickThemeQuietProp(Rng& rng) {
+    switch (D.theme) {
+        case TH_MOSSY:     return rng.chance(50) ? DP_MUSHROOM : (rng.chance(50) ? DP_BUSH : DP_STUMP);
+        case TH_ROOTED:    return rng.chance(40) ? DP_MUSHROOM : (rng.chance(60) ? DP_STUMP : DP_BUSH);
+        case TH_AMBER:     return rng.chance(60) ? DP_PLANT : DP_MUSHROOM;
+        case TH_MIRE:      return rng.chance(55) ? DP_REEDS : (rng.chance(50) ? DP_MUSHROOM : DP_BUSH);
+        case TH_HEATH:     return rng.chance(50) ? DP_BOULDER : DP_CRYSTAL;
+        case TH_FROST:     return rng.chance(70) ? DP_CRYSTAL : DP_BOULDER;
+        case TH_SUNSCORCH: return rng.chance(60) ? DP_URN : DP_BOULDER;
+        case TH_CRYPT:     return rng.chance(60) ? DP_URN : DP_CRYSTAL;
+        default:           return rng.chance(50) ? DP_URN : DP_MUSHROOM;
+    }
+}
+int pickThemeFurnProp(Rng& rng) {
+    switch (D.theme) {
+        case TH_MOSSY:     { static const int k[]={DP_BARREL,DP_CRATE,DP_KEG,DP_TABLE,DP_STOOL,DP_BUSH,DP_STUMP}; return k[rng.next()%7]; }
+        case TH_ROOTED:    { static const int k[]={DP_BARREL,DP_CRATE,DP_TABLE,DP_STUMP,DP_MUSHROOM,DP_PLANT,DP_BUSH}; return k[rng.next()%7]; }
+        case TH_AMBER:     { static const int k[]={DP_BARREL,DP_CRATE,DP_TABLE,DP_SHELF,DP_PLANT,DP_URN,DP_CRYSTAL}; return k[rng.next()%7]; }
+        case TH_MIRE:      { static const int k[]={DP_BARREL,DP_CRATE,DP_KEG,DP_URN,DP_REEDS,DP_MUSHROOM,DP_PLANT}; return k[rng.next()%7]; }
+        case TH_HEATH:     { static const int k[]={DP_BARREL,DP_CRATE,DP_TABLE,DP_STOOL,DP_SHELF,DP_BOULDER,DP_STATUE}; return k[rng.next()%7]; }
+        case TH_FROST:     { static const int k[]={DP_CRATE,DP_BARREL,DP_CRYSTAL,DP_BOULDER,DP_TABLE,DP_LANTERN,DP_URN}; return k[rng.next()%7]; }
+        case TH_SUNSCORCH: { static const int k[]={DP_BARREL,DP_CRATE,DP_URN,DP_KEG,DP_TABLE,DP_BOULDER,DP_PILLAR}; return k[rng.next()%7]; }
+        case TH_CRYPT:     { static const int k[]={DP_PILLAR,DP_STATUE,DP_URN,DP_CRATE,DP_TABLE,DP_SHELF,DP_CANDLE}; return k[rng.next()%7]; }
+        default:           { static const int k[]={DP_BARREL,DP_CRATE,DP_KEG,DP_TABLE,DP_STOOL,DP_SHELF,DP_PLANT}; return k[rng.next()%7]; }
+    }
+}
+int pickThemeVaultProp(Rng& rng) {
+    switch (D.theme) {
+        case TH_FROST: return DP_CRYSTAL;
+        case TH_MIRE:  return rng.chance(50) ? DP_STATUE : DP_URN;
+        case TH_HEATH: return DP_STATUE;
+        case TH_SUNSCORCH: return DP_URN;
+        case TH_CRYPT: return rng.chance(40) ? DP_STATUE : DP_PILLAR;
+        default: return rng.chance(30) ? DP_STATUE : DP_LONGTABLE;
+    }
 }
 
 // ================================================================ generation
@@ -304,6 +425,10 @@ void generateFloor() {
         carveCorridor(f.tiles, f.w, f.h, ax, ay, bx, by);
     }
     int loops = 1 + (int)(rng.next() % 3u);
+    // theme nudges connectivity: mire is loopier, crypt is more linear, frost is airy
+    if (D.theme == TH_MIRE) loops = 2 + (int)(rng.next() % 2u);
+    else if (D.theme == TH_CRYPT) loops = 1 + (int)(rng.next() % 2u);
+    else if (D.theme == TH_FROST) loops = std::max(1, loops - (rng.chance(50)?1:0));
     for (int i = 0; i < loops && rooms.size() > 3; i++) {
         int a = (int)(rng.next() % (uint32_t)rooms.size());
         int b = (a + 1 + (int)(rng.next() % (uint32_t)(rooms.size() - 1))) % (int)rooms.size();
@@ -359,13 +484,29 @@ void generateFloor() {
     DunFloor& F = D.F;
 
     // --- wall sconces: torches on wall cells that face the floor (never block)
+    // sconce density is theme-tinted: mire glows more, frost glints, heath is sparser
+    int sconceMod = 9;
+    if (D.theme == TH_MIRE) sconceMod = 7;
+    else if (D.theme == TH_FROST) sconceMod = 8;
+    else if (D.theme == TH_HEATH) sconceMod = 10;
+    else if (D.theme == TH_SUNSCORCH) sconceMod = 11;
     for (int y = 1; y < F.h - 1; y++) {
         for (int x = 1; x < F.w - 1; x++) {
             if (F.tiles[dIdx(x, y, F.w)] != DT_WALL) continue;
             bool faceFloor = cellOpen(x, y + 1) || cellOpen(x + 1, y) || cellOpen(x - 1, y);
             if (!faceFloor) continue;
-            if (hash2i(x, y, D.seed ^ ((uint32_t)D.floor * 131u)) % 9u == 0u)
+            if (hash2i(x, y, D.seed ^ ((uint32_t)D.floor * 131u)) % (uint32_t)sconceMod == 0u)
                 F.sconces.push_back({ x, y });
+        }
+    }
+    // theme-specific accent: frost gets crystal shards, mire gets reed tufts along watery seams
+    if (D.theme == TH_FROST || D.theme == TH_MIRE || D.theme == TH_SUNSCORCH) {
+        for (int y = 1; y < F.h - 1; y++) for (int x = 1; x < F.w - 1; x++) {
+            if (!cellOpen(x, y)) continue;
+            if ((hash2i(x, y, D.seed ^ 0xA5u) % 64u) != 0u) continue;
+            if (D.theme == TH_FROST) addProp(F, DP_CRYSTAL, x, y, 0.6f, 0.55f);
+            else if (D.theme == TH_MIRE && rng.chance(60)) addProp(F, DP_REEDS, x, y, 0.7f, 0.45f);
+            else if (D.theme == TH_SUNSCORCH && rng.chance(50)) addProp(F, DP_BOULDER, x, y, 0.7f, 0.5f);
         }
     }
 
@@ -376,36 +517,54 @@ void generateFloor() {
         int roll = (int)(rng.next() % 6u);
         int cx, cy; roomCenter(r, cx, cy);
         if (roll <= 1) {
-            if (rng.chance(70)) {              // empty chamber: quiet dressing
-                int tex = rng.chance(50) ? DP_URN : (rng.chance(50) ? DP_MUSHROOM : DP_CRYSTAL);
+            if (rng.chance(70)) {              // empty chamber: quiet dressing — theme picks the clutter
+                int tex = pickThemeQuietProp(rng);
                 int px_ = rng.range(r.x, r.x + r.w - 1);
                 int py_ = rng.range(r.y, r.y + r.h - 1);
                 if (!(px_ == cx && py_ == cy)) addProp(F, tex, px_, py_);
             }
         } else if (roll <= 3) {
-            int count = rng.range(1, 3);       // stores & furniture
+            int count = rng.range(1, 3);       // stores & furniture — theme stock
             for (int i = 0; i < count; i++) {
-                static const int kFurn[] = { DP_BARREL, DP_CRATE, DP_KEG, DP_TABLE, DP_STOOL, DP_SHELF, DP_PLANT };
-                int tex = kFurn[(int)(rng.next() % 7u)];
+                int tex = pickThemeFurnProp(rng);
                 int px_ = rng.range(r.x, r.x + r.w - 1);
                 int py_ = rng.range(r.y, r.y + r.h - 1);
                 if (px_ == cx && py_ == cy) continue;
                 addProp(F, tex, px_, py_);
             }
         } else {                               // guarded hall
-            if (r.w >= 7 && r.h >= 5) {
+            // Crypt themed halls keep true pillared colonnades; others improvise
+            bool pillarTheme = (D.theme == TH_CRYPT || D.theme == TH_HEATH || D.theme == TH_AMBER);
+            if (pillarTheme && r.w >= 7 && r.h >= 5) {
                 addProp(F, DP_PILLAR, r.x + 1, r.y + 1);
                 addProp(F, DP_PILLAR, r.x + r.w - 2, r.y + 1);
                 if (r.h >= 6) {
                     addProp(F, DP_PILLAR, r.x + 1, r.y + r.h - 2);
                     addProp(F, DP_PILLAR, r.x + r.w - 2, r.y + r.h - 2);
                 }
+            } else if (r.w >= 6 && r.h >= 5) {
+                // alternate theme dressing: boulders for heath, crystal for frost, etc.
+                if (D.theme == TH_FROST) {
+                    addProp(F, DP_CRYSTAL, r.x+1, r.y+1, 0.7f, 0.6f);
+                    addProp(F, DP_CRYSTAL, r.x+r.w-2, r.y+1, 0.7f, 0.6f);
+                } else if (D.theme == TH_SUNSCORCH) {
+                    addProp(F, DP_URN, r.x+1, r.y+1);
+                    addProp(F, DP_URN, r.x+r.w-2, r.y+1);
+                } else if (D.theme == TH_HEATH) {
+                    addProp(F, DP_BOULDER, r.x+1, r.y+1, 0.7f, 0.55f);
+                    addProp(F, DP_BOULDER, r.x+r.w-2, r.y+1, 0.7f, 0.55f);
+                } else if (r.w >= 7 && r.h >= 5) {
+                    addProp(F, DP_PILLAR, r.x + 1, r.y + 1);
+                    addProp(F, DP_PILLAR, r.x + r.w - 2, r.y + 1);
+                }
             }
             if (rng.chance(55)) {
                 int px_ = rng.range(r.x, r.x + r.w - 1);
                 int py_ = rng.range(r.y, r.y + r.h - 1);
-                if (!(px_ == cx && py_ == cy))
-                    addProp(F, rng.chance(30) ? DP_STATUE : DP_LONGTABLE, px_, py_, 1.3f, 0.9f);
+                if (!(px_ == cx && py_ == cy)) {
+                    int vaultTex = pickThemeVaultProp(rng);
+                    addProp(F, vaultTex, px_, py_, 1.3f, 0.9f);
+                }
             }
         }
     }
@@ -531,8 +690,12 @@ void generateFloor() {
         placeChest(rng.range(r.x, r.x + r.w - 1), rng.range(r.y, r.y + r.h - 1), false);
     }
 
-    // --- roaming inhabitants
+    // --- roaming inhabitants — theme nudges density: crypt/frost a touch lonelier, mire busier
     int mobCount = std::min(3 + D.floor, 6);
+    if (D.theme == TH_MIRE) mobCount = std::min(4 + D.floor, 7);
+    else if (D.theme == TH_FROST) mobCount = std::max(2, std::min(2 + D.floor, 5));
+    else if (D.theme == TH_HEATH) mobCount = std::min(4 + D.floor, 7);
+    else if (D.theme == TH_CRYPT) mobCount = std::min(3 + D.floor, 6);
     guard = 0;
     while (placedMobs < mobCount && guard++ < 60) {
         const Room& r = rooms[(int)(rng.next() % (uint32_t)rooms.size())];
@@ -652,9 +815,24 @@ void enterDungeon(int siteTx, int siteTy, bool startCavern) {
     D.siteTx = siteTx; D.siteTy = siteTy;
     D.startCavern = startCavern;
     D.seed = g.worldSeed ^ hash2i(siteTx, siteTy, 0xD0A6Eu) ^ (startCavern ? 0x57ACu : 0u);
-    D.floors = startCavern ? 4 : (2 + (int)((D.seed >> 9) & 1u));
+    // theme is derived from surface biome + seed so every mouth has a stable identity
+    if (startCavern) D.theme = TH_MOSSY;
+    else D.theme = themeForSite(siteTx, siteTy, D.seed);
+    D.themeName = dunThemeName(D.theme);
+    // theme can nudge depth: heath/crypt feel deeper, frost/sunscorch a touch shallower
+    int baseFloors = startCavern ? 4 : (2 + (int)((D.seed >> 9) & 1u));
+    if (!startCavern) {
+        if (D.theme == TH_HEATH || D.theme == TH_CRYPT) baseFloors = std::min(4, baseFloors + (D.seed & 1u ? 1 : 0));
+        else if (D.theme == TH_FROST) baseFloors = std::max(2, baseFloors - (int)(D.seed & 1u));
+    }
+    D.floors = baseFloors;
     D.floor = 0;
-    D.name = startCavern ? "Hollow Hill" : cavernNameFor(D.seed);
+    // keep Hollow Hill's historic name; other caverns get a theme-tinted title
+    {
+        const char* base = startCavern ? "Hollow Hill" : cavernNameFor(D.seed);
+        D.name = base;
+        // fullName for HUD includes theme; keep D.name as short base for logs/saves
+    }
     D.zoneBase = std::max(1, zoneLevelAt((float)siteTx + 0.5f, (float)siteTy + 1.5f));
     generateAndEnterFloor();
     g.mode = MODE_DUNGEON;
@@ -1010,15 +1188,18 @@ void dungeonDraw() {
     }
     float camX = roundf(D.camX - shakeX);
     float camY = roundf(D.camY - shakeY);
-    ClearBackground(Color{ 8, 8, 14, 255 });
+    ThemeVis vis = themeVisual(D.theme);
+    ClearBackground(vis.clear);
 
     int x0 = (int)floorf(camX / TILE) - 1;
     int y0 = (int)floorf(camY / TILE) - 1;
     int x1 = x0 + g.vw / TILE + 3;
     int y1 = y0 + g.vh / TILE + 3;
 
-    Texture2D& floorTex = g.assets.stoneFloor.id ? g.assets.stoneFloor : g.assets.tileFloor;
-    Texture2D& brickTex = g.assets.brickFloor[1].id ? g.assets.brickFloor[1] : g.assets.brickFloor[0];
+    Texture2D floorTex = g.assets.dunFloor[D.theme];
+    if (floorTex.id == 0) floorTex = g.assets.stoneFloor.id ? g.assets.stoneFloor : g.assets.tileFloor;
+    Texture2D brickTex = g.assets.dunWall[D.theme];
+    if (brickTex.id == 0) brickTex = g.assets.brickFloor[1].id ? g.assets.brickFloor[1] : g.assets.brickFloor[0];
 
     // --- ground layer
     for (int ty = y0; ty <= y1; ty++) {
@@ -1031,35 +1212,53 @@ void dungeonDraw() {
                 else
                     DrawRectangle((int)sx, (int)sy, TILE, TILE, Color{ 84, 76, 92, 255 });
                 if (((tx + ty) & 1) == 0)
-                    DrawRectangle((int)sx, (int)sy, TILE, TILE, Fade(Color{ 0, 0, 8, 255 }, 0.10f));
+                    DrawRectangle((int)sx, (int)sy, TILE, TILE, Fade(Color{ 0, 0, 8, 255 }, 0.08f));
+                // theme-tinted floor variance: cracks, moss tufts, sand ripples drawn as subtle overlay
+                uint32_t fh = hash2i(tx, ty, D.seed ^ (uint32_t)D.theme * 7919u);
+                if ((fh % 23u) == 0u && g.assets.iceCrack.id && D.theme == TH_FROST) {
+                    DrawTexturePro(g.assets.iceCrack, {0,0,(float)g.assets.iceCrack.width,(float)g.assets.iceCrack.height},
+                                   {sx,sy,TILE,TILE},{0,0},0.0f, Fade(WHITE,0.35f));
+                } else if ((fh % 31u)==0u && g.assets.pebble.id && (D.theme==TH_HEATH || D.theme==TH_MOSSY)) {
+                    DrawTexturePro(g.assets.pebble, {0,0,(float)g.assets.pebble.width,(float)g.assets.pebble.height},
+                                   {sx+2,sy+4,12,8},{0,0},0.0f, Fade(WHITE,0.28f));
+                } else if ((fh % 29u)==0u && g.assets.tundraFloor.id && D.theme==TH_HEATH) {
+                    DrawTexturePro(g.assets.tundraFloor,{0,0,(float)g.assets.tundraFloor.width,(float)g.assets.tundraFloor.height},
+                                   {sx,sy,TILE,TILE},{0,0},0.0f, Fade(Color{200,190,170,255},0.18f));
+                }
             } else if (inBounds(tx, ty)) {
                 bool face = cellOpen(tx, ty + 1);
                 if (face && brickTex.id) {
-                    // south-facing wall face catches the light
+                    // south-facing wall face catches theme light
                     DrawTexturePro(brickTex, { 0, 0, (float)brickTex.width, (float)brickTex.height },
                                    { sx, sy, TILE, TILE }, { 0, 0 }, 0.0f,
-                                   Color{ 168, 156, 176, 255 });
-                    DrawRectangle((int)sx, (int)sy, TILE, 3, Color{ 210, 198, 220, 255 });
-                    DrawRectangle((int)sx, (int)(sy + TILE - 4), TILE, 4, Color{ 40, 34, 52, 255 });
+                                   vis.wallLight);
+                    DrawRectangle((int)sx, (int)sy, TILE, 3, Fade(vis.wallLight, 0.95f));
+                    DrawRectangle((int)sx, (int)(sy + TILE - 4), TILE, 4, vis.wallDark);
                 } else if (brickTex.id) {
                     DrawTexturePro(brickTex, { 0, 0, (float)brickTex.width, (float)brickTex.height },
                                    { sx, sy, TILE, TILE }, { 0, 0 }, 0.0f,
-                                   Color{ 58, 52, 72, 255 });
+                                   vis.wallDark);
                 } else {
-                    DrawRectangle((int)sx, (int)sy, TILE, TILE, Color{ 30, 26, 40, 255 });
+                    DrawRectangle((int)sx, (int)sy, TILE, TILE, vis.wallDark);
                 }
             } else {
-                DrawRectangle((int)sx, (int)sy, TILE, TILE, Color{ 6, 6, 10, 255 });
+                DrawRectangle((int)sx, (int)sy, TILE, TILE, Fade(vis.clear, 0.9f));
             }
         }
     }
 
-    // Sconces are fixtures, not invisible light sources.
+    // Sconces are fixtures, not invisible light sources — tinted per theme
     for (const auto& sc : D.F.sconces) {
         if (!g.assets.torch.id) break;
         float cx = (sc.first + 0.5f) * TILE - camX;
         float fy = (sc.second + 1.0f) * TILE - camY;
-        texFootLocal(g.assets.torch, cx, fy);
+        // frost shows crystal sparkle, mire uses lantern green, sunscorch warm brazier
+        Texture2D sconceTex = g.assets.torch;
+        Color sconceTint = vis.sconceTint;
+        if (D.theme == TH_FROST && g.assets.crystal.id) { sconceTex = g.assets.crystal; sconceTint = Color{180,220,255,255}; }
+        else if (D.theme == TH_MIRE && g.assets.lantern.id) { sconceTex = g.assets.lantern; sconceTint = Color{170,255,150,255}; }
+        else if (D.theme == TH_SUNSCORCH && g.assets.candle.id) { sconceTex = g.assets.candle; sconceTint = Color{255,200,120,255}; }
+        texFootLocal(sconceTex, cx, fy, sconceTint);
     }
 
     // --- stair decals (drawn on the floor, revealed by torchlight)
@@ -1154,8 +1353,8 @@ void dungeonDraw() {
         }
     }
 
-    // --- darkness & torchlight
-    DrawRectangle(0, 0, g.vw, g.vh, Fade(Color{ 4, 4, 10, 255 }, 0.34f));
+    // --- darkness & torchlight — theme tints the fog and every glow
+    DrawRectangle(0, 0, g.vw, g.vh, Fade(vis.fog, 0.34f));
     BeginBlendMode(BLEND_ADDITIVE);
     for (auto& sc : D.F.sconces) {
         float cx = (sc.first + 0.5f) * TILE - camX;
@@ -1163,21 +1362,23 @@ void dungeonDraw() {
         if (cx < -40 || cx > g.vw + 40 || cy < -40 || cy > g.vh + 40) continue;
         float pulse = 0.5f + 0.5f * sinf(g.totalTime * 5.0f + (float)(sc.first * 7 + sc.second));
         DrawCircleGradient((int)cx, (int)cy, 30 + pulse * 7,
-                           Fade(Color{ 255, 168, 70, 255 }, 0.34f), BLANK);
+                           Fade(vis.torchGlow, 0.32f), BLANK);
     }
     for (auto& p : D.F.props) {
-        if (p.tex != DP_TORCH && p.tex != DP_LANTERN && p.tex != DP_CANDLE) continue;
+        if (p.tex != DP_TORCH && p.tex != DP_LANTERN && p.tex != DP_CANDLE && p.tex != DP_CRYSTAL) continue;
         float cx = p.x * TILE - camX;
         float cy = (p.y + 0.2f) * TILE - camY;
         float pulse = 0.5f + 0.5f * sinf(g.totalTime * 5.5f + p.x * 3.0f);
+        Color glow = vis.torchGlow;
+        if (p.tex == DP_CRYSTAL) glow = Color{160,210,255,255};
         DrawCircleGradient((int)cx, (int)cy, 26 + pulse * 6,
-                           Fade(Color{ 255, 176, 84, 255 }, 0.30f), BLANK);
+                           Fade(glow, 0.30f), BLANK);
     }
     {
         // the party's own lantern
         float cx = D.px * TILE - camX;
         float cy = (D.py + 0.1f) * TILE - camY;
-        DrawCircleGradient((int)cx, (int)cy, 66, Fade(Color{ 255, 226, 170, 255 }, 0.13f), BLANK);
+        DrawCircleGradient((int)cx, (int)cy, 66, Fade(vis.torchGlow, 0.13f), BLANK);
     }
     if (D.F.downTx >= 0) {
         float cx = (D.F.downTx + 0.5f) * TILE - camX;
@@ -1186,9 +1387,9 @@ void dungeonDraw() {
     }
     EndBlendMode();
 
-    // --- HUD
-    char header[96];
-    snprintf(header, sizeof(header), "%s  B%d", D.name.c_str(), D.floor + 1);
+    // --- HUD — show cavern base name plus theme for at-a-glance variety
+    char header[128];
+    snprintf(header, sizeof(header), "%s — %s  B%d", D.name.c_str(), D.themeName.c_str(), D.floor + 1);
     Vector2 tsz = measureText(header, 8);
     float tw = std::max(170.0f, tsz.x + 24.0f);
     drawWindow({ floorf(g.vw * 0.5f - tw * 0.5f), 5.0f, tw, 21.0f });
@@ -1244,4 +1445,18 @@ void dungeonDraw() {
         drawTextCentered(hint, g.vw * 0.5f, (float)g.vh - 17.0f, Color{ 235, 242, 255, 245 }, 8);
         drawToast();
     }
+}
+
+// -- theme accessors for HUD and music
+int dungeonTheme() { return D.active ? D.theme : -1; }
+const char* dungeonThemeName() { return D.active ? D.themeName.c_str() : ""; }
+const char* dungeonFullName() {
+    static char buf[128];
+    if (!D.active) return "";
+    snprintf(buf, sizeof(buf), "%s — %s", D.name.c_str(), D.themeName.c_str());
+    return buf;
+}
+MusicCue dungeonMusicCue() {
+    if (!D.active) return MUS_FEN;
+    return dunThemeMusic(D.theme);
 }

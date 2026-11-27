@@ -19,7 +19,7 @@ MusicCue sceneCue(Mode scene) {
     if (scene == MODE_GAMEOVER) return MUS_GAMEOVER;
     if (scene == MODE_BATTLE) return battleMusicCue();
     if (scene == MODE_ROOM) return g.room.kind == ROOM_TEMPLE ? MUS_CHAPEL : MUS_HEARTH;
-    if (scene == MODE_DUNGEON) return MUS_FEN;
+    if (scene == MODE_DUNGEON) return dungeonMusicCue();
     if (inVillage(g.px,g.py) || (!g.villageLoaded && g.px*g.px+g.py*g.py < 18*18)) return MUS_VILLAGE;
     if (inBossArena(g.px,g.py)) return MUS_PASS;
     switch (sampleGround((int)floorf(g.px),(int)floorf(g.py)).biome) {
