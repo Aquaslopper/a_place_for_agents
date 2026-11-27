@@ -11,14 +11,13 @@ static const float WALK_SPEED = 4.4f;     // tiles / second
 static const float RUN_SPEED  = 7.2f;
 
 Vector2 getVirtualMouse() {
+    // The 512x288 canvas is stretched to fill the whole window (see main.cpp),
+    // so X and Y scale independently and there is no letterbox offset.
     Vector2 m = GetMousePosition();
     int sw = GetScreenWidth(), sh = GetScreenHeight();
-    float scale = std::min((float)sw / VRES_W, (float)sh / VRES_H);
-    if (scale >= 2.0f) scale = floorf(scale);
-    if (scale < 0.01f) scale = 1.0f;
-    float offX = (sw - VRES_W * scale) * 0.5f;
-    float offY = (sh - VRES_H * scale) * 0.5f;
-    return { (m.x - offX) / scale, (m.y - offY) / scale };
+    if (sw < 1) sw = VRES_W;
+    if (sh < 1) sh = VRES_H;
+    return { m.x * (float)VRES_W / (float)sw, m.y * (float)VRES_H / (float)sh };
 }
 
 static bool mouseInVirtual() {

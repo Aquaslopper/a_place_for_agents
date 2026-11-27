@@ -208,10 +208,10 @@ static GroundTile generateGround(int tx, int ty) {
     float d = (float)(h & 0xffff)/65536.f;
     out.decoVariant = (uint8_t)((h>>16)%3);
     if (out.kind == G_GRASS || out.kind == G_GRASS_DARK) {
-        if (patch > 0.57f && d < 0.15f) out.deco = 2;
-        else if (patch > 0.32f && d < 0.11f) out.deco = 1;
-    } else if (out.kind == G_WATER && (out.biome == BI_FEN || bank < 2.2f) && d < 0.085f) out.deco = 4;
-    else if ((out.kind == G_HEATH || out.kind == G_BEACH || out.kind == G_SAND) && d < 0.055f) out.deco = 3;
+        if (patch > 0.57f && d < 0.18f) out.deco = 2;
+        else if (patch > 0.32f && d < 0.14f) out.deco = 1;
+    } else if (out.kind == G_WATER && (out.biome == BI_FEN || bank < 2.2f) && d < 0.10f) out.deco = 4;
+    else if ((out.kind == G_HEATH || out.kind == G_BEACH || out.kind == G_SAND) && d < 0.07f) out.deco = 3;
     return out;
 }
 
@@ -259,7 +259,7 @@ bool villageDecoSolid(int kind) {
 static bool proceduralLandmark(int sx, int sy, Landmark& out) {
     const int sector = 128;
     uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
-    if ((h % 100) >= 55) return false;
+    if ((h % 100) >= 50) return false;
     int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
     int ly = sy * sector + sector / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
     if ((float)lx * lx + (float)ly * ly < 42.0f * 42.0f) return false;
@@ -283,7 +283,7 @@ static bool proceduralLandmarkNear(int tx, int ty, int radius, Landmark& out) {
     // Candidates are at least 44 tiles from a sector edge; a single sector
     // suffices for the small footprint/clearing radii used here.
     uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x1a4d4u);
-    if ((h % 100) >= 55) return false;
+    if ((h % 100) >= 50) return false;
     int lx = sx * sector + sector / 2 + (int)(hashf(sx, sy, h) * 40) - 20;
     int ly = sy * sector + sector / 2 + (int)(hashf(sy, sx, h) * 40) - 20;
     if (abs(tx - lx) > radius || abs(ty - ly) > radius) return false;
@@ -396,8 +396,8 @@ PropKind propAt(int tx, int ty) {
                 if (gt.biome == BI_FOREST && ((h>>8)%3)) return (PropKind)(P_PINE0 + h%3);
                 return (PropKind)(P_TREE0 + h%3);
             }
-            if (hf < 0.012f) return P_ROCK0;
-            if (hf < 0.018f + grove * 0.046f) return P_BUSH_PLAIN;
+            if (hf < 0.014f) return P_ROCK0;
+            if (hf < 0.022f + grove * 0.055f) return P_BUSH_PLAIN;
             if (hf > 0.993f && grove > 0.48f) return P_STUMP;
             if (hf > 0.96f && gt.biome == BI_FOREST) return P_MUSHROOM;
             if (hf > 0.982f && grove < 0.50f) return P_BUSH;
@@ -781,7 +781,7 @@ void villageLoadAt(float x, float y) {
         for (int dy=-1; dy<=1; ++dy) for (int dx=-1; dx<=1; ++dx) {
             int cx=sx+dx, cy=sy+dy;
             uint32_t h=hash2i(cx,cy,g.worldSeed^0x71a9eu);
-            if (h%1000 >= 280) continue;
+            if (h%1000 >= 320) continue;
             int bx=cx*SECTOR+SECTOR/2, by=cy*SECTOR+SECTOR/2;
             bool ok=false;
             for (int r=0; r<40 && !ok; r+=3) for (int a=0; a<(r?16:1) && !ok; ++a) {
@@ -947,7 +947,7 @@ void npcsLoadFor(float x, float y, bool force) {
             const int sprites[] = { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3 };
             const int faces[] = { FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3 };
             const char* names[] = { "Elder Rowan", "Kip", "Guard Bram", "Elin", "Corin", "Mina" };
-            int n = 4 + (int)(v.seed % 3);
+            int n = 5 + (int)(v.seed % 3);
             for (int i = 0; i < n; i++) {
                 float ang = hashf(i, 11, v.seed) * 6.2831853f;
                 float r = 2.5f + hashf(i, 13, v.seed) * 5.0f;
@@ -962,7 +962,7 @@ void npcsLoadFor(float x, float y, bool force) {
         }
     } else {
         uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x4e3c17u);
-        if ((h % 100) < 20 && (x * x + y * y) > 45 * 45) {
+        if ((h % 100) < 25 && (x * x + y * y) > 45 * 45) {
             float px = sx * 32 + 8.0f + hashf(sx, sy, h) * 14.0f;
             float py = sy * 32 + 8.0f + hashf(sy, sx, h) * 14.0f;
             int tx = (int)floorf(px), ty = (int)floorf(py);
@@ -992,7 +992,7 @@ void chestsLoadFor(float x, float y) {
     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
         int cx = sx + dx, cy = sy + dy;
         uint32_t h = hash2i(cx, cy, g.worldSeed ^ 0xc4e57u);
-        if ((h % 100) >= 36) continue;
+        if ((h % 100) >= 42) continue;
         int tx = cx * SECTOR + 4 + (int)(hashf(cx, cy, h) * (SECTOR - 8));
         int ty = cy * SECTOR + 4 + (int)(hashf(cy, cx, h + 7) * (SECTOR - 8));
         if (!cellWalkable(tx, ty)) continue;
@@ -1109,7 +1109,7 @@ void fieldMonstersInView(float x, float y, std::vector<FieldMonster>& out) {
     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
         int cx = sx + dx, cy = sy + dy;
         uint32_t h = hash2i(cx, cy, g.worldSeed ^ 0xf11du);
-        if ((h % 100) >= 80) continue;
+        if ((h % 100) >= 85) continue;
         int count = 1 + (int)((h >> 8) % 2);
         for (int i = 0; i < count; i++) {
             float a = hashf(i, cx * 7 + 1, h) * 6.2831853f;

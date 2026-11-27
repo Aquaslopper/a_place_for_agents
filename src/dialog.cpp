@@ -596,7 +596,7 @@ void menuUpdate(float dt) {
 
     // ---- Page 4: Options & Save/Load
     if (g.menuPage == 4) {
-        const int NOPT = 8;
+        const int NOPT = 9;
         if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g.optionsIndex = (g.optionsIndex + NOPT - 1) % NOPT; playSoundIf(g.assets.cursor); }
         if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { g.optionsIndex = (g.optionsIndex + 1) % NOPT; playSoundIf(g.assets.cursor); }
         auto act = [&](int idx) {
@@ -623,19 +623,22 @@ void menuUpdate(float dt) {
                 ToggleFullscreen();
                 playSoundIf(g.assets.confirm);
             } else if (idx == 5) {
-                gShowControlsModal = true;
+                g.crtOn = !g.crtOn;
                 playSoundIf(g.assets.confirm);
             } else if (idx == 6) {
+                gShowControlsModal = true;
+                playSoundIf(g.assets.confirm);
+            } else if (idx == 7) {
                 g.audition = playingCue()==MUS_NONE ? MUS_VILLAGE : playingCue();
                 g.menuPage = 7; playSoundIf(g.assets.confirm);
-            } else if (idx == 7) {
+            } else if (idx == 8) {
                 returnToTitle();
             }
         };
         if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) act(g.optionsIndex);
         if (clicked) {
             for (int i = 0; i < NOPT; i++) {
-                if (CheckCollisionPointRec(m, { 130, (float)(42 + i * 28), 346, 24 })) {
+                if (CheckCollisionPointRec(m, { 130, (float)(42 + i * 25), 346, 22 })) {
                     g.optionsIndex = i; act(i); break;
                 }
             }
@@ -686,6 +689,7 @@ static void drawShopPage() {
             const ItemDef& d = itemDef(id);
             drawItemIcon(id, 30, y + 1, 14);
             drawText(d.name, 50, y + 4, WHITE, 8);
+            if (sel) drawCursor(26, y + 5);
 
             if (g.shopTab == 0) {
                 int own = itemCount(id);
@@ -981,25 +985,27 @@ void drawMenuScreen() {
     // ---- Page 4: Options & Save/Load
     else if (g.menuPage == 4) {
         drawText("OPTIONS & SAVE", 124, 20, Color{ 255, 232, 150, 255 }, 8);
-        const char* rows[8] = {
+        const char* rows[9] = {
             "Save Adventure to Disk",
             g.saveExists ? "Load Last Save" : "Load Last Save (none yet)",
             g.musicOn ? "Music: ON" : "Music: OFF",
             g.waitBattle ? "Battle Mode: WAIT (pauses on menus)" : "Battle Mode: ACTIVE (real-time ATB)",
             "Toggle Fullscreen (F11)",
+            g.crtOn ? "CRT Filter: ON (scanlines + vignette)" : "CRT Filter: OFF (clean pixels)",
             "Controls & Tips",
             "Sound Room",
             "Return to Title Screen",
         };
-        for (int i = 0; i < 8; i++) {
-            Rectangle r{ 130, (float)(42 + i * 28), 346, 24 };
+        for (int i = 0; i < 9; i++) {
+            Rectangle r{ 130, (float)(42 + i * 25), 346, 22 };
             bool sel = (i == g.optionsIndex);
             DrawRectangleRounded(r, 0.3f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 220 });
             DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
                                         sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
-            Color c = (i == 7) ? Color{ 255, 175, 175, 255 }
+            Color c = (i == 8) ? Color{ 255, 175, 175, 255 }
                                : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
-            drawText(rows[i], r.x + 12, r.y + 8, c, 8);
+            drawText(rows[i], r.x + 12, r.y + 7, c, 8);
+            if (sel) drawCursor(r.x + 2, r.y + 7);
         }
         if (gShowControlsModal) {
             DrawRectangle(0, 0, VRES_W, VRES_H, Fade(BLACK, 0.55f));
@@ -1018,7 +1024,7 @@ void drawMenuScreen() {
                 "- Follow the North Road to find the Castle of Elm.",
             };
             for (int i = 0; i < 10; i++)
-                drawText(help[i], 92, 76 + i * 14, Color{ 225, 235, 255, 255 }, 8);
+                drawText(help[i], 92.0f, 76.0f + i * 14.0f, Color{ 225, 235, 255, 255 }, 8);
             drawTextCentered("SPACE or CLICK to close", VRES_W * 0.5f, 224, Color{ 255, 232, 150, 255 }, 8);
         }
     }

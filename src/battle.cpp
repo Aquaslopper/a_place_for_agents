@@ -519,9 +519,11 @@ void battleUpdate(float dt) {
         return;
     }
 
-    // Advance ATB gauges (respects WAIT mode when browsing sub-menus / targets)
-    bool pauseAtb = g.waitBattle && (B.phase == BP_MAGIC || B.phase == BP_ITEM ||
-                                     B.phase == BP_TARGET_FOE || B.phase == BP_TARGET_ALLY);
+    // Advance ATB gauges (WAIT pauses while any command menu is open,
+    // including the main command tray; ACTIVE never pauses).
+    bool pauseAtb = g.waitBattle && (B.phase == BP_COMMAND || B.phase == BP_MAGIC ||
+                                     B.phase == BP_ITEM || B.phase == BP_TARGET_FOE ||
+                                     B.phase == BP_TARGET_ALLY);
     if (!pauseAtb) {
         for (int i = 0; i < 3; i++) {
             Hero& h = g.party[i];
@@ -681,7 +683,7 @@ void battleUpdate(float dt) {
         return;
     }
 
-    // ---- Items
+    // ---- Items (scrolls: there are 7 consumable types, only 5 rows fit)
     if (B.phase == BP_ITEM) {
         auto items = usableBattleItems();
         int n = (int)items.size();
@@ -689,6 +691,7 @@ void battleUpdate(float dt) {
         if (B.subCursor >= n) B.subCursor = 0;
         if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { B.subCursor = (B.subCursor + n - 1) % n; playSoundIf(g.assets.cursor); }
         if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) { B.subCursor = (B.subCursor + 1) % n; playSoundIf(g.assets.cursor); }
+        int scroll = std::max(0, std::min(B.subCursor - 4, n - 5));
 
         auto chooseItem = [&](int idx) {
             gPendingItem = items[idx];
@@ -703,8 +706,8 @@ void battleUpdate(float dt) {
 
         if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) chooseItem(B.subCursor);
         if (clicked) {
-            for (int i = 0; i < n && i < 5; i++) {
-                if (CheckCollisionPointRec(m, subListRect(i))) { B.subCursor = i; chooseItem(i); return; }
+            for (int row = 0; row < 5 && scroll + row < n; row++) {
+                if (CheckCollisionPointRec(m, subListRect(row))) { B.subCursor = scroll + row; chooseItem(scroll + row); return; }
             }
         }
         return;
@@ -807,7 +810,11 @@ static Texture2D* fxTex(FxKind k) {
 static void drawBattleBackdrop(float sx, float sy) {
     GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
     Texture2D tex=B.isBoss ? g.assets.castleBattlefield : g.assets.battlefield[gt.biome];
-    DrawTexture(tex,(int)sx,(int)sy,WHITE);
+    if (!tex.id) { ClearBackground(Color{ 30, 40, 70, 255 }); return; }
+    // Overscan by a few pixels so screen shake never shows a bare edge.
+    DrawTexturePro(tex, { 0, 0, (float)tex.width, (float)tex.height },
+                   { sx - 4, sy - 4, (float)tex.width + 8, (float)tex.height + 8 },
+                   { 0, 0 }, 0.0f, WHITE);
 }
 
 void battleDraw() {
@@ -923,6 +930,7 @@ void battleDraw() {
                 : (B.phase == BP_COMMAND ? (sel ? Color{ 255, 236, 176, 255 } : WHITE)
                                          : Color{ 165, 175, 210, 220 });
         drawText(cmds[i], r.x + 8, r.y + 4, c, 8);
+        if (sel) drawCursor(r.x + 1, r.y + 4);
     }
 
     // Middle panel (sub-list OR living enemies)
@@ -940,17 +948,27 @@ void battleDraw() {
             Vector2 sz = measureText(mp, 8);
             drawText(mp, r.x + r.width - sz.x - 4, r.y + 3,
                      ok ? Color{ 130, 195, 255, 255 } : Color{ 210, 110, 110, 255 }, 8);
+            if (sel) drawCursor(r.x + 1, r.y + 4);
         }
     } else if (B.phase == BP_ITEM) {
         auto items = usableBattleItems();
-        for (int i = 0; i < (int)items.size() && i < 5; i++) {
-            Rectangle r = subListRect(i);
+        int n = (int)items.size();
+        int scroll = std::max(0, std::min(B.subCursor - 4, n - 5));
+        for (int row = 0; row < 5 && scroll + row < n; row++) {
+            int i = scroll + row;
+            Rectangle r = subListRect(row);
             bool sel = (B.subCursor == i);
             if (sel) DrawRectangle((int)r.x, (int)r.y, (int)r.width, (int)r.height, Color{ 56, 86, 164, 255 });
             drawText(itemDef(items[i]).name, r.x + 4, r.y + 3, WHITE, 8);
             char q[16]; snprintf(q, sizeof(q), "x%d", itemCount(items[i]));
             Vector2 sz = measureText(q, 8);
             drawText(q, r.x + r.width - sz.x - 4, r.y + 3, Color{ 255, 232, 150, 255 }, 8);
+            if (sel) drawCursor(r.x + 1, r.y + 4);
+        }
+        if (n > 5) {
+            char sc[24]; snprintf(sc, sizeof(sc), "%d/%d", B.subCursor + 1, n);
+            Vector2 ssz = measureText(sc, 8);
+            drawText(sc, 110 + 152 - ssz.x - 4, 272, Color{ 165, 180, 215, 255 }, 8);
         }
     } else {
         int row = 0;

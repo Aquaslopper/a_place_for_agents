@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(APlaceForAgents VERSION 0.1.0 LANGUAGES CXX C)
+project(APlaceForAgents VERSION 0.2.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,7 +17,10 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(raylib)
 
 # ---------------------------------------------------------------- game
-add_executable(aplaceforagents
+# WIN32 builds a GUI-subsystem executable on Windows: no console window pops
+# up next to the game. On Linux the keyword is ignored. raylib logs simply
+# have nowhere to print on Windows, which is what a shipped game wants.
+add_executable(aplaceforagents WIN32
     src/main.cpp
     src/music.cpp
     src/core.cpp
@@ -33,6 +36,8 @@ target_link_libraries(aplaceforagents PRIVATE raylib)
 
 if (MSVC)
     target_compile_options(aplaceforagents PRIVATE /W3 /utf-8)
+    # getenv() is used for optional env overrides; silence the C4996 noise.
+    target_compile_definitions(aplaceforagents PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(aplaceforagents PRIVATE -Wall -Wno-unused-parameter)
 endif()
