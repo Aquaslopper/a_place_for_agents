@@ -41,4 +41,95 @@ Deliver a coherent, playable change. Build the game, check online sources for re
 
 ## Handoff state
 
-The prior partial source edits were reverted. No map-system replacement has been implemented or validated. The only purpose of this file is to hand off the requested work. This human-directed mission supersedes the old seed mission in `docs/NEXT_AGENT_PROMPT.md` where it says to build on the blob; read the repository for implementation details, but do not reinterpret this request as another blob-map polish task.
+The prior partial source edits were reverted. The map-system replacement (the generator) is NOT yet implemented or validated. However, the groundwork steps 1–3 below ARE done and persisted. This human-directed mission supersedes the old seed mission in `docs/NEXT_AGENT_PROMPT.md` where it says to build on the blob; read the repository for implementation details, but do not reinterpret this request as another blob-map polish task.
+
+---
+
+## Work completed (steps 1–3) — build on this, do not redo it
+
+The human runs this mission **one dictated step at a time** and gets angry at scope creep or micro-stepping. Steps 1–3 are DONE and persisted in the repo; the procedural generator itself (step 4+) is NOT yet written. Everything here is reproducible from the committed files. Read this whole section before touching anything.
+
+### Step 1 — Overworld assets obtained (source-only, vendored, credited)
+
+Goal: gather free-to-use art that reads like the Lufia II overworld. None of this is runtime art yet — these are SOURCE sheets the importer/generator crops from.
+
+| Pack | Source | License | Vendored path |
+|---|---|---|---|
+| OpenRTP World chipsets | already in repo | CC0 (`World.png`, Jason Perry / finalbossblues 2022) · CC-BY+CC0 mix (`retro_World.png`, 2014 composite: MrBeast/Redshrike/surt/Ogrebane/Gwes/jikmok) | `assets/source/openrtp/ChipSet/World.png`, `retro_World.png` — both 480×256 |
+| MrBeast — Worldmap/Overworld | github `castle-engine/castle-engine` mirror `examples/tiled/map_viewer/data/maps/animations/worldmapoverworld-tileset/` (orig OGA `worldmapoverworld-tileset`) | CC-BY 3.0 | `assets/source/overworld/mrbeast_worldmap/` — tileset.png 256×336, mountains.png 192×160, water.png 480×48 |
+| ArMM1998 — Zelda-like | github `ggdaltoso/gbadev` `assets/zelda-like/` (orig OGA `zelda-like-tilesets-and-sprites`) | CC0 | `assets/source/overworld/armm1998_zelda_like/` — Overworld.png 640×576, objects/character/NPC_test/cave/Inner/font/log |
+
+How they were fetched (sandbox outbound is limited to github / codeload / api.github / npm / pypi hosts):
+- ArMM1998: `curl codeload.github.com/ggdaltoso/gbadev/tar.gz/...` → extract → `cp` the 8 PNGs + CREDITS.md.
+- MrBeast: GitHub contents API (`api.github.com/repos/castle-engine/castle-engine/contents/...`) returning base64 PNGs, decoded with urllib.
+- Previews / labelled zoom grids rendered with Pillow into `docs/overworld_assets/`.
+
+Required follow-ups that were done (REPEAT after any asset change):
+- `CREDITS.md` — "Overworld source sheets" section added.
+- `assets/source/overworld/README.md` plus a `DESCRIPTION.md` beside EACH pack (source URL, author, license, publisher description, usage notes). The human insisted the pack descriptions be saved, not just the PNGs.
+- `python3 tools/generate_manifest.py` → `ART_MANIFEST.md` (now **424 entries**).
+- `python3 tools/validate_assets.py` → OK (**344 runtime / 424 total**). Adding any file under `assets/` breaks the validator until the manifest is regenerated.
+
+### Step 2 — Art bible §9 "Overworld tile registry" written
+
+`docs/ART_BIBLE.md` §9 is the authoritative tile knowledge. It was grounded in:
+- the RM2k/2003 chipset spec (RPG Maker Forums "Chipset composition" thread 41286, Steam guide 277343853, jojogape DeviantArt template d5f3quh): 480×256 = 30×16 cells, lower/upper layers, 3×4 autotiles, the special water boundary region;
+- the pack source-page descriptions (OGA) saved as DESCRIPTION.md;
+- viewed zoom crops of both World sheets — NOT pixel-guessing (the human rejected guessing twice).
+
+Sections: §9.1 mechanics · §9.2 the two chipsets · §9.3 the shared 30×16 region map · §9.4 terrain autotile blocks (exact col×row) · §9.5 site/landmark icon cells · §9.6 supplementary packs · §9.7 the `OW_*` semantic vocabulary the generator + renderer will share. **READ §9 before touching tiles; do not re-derive coordinates.**
+
+CORRECTION made this session: §9.1 originally listed only the pink key `(255,103,139)`. The retro sheet actually keys with **magenta `(224,103,191)`**. §9.1 now lists both. Use the right key per sheet or icons get pink/magenta boxes.
+
+### Step 3 — The 3×3 plate library (100 plates) built
+
+Reference (LEARN-ONLY, never shipped): the Lufia II overworld by Rick Bruns, 4096×4096, at
+<https://www.snesmaps.com/maps/Lufia2/00Lufia2OverworldBG.html> (background-only) and
+`00Lufia2Overworld.html` (labelled with site names). The human cut 4 example 3×3 crops to show the format. We study composition only; **all plate art comes from `retro_World.png`.** Do NOT cut the Lufia map into runtime art.
+
+These reference rips are copyrighted commercial game art, so they are **gitignored, not committed** (`image-search/`, plus the side-by-side `comparison_lufia2_vs_openrtp.png`). Re-fetch from the URLs above if you need to study them again; do not add them to the repo or to runtime assets.
+
+Builder: **`tools/build_overworld_plates.py`** (run from repo root). Output:
+- `docs/overworld_assets/plates/<name>.png` — 100 plates, 48×48 each (3×3 of 16×16).
+- `docs/overworld_assets/plates/index.json` — canonical name list (100). The folder is kept in sync with this index (stale plates are deleted on each run).
+- `docs/overworld_assets/plates_terrain.png` (75 terrain) and `plates_sites.png` (25 site/special) contact sheets.
+
+Method (full detail in the script docstring):
+1. `cell(c,r)` crops a 16×16 cell and keys out magenta `(224,103,191)` ±12.
+2. `island(c0,r0)` = the 3×3 below the preview row of a standard 3×4 autotile = a coherent terrain island on grass. Works for forest(6,4), sand(9,0), snow(9,4), dirt(6,0), mountain(3,12).
+3. `render_mask(mask, island, isolated)` composes any 3×3 binary shape (full / pond / top / bottom / left / right / halves / corners / channels / cross) by choosing per-cell edge/corner tiles from the island; off-plate neighbours clamp to the edge so terrain continues across plate borders.
+4. Site plates = grass base + upper-layer icon (§9.5 coords) stamped foot-anchored.
+5. Special transporter plates: `bridge_over_water`, `cave_in_mountain`, `gate_pass`.
+
+Composition lessons taken from Lufia (apply when authoring more plates):
+- a plate is 3×3; the centre often holds the feature (forest clump, bridge, tree), the 8 neighbours blend to the edges;
+- each SIDE carries one terrain type that must equal the neighbouring plate's opposite side (the Carcassonne rule);
+- transitions (grass↔water/sand/forest) happen INSIDE a plate via autotile edges so the border itself is a clean single terrain;
+- rare site icons sit as a single entry point.
+
+**KNOWN DEFECT — WATER PLATES ARE WRONG (fix this first):**
+- `water_*` render as dark bands + white specks, not blue sea + foam coast.
+- Cause: the water region (cols 0–5, rows 0–7) is the RM2k *boundary* autotile, not a standard island autotile, so `island(0,0)` grabs the wrong pieces.
+- The mask / `render_mask` machinery is correct; only the water tile SOURCE is wrong.
+- Fix: decode the RM2k water boundary (8×8 corner-animation pieces, H/V sides, "+" centre across the first blocks; open-water centre in the deep-sea block cols 0–2 rows 3–7; animated water cols 3–5 rows 3–7), build a correct water edge/corner set, re-run. Candidates for a full-water cell: `(1,5)` deep sea, `(4,5)` animated.
+- forest/sand/snow/dirt/mountain (60 plates) + all 25 site/special plates are correct and usable now.
+
+### Step 4+ — what the next agent builds (the generator)
+
+The human's design (dictated, not yet implemented):
+- **Carcassonne-style edge-matching:** each 3×3 plate has 4 labelled sides (grass / dirt-road / water / mountain / forest …). A plate may be placed only where touching sides match, so roads/coasts/forests continue cleanly (no "spaghetti"). Seeded RNG picks among the VALID plates; same seed → same world. This is constraint-based tiling / Wave Function Collapse.
+- **Rare special plates** (town, dungeon, tower, deep forest) with extra placement rules: town within N tiles of start, dungeon only beside mountain, minimum town spacing, etc.
+- **Special plates are TRANSPORTERS:** the icon is an entry point into the map beneath (town plate → town map; exit → back to the overworld at the same plate).
+- **NEVER-BLOCKED rule:** the player must never be trapped by a mountain wall. Whenever a walkable path cannot escape, place a bridge or tunnel plate that transports the player to the map beneath and out the other side.
+- Then the full mission above: town → overworld → multi-floor dungeons → boss loop, remove the blob, build with the existing CMake, exercise several transitions + save/load, update player-facing docs.
+
+Parameters to pin down when building: the edge-type alphabet, the plate library (these 100 + more), the matching/transition table, special-plate rarity + spacing rules.
+
+### Reproduction / gotchas checklist
+- Run builder: `python3 tools/build_overworld_plates.py` (from repo root). Needs Pillow + numpy (`pip install --break-system-packages pillow numpy`).
+- After ANY asset change: `python3 tools/generate_manifest.py` then `python3 tools/validate_assets.py`.
+- Transparency keys: retro = `(224,103,191)`; World.png = `(255,103,139)`; cyan `(0,147,146)` also appears.
+- Build is currently BROKEN as checked out: `CMakeLists.txt` references missing `src/world.cpp`, `src/overworld.cpp`, `src/world.hpp`. That is a later step.
+- `ART_BIBLE.md` §7 still says "384 files" (stale; actual 424) — cosmetic.
+- Do NOT cut the Lufia map into runtime art; it is reference only.
+- Do NOT repeat the failed blob approach (see top of this file).

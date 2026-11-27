@@ -292,3 +292,152 @@ Exactly one window language, implemented in `src/core.cpp`:
 | A5 character readability | §4 + distinct-hero validator check |
 | A6 one UI finish | §5 (`drawWindow`/`drawWindowBlue`/`drawPixelPanel`, rounded UI removed) |
 | A7 automatic validation + manifest | §7 (`tools/validate_assets.py`, generated `ART_MANIFEST.md`, CI gate) |
+
+---
+
+## 9. Overworld tile registry (the World chipsets)
+
+**Status: authoritative for the SNES-style overworld.** The overworld is a
+scaled-down world map in the manner of *Lufia II* / *Final Fantasy VI* /
+*Dragon Quest*: deep-blue sea, bright grass, dark forest clumps, mountain
+chains, desert and snow patches, and miniature town/castle/cave icons. It is
+built **only** from the OpenRTP World chipsets below (plus the credited
+supplementary packs). Coordinates are `(column, row)` in 16×16 cells, origin
+top-left, on the 480×256 sheet.
+
+### 9.1 How an OpenRTP / RPG Maker 2000 chipset works
+
+The World sheets are standard RM2k/2003 chipsets, and they are read the same
+way the engine reads them:
+
+- **Sheet = 480×256 px = 30 columns × 16 rows of 16×16 tiles.**
+- **Two layers.** A *lower layer* (terrain the party walks on: sea, grass,
+  forest, mountain, roads) and an *upper layer* (objects drawn over the party:
+  trees, houses, castles, caves). Upper-layer cells use a colour key for
+  transparency: `World.png` keys with pink `(255,103,139)`, but
+  `retro_World.png` keys with **magenta `(224,103,191)`** (cyan `(0,147,146)`
+  also occurs). The first upper-layer cell is blank. Use the right key per
+  sheet or every icon gets a pink/magenta box behind it.
+- **Autotiles are 3×4 blocks.** The engine expands a single autotile choice
+  into bordered terrain: row 0 of the block is the editor/preview row, and the
+  3×3 below it holds the edges, corners and centre. This is the *same*
+  corner-mask idea as the field atlas in §3 — the overworld reuses it, it does
+  not invent a second terrain system.
+- **Water autotile region** (top-left): the first 3×4 blocks hold the coast
+  boundary, a shared centre holds open/deep water, and a further block holds
+  4-frame animated water (waterfall/rapids). Blue = water, grey-blue = deep
+  water, the animated columns cycle.
+- **Single tiles** (lower layer) are individual 16×16 cells that neither
+  autotile nor animate (world-map bushes, settlement markers, rocks).
+
+Reference sheets for this layout: jojogape's *RPG Maker 2000/2003 Tileset
+Template v2* (DeviantArt d5f3quh) and the RPG Maker Forums "Chipset
+composition" tutorial. The vendored `assets/source/openrtp/AUTHORS.md` is the
+per-file author/license table.
+
+### 9.2 The two world chipsets
+
+| Sheet | Author / year | License | Character |
+|---|---|---|---|
+| `ChipSet/World.png` | Jason Perry (finalbossblues), 2022 | CC0 | Modern OpenRTP world chipset; bright, saturated |
+| `ChipSet/retro_World.png` | MrBeast + Redshrike + surt + Ogrebane + Gwes + jikmok, 2014 | CC-BY / CC0 mix | **SNES-retro** world chipset; the Lufia-2-era look. Primary overworld source |
+
+`retro_World.png` is literally composed of the MrBeast *Worldmap/Overworld*
+tileset plus surt's town/forest tiles (see its AUTHORS.md row), which is why it
+reads as a 16-bit console overworld rather than a modern tileset. Both sheets
+share the identical 30×16 RM2k layout below, so a crop coordinate works on
+either.
+
+### 9.3 Region map (shared 30×16 layout)
+
+| Region (cols × rows) | Contents |
+|---|---|
+| 0–5 × 0–7 | Water autotiles: coast boundary, open/deep sea, animated water |
+| 6–8 × 0–3 | Dirt-on-grass autotile (paths / dry earth) |
+| 9–11 × 0–3 | Sand-on-grass autotile (desert / beach) |
+| 6–8 × 4–7 | Swamp-on-grass (World) / forest-on-grass (retro) autotile |
+| 9–11 × 4–7 | Snow-on-grass autotile |
+| 0–5 × 8–11 | Grass (bright meadow; cols 3–5 a darker variant) |
+| 6–11 × 8–11 | Ice mountains (6–8) and snow-capped mountains (9–11) |
+| 0–5 × 12–15 | Forest clumps (0–2) and brown hills/mountains (3–5) |
+| 12–17 × 0–15 | Walls / floors / interior (NOT overworld terrain) |
+| 18–23 × 0–7 | Mountain-range zigzags (rows 0–1) and raised plateaus (rows 2–7) |
+| 18–29 × 8–15 | Upper-layer objects: trees, settlements, castles, dungeons, landmarks |
+
+### 9.4 Terrain autotiles (lower layer)
+
+| Terrain | Source block | Overworld meaning |
+|---|---|---|
+| Deep sea | cols 0–2, rows 3–7 | impassable open ocean (boat only) |
+| Coast / shallow | rows 0–2 | water meeting land; foam edge |
+| Animated water | cols 3–5, rows 3–7 | waterfall / rapids (4-frame cycle) |
+| Grass | cols 0–5, rows 8–11 | walkable meadow (the default land) |
+| Forest | cols 0–2, rows 12–15 | walkable-or-blocking woodland clumps |
+| Dirt / path | cols 6–8, rows 0–3 | roads and dry earth |
+| Sand / desert | cols 9–11, rows 0–3 | desert and beach |
+| Swamp | cols 6–8, rows 4–7 (World) | mire / fen |
+| Snow | cols 9–11, rows 4–7 | snowfield |
+| Brown mountain | cols 3–5, rows 12–15; cols 9–11, rows 8–11 | impassable range |
+| Ice mountain | cols 6–8, rows 8–11 | impassable frozen peak |
+| Mountain range | cols 18–23, rows 0–1 | zigzag range silhouette on grass/snow |
+| Plateau / mesa | cols 18–23, rows 2–7 | raised grass/dirt/snow/rock with cliff edge |
+
+### 9.5 Overworld site & landmark icons (upper layer, `World.png` coords)
+
+These are the miniature markers placed on the world map; each is cropped as a
+unit (exact bbox finalized at import). They read as a silhouette at 1× (§3).
+
+| Icon | Cell(s) | Size | Overworld role |
+|---|---|---|---|
+| Round tree | (19,8) | 1×1 | woodland dressing |
+| Dead tree | (20,8) | 1×1 | dressing |
+| Large tree | (18–19,10–11) | 2×2 | forest landmark |
+| Flower bush / bush / palm | (18,9)/(19,9)/(20,9) | 1×1 | dressing |
+| Village house, red roof | (22,8) | 1×1 | **town** marker (temperate) |
+| Village house, snow roof | (23,8) | 1×1 | **town** marker (snow) |
+| Village house, wooden | (22,9) | 1×1 | **town** marker |
+| Village house, snow II | (23,9) | 1×1 | **town** marker (snow) |
+| Grey castle | (20–21,10–11) | 2×2 | **castle / city** marker |
+| Blue castle | (22–23,10–11) | 2×2 | **castle / city** marker |
+| Tent / pavilion | (18–19,12–13) | 2×2 | camp |
+| Round tower | (20,12–13) | 1×2 | **tower** dungeon marker |
+| Monument / statue | (21,12–13) | 1×2 | landmark |
+| Temple / shrine | (22,12–13) | 1×2 | temple |
+| Cave entrance | (23,12–13) | 1×2 | **cave / dungeon** marker (dark arch) |
+| Volcano | (18–19,14–15) | 2×2 | landmark |
+| Ruins | (20–21,14–15) | 2×2 | ruin dungeon marker |
+| Gate | (22,14–15) | 1×2 | pass / gate |
+| Bridge | (23,14–15) | 1×2 | river crossing |
+| Colosseum | (24–25,14–15) | 2×2 | landmark |
+
+`retro_World.png` carries the same icon vocabulary in the same cells with the
+retro palette (blue/red-roof houses, grey + gold castles, dark-arch cave).
+
+### 9.6 Supplementary overworld packs (credited, source-only)
+
+Vendored under `assets/source/overworld/`; descriptions saved beside each pack.
+
+- **MrBeast — Worldmap/Overworld** (CC-BY 3.0): `tileset.png` (grass/sand/snow
+  coast transitions, forest, roads, bridges, town/castle/tower icons),
+  `mountains.png` (3×3 mountain blocks — use the centre cell), `water.png`
+  (32×32 animated coast, 15 frames, ping-pong loop). Already inside
+  `retro_World.png`.
+- **ArMM1998 — Zelda-like** (CC0): `Overworld.png` (40 tiles/row), `objects.png`,
+  `character.png`, `NPC_test.png`, `cave.png`, `Inner.png`, `font.png`, `log.png`.
+  Supplementary props/characters; more ALttP-flavoured than Lufia.
+
+### 9.7 Semantic overworld terrain (generation vocabulary)
+
+The procedural overworld maps each tile to one of these semantics, then draws
+it with the chipset cell above. This is the contract the map generator and the
+overworld renderer will share (defined in code at the implementation step):
+
+`OW_DEEP, OW_SEA, OW_GRASS, OW_FOREST, OW_DIRT, OW_SAND, OW_SWAMP, OW_SNOW,
+OW_MOUNTAIN, OW_ICE, OW_ROAD, OW_BRIDGE, OW_TOWN, OW_CITY, OW_CAVE, OW_TOWER,
+OW_TEMPLE, OW_RUINS, OW_CAMP, OW_VOLCANO, OW_BRIDGE_GATE`.
+
+Rules: terrain families transition only through the autotile corner masks
+(§9.1); site icons are foot-anchored and y-sorted like field props (§3); the
+overworld draws the party at miniature scale and compressed distance, the way
+a 16-bit world map does. No runtime tile is generated yet — this section is the
+registry the import step will crop against.

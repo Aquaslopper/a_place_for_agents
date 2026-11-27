@@ -8,3 +8,9 @@ build/
 .deps/
 
 .venv/
+
+# Learn-only reference rips of copyrighted commercial game maps (Lufia II).
+# Studied for composition, never used as runtime art, never redistributed.
+# Source: https://www.snesmaps.com/maps/Lufia2/00Lufia2OverworldBG.html
+image-search/
+docs/overworld_assets/comparison_lufia2_vs_openrtp.png
