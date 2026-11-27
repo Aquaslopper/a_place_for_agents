@@ -732,9 +732,8 @@ static void drawShopPage() {
     drawText(gbuf, ox + BASE_VW - 26.0f - gsz.x, oy + 17, Color{ 255, 232, 150, 255 }, 8);
 
     auto drawTab = [&](Rectangle r, const char* label, bool active) {
-        DrawRectangleRounded(r, 0.35f, 4, active ? Color{ 62, 92, 170, 255 } : Color{ 26, 36, 78, 255 });
-        DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f,
-                                    active ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
+        drawPixelPanel(r, active ? Color{ 62, 92, 170, 255 } : Color{ 26, 36, 78, 255 },
+                          active ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
         drawTextCentered(label, r.x + r.width * 0.5f, r.y + 5,
                          active ? Color{ 255, 240, 180, 255 } : Color{ 185, 200, 235, 255 }, 8);
     };
@@ -818,8 +817,7 @@ static void drawInnPage() {
     for (int i = 0; i < 3; i++) {
         const Hero& h = g.party[i];
         Rectangle card{ ox + 80.0f + i * 120.0f, oy + 114.0f, 112.0f, 52.0f };
-        DrawRectangleRounded(card, 0.2f, 4, Color{ 20, 30, 68, 225 });
-        DrawRectangleRoundedLinesEx(card, 0.2f, 4, 1.0f, Color{ 84, 104, 162, 200 });
+        drawPixelPanel(card, Color{ 20, 30, 68, 225 }, Color{ 84, 104, 162, 200 });
         drawTextCentered(heroName(h.klass), card.x + card.width * 0.5f, card.y + 7,
                          h.ko ? Color{ 240, 130, 130, 255 } : Color{ 255, 236, 176, 255 }, 8);
         char hp[32];
@@ -832,9 +830,8 @@ static void drawInnPage() {
     }
 
     auto drawBtn = [&](Rectangle r, const char* label, bool sel, bool dis) {
-        DrawRectangleRounded(r, 0.35f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 });
-        DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.2f,
-                                    sel ? Color{ 255, 232, 150, 255 } : Color{ 95, 115, 165, 255 });
+        drawPixelPanel(r, sel ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 },
+                          sel ? Color{ 255, 232, 150, 255 } : Color{ 95, 115, 165, 255 });
         Color c = dis ? Color{ 160, 120, 120, 255 }
                       : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
         drawTextCentered(label, r.x + r.width * 0.5f, r.y + 8, c, 8);
@@ -853,9 +850,8 @@ static void drawHeroPicker(const char* title, int sel) {
         const Hero& h = g.party[i];
         Rectangle r{ ox + 110, oy + 90.0f + i * 32.0f, 292, 26 };
         bool s = (i == sel);
-        DrawRectangleRounded(r, 0.3f, 4, s ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 255 });
-        DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
-                                    s ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
+        drawPixelPanel(r, s ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 255 },
+                          s ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
         if (s) drawCursor(r.x + 5, r.y + 9);
         char buf[96];
         snprintf(buf, sizeof(buf), "%-6s HP %d/%d  MP %d/%d%s",
@@ -881,8 +877,7 @@ void drawMenuScreen() {
         bool sel = (i == g.menuPage);
         Rectangle r{ ox + 16, oy + 42.0f + i * 26.0f, 84, 22 };
         if (sel) {
-            DrawRectangleRounded(r, 0.35f, 4, Color{ 56, 86, 164, 255 });
-            DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f, Color{ 255, 232, 150, 255 });
+            drawPixelPanel(r, Color{ 56, 86, 164, 255 }, Color{ 255, 232, 150, 255 });
         }
         drawText(tabs[i], ox + 24, r.y + 7, sel ? Color{ 255, 236, 176, 255 } : Color{ 215, 225, 248, 255 }, 8);
     }
@@ -898,10 +893,9 @@ void drawMenuScreen() {
             const Hero& h = g.party[i];
             float y = oy + 20.0f + i * 78.0f;
             bool sel = (i == g.menuIndex);
-            DrawRectangleRounded({ ox + 118, y, 376, 72 }, 0.16f, 4,
-                                 sel ? Color{ 34, 52, 114, 245 } : Color{ 22, 32, 74, 215 });
-            DrawRectangleRoundedLinesEx({ ox + 118, y, 376, 72 }, 0.16f, 4, 1.0f,
-                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 220 });
+            drawPixelPanel({ ox + 118, y, 376, 72 },
+                             sel ? Color{ 34, 52, 114, 245 } : Color{ 22, 32, 74, 215 },
+                             sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 220 });
             Texture2D& f = g.assets.face[i == 0 ? FACE_KNIGHT : (i == 1 ? FACE_MAGE : FACE_CLERIC)];
             if (f.id) DrawTexturePro(f, { 0, 0, (float)f.width, (float)f.height },
                                      { ox + 126, y + 12, 48, 48 }, { 0, 0 }, 0.0f,
@@ -993,9 +987,7 @@ void drawMenuScreen() {
         for (int i = 0; i < 3; i++) {
             Rectangle r{ ox + 122.0f + i * 122.0f, oy + 24, 116, 22 };
             bool sel = (i == g.equipHero);
-            DrawRectangleRounded(r, 0.35f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 });
-            DrawRectangleRoundedLinesEx(r, 0.35f, 4, 1.0f,
-                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
+            drawPixelPanel(r, sel);
             drawTextCentered(heroName(g.party[i].klass), r.x + r.width * 0.5f, r.y + 7,
                              sel ? Color{ 255, 236, 176, 255 } : WHITE, 8);
         }
@@ -1010,9 +1002,8 @@ void drawMenuScreen() {
         for (int s = 0; s < 3; s++) {
             Rectangle r{ ox + 122, oy + 74.0f + s * 28.0f, 186, 24 };
             bool sel = (g.equipSlot == s);
-            DrawRectangleRounded(r, 0.25f, 4, sel ? Color{ 50, 74, 146, 240 } : Color{ 24, 34, 72, 220 });
-            DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.0f,
-                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
+            drawPixelPanel(r, sel ? Color{ 50, 74, 146, 240 } : Color{ 24, 34, 72, 220 },
+                              sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
             drawText(sname[s], r.x + 6, r.y + 3, Color{ 180, 200, 235, 255 }, 8);
             const char* eqName = (cur[s] >= 0) ? itemDef(cur[s]).name : "- None -";
             drawText(eqName, r.x + 6, r.y + 13, WHITE, 8);
@@ -1025,8 +1016,7 @@ void drawMenuScreen() {
             Rectangle r{ ox + 316, oy + 74.0f + i * 20.0f, 174, 18 };
             bool sel = (g.equipIndex >= 0 && i == g.equipIndex);
             if (sel) {
-                DrawRectangleRounded(r, 0.25f, 4, Color{ 56, 86, 164, 255 });
-                DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.0f, Color{ 255, 232, 150, 255 });
+                drawPixelPanel(r, Color{ 56, 86, 164, 255 }, Color{ 255, 232, 150, 255 });
             }
             if (i < (int)cands.size()) {
                 drawItemIcon(cands[i], r.x + 4, r.y + 2, 14);
@@ -1045,10 +1035,9 @@ void drawMenuScreen() {
         for (int q = 0; q < QUEST_COUNT; q++) {
             float y = oy + 40.0f + q * 61.0f;
             bool sel = (q == g.menuIndex);
-            DrawRectangleRounded({ ox + 122, y, 366, 56 }, 0.16f, 4,
-                                 sel ? Color{ 36, 54, 116, 240 } : Color{ 22, 32, 74, 210 });
-            DrawRectangleRoundedLinesEx({ ox + 122, y, 366, 56 }, 0.16f, 4, 1.0f,
-                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 200 });
+            drawPixelPanel({ ox + 122, y, 366, 56 },
+                             sel ? Color{ 36, 54, 116, 240 } : Color{ 22, 32, 74, 210 },
+                             sel ? Color{ 255, 232, 150, 255 } : Color{ 80, 100, 155, 200 });
             int st = g.quests[q].state;
             const char* badge = (st == QS_DONE) ? "COMPLETE"
                               : (st == QS_ACTIVE ? "ACTIVE" : "AVAILABLE");
@@ -1096,9 +1085,8 @@ void drawMenuScreen() {
         for (int i = 0; i < 9; i++) {
             Rectangle r{ ox + 126, oy + 40.0f + i * 24.0f, 360, 21 };
             bool sel = (i == g.optionsIndex);
-            DrawRectangleRounded(r, 0.3f, 4, sel ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 220 });
-            DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f,
-                                        sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
+            drawPixelPanel(r, sel ? Color{ 56, 86, 164, 255 } : Color{ 24, 34, 72, 220 },
+                              sel ? Color{ 255, 232, 150, 255 } : Color{ 85, 105, 155, 200 });
             Color c = (i == 8) ? Color{ 255, 175, 175, 255 }
                                : (sel ? Color{ 255, 236, 176, 255 } : WHITE);
             drawText(rows[i], r.x + 14, r.y + 6, c, 8);

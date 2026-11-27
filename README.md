@@ -180,10 +180,30 @@ playing does not require Python, a MIDI synthesizer or an instrument bank.
 The Windows executable uses the GUI subsystem. CI builds and packages Windows
 and Linux binaries. **Project policy: no tests.**
 
+## Art system, manifest and validation
+
+The one art dialect is **EasyRPG/OpenRTP** (vendored at
+`assets/source/openrtp/`), adapted by `tools/import_openrtp.py` — keep it,
+credit it, build on it. The contract, palette, terrain system, UI finish
+and the guardrail against ever replacing the OpenRTP art are in
+[docs/ART_BIBLE.md](docs/ART_BIBLE.md); per-file provenance for all 384
+asset files is in the generated [ART_MANIFEST.md](ART_MANIFEST.md).
+
+```bash
+python3 tools/generate_manifest.py   # rebuild ART_MANIFEST.md after adding/renaming an asset
+python3 tools/validate_assets.py     # dimensions, manifest parity, code refs, UI finish, OpenRTP guardrails
+```
+
+`validate_assets.py` is an asset validator (not a test suite) and runs in
+CI; it fails if the OpenRTP import pipeline or credits are removed, if a
+runtime file is missing from the manifest, or if art leaves the contract
+sizes. **Never** regenerate runtime PNGs to replace OpenRTP-derived art.
+
 ## Regenerating assets
 
 All runtime assets are committed. These optional tools regenerate art and sound
 effects; Python dependencies are only needed if you are editing the source art.
+After regenerating, re-run the manifest + validator commands above.
 
 ```bash
 python3 tools/build_art.py     # art only: Pillow, NumPy

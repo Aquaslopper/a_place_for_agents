@@ -8,6 +8,15 @@ The 13 in-game cues are recordings of compositions from [EasyRPG/OpenRTP](https:
 
 ## Pixel art
 
+**One dialect, locked (Workstream A1):** the game's pixel art is
+[OpenRTP](https://github.com/EasyRPG/RTP) and repository pieces drawn in
+the same dialect to extend it — see [docs/ART_BIBLE.md](docs/ART_BIBLE.md)
+§0–§1. OpenRTP-derived runtime files must never be replaced by a
+regenerated art set, and this attribution must never be removed or
+rewritten as "original" art; `tools/validate_assets.py` enforces both in
+CI. Per-file provenance for every shipped file is in
+[ART_MANIFEST.md](ART_MANIFEST.md).
+
 Source: [OpenRTP, revision `993d88c`](https://github.com/EasyRPG/RTP/tree/993d88cbc78c658d348bbfa74a3b424d393d27e5). The [vendored authors list](assets/source/openrtp/AUTHORS.md) gives licenses, attribution links and individual frame credits. CC BY here means [CC BY 4.0 International](https://creativecommons.org/licenses/by/4.0/); CC0 means [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 
 | Source | Credit and use in this game |
