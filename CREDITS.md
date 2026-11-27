@@ -43,6 +43,22 @@ native-resolution crops of Jason Perry's **CC0** OpenRTP
 [Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles)
 are explicitly offered in RM2k/3 chipset format for EasyRPG under CC0.
 
+## Overworld source sheets (gathered for the Lufia 2-style world map)
+
+Source sheets vendored under `assets/source/overworld/` for the upcoming
+SNES-style overworld. Not yet adapted into runtime tiles.
+
+- **ArMM1998 — Zelda-like tilesets and sprites**, CC0 1.0 (public domain).
+  [OpenGameArt](https://opengameart.org/content/zelda-like-tilesets-and-sprites).
+  Overworld, objects, characters, NPCs and cave sheets.
+- **MrBeast — Worldmap/Overworld tileset**, CC-BY 3.0, commissioned by
+  [OpenGameArt](https://opengameart.org/content/worldmapoverworld-tileset).
+  Worldmap terrain, mountain ranges and animated water/coast strip.
+  Attribution: "Worldmap/Overworld tileset" by MrBeast, commissioned by
+  OpenGameArt.org, licensed under CC-BY 3.0.
+- The primary overworld chipset remains the vendored OpenRTP
+  `ChipSet/World.png` / `retro_World.png` (see above).
+
 ## Visual references, not game assets
 
 - [Potos Village](https://www.snesmaps.com/maps/SecretOfMana/002bPotosVillageMap.html) and the [Pandora–Potos–Water Palace path](https://www.snesmaps.com/maps/SecretOfMana/003bPandoraPotosWaterPalacePathMap.html), *Secret of Mana*, via SNESMaps. The study was about **walking scale and layout**: roads meet doors and cross streams at specific places; vegetation frames clearings; banks and cliff faces continue across tiles. No map or graphics from that game are distributed here.
