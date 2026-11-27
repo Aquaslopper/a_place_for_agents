@@ -1149,10 +1149,14 @@ void drawMenuScreen() {
             else if (q == QUEST_LOCKET && st == QS_ACTIVE)
                 prog = g.locketFound ? "Locket found! Return to Tamsin."
                                      : "Standing Stones: " + compassHint(g.px, g.py, LOCKET_PICKUP_X, LOCKET_PICKUP_Y);
-            else if (q == QUEST_CROWN && st == QS_ACTIVE)
-                prog = (itemCount(IT_CROWN) > 0 || g.bossDefeated)
-                     ? "Crown reclaimed! Return to Old Maren."
-                     : "Castle of Elm: " + compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
+            else if (q == QUEST_CROWN && st == QS_ACTIVE) {
+                if (itemCount(IT_CROWN) > 0 || g.bossDefeated)
+                    prog = "Crown reclaimed! Return to Old Maren.";
+                else if (!g.hasWaystone) {
+                    int tx, ty; startCavernSite(tx, ty);
+                    prog = "Hollow Hill's Waystone: " + compassHint(g.px, g.py, (float)tx, (float)ty);
+                } else prog = "Castle of Elm: " + compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
+            }
             else if (q == QUEST_TIDE && st == QS_ACTIVE)
                 prog = std::string(g.hasBoat ? "Boat hired" : "Boat: see Ferryman Bel at the millpond") +
                        "  |  Tidewells " + std::to_string(g.tideFound) + " / " + std::to_string(TIDE_ISLANDS) +
@@ -1203,9 +1207,9 @@ void drawMenuScreen() {
                 "WASD / Arrows / Click : Walk (hold Shift to run)",
                 "SPACE / E / Enter     : Talk, chests, doors",
                 "ESC / TAB             : Open / close Pause Menu",
+                "M                     : Travel map / close view",
                 "In Battle             : Arrows or Click commands",
                 "F11 / Alt+Enter       : Toggle Fullscreen",
-                "",
                 "Adventure Tips:",
                 "- Meet Hedrick, Tamsin, Old Maren & Odo in town.",
                 "- Back-row heroes take half melee damage.",

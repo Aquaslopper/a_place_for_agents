@@ -18,7 +18,7 @@ king who has made off with the village crown.
 Built in C++17 with [raylib 5.5](https://github.com/raysan5/raylib), adapted
 OpenRTP pixel art and a streamed 13-cue score. See [credits and licenses](CREDITS.md)
 and the [soundtrack cue sheet](assets/audio/SCORE.txt). If you are working on
-the game as an agent, the repository guide is [AGENTS.md](AGENTS.md).
+the game as an agent, the repository guide is [the Next-Agent Prompt](docs/NEXT_AGENT_PROMPT.md).
 
 ## Play
 
@@ -42,6 +42,7 @@ image-aligned scanline shading. Clean pixels are always available.
 |---|---|
 | `WASD` / arrow keys | Walk (cardinal movement; hold `Shift` to run) |
 | Left mouse button | Click to walk; the party routes around obstacles |
+| `M` | Toggle the travelling map in the overworld |
 | Click a building | Walk to its door and enter |
 | `Space` / `E` / `Enter` | Talk, open a chest, enter a door, or advance dialogue |
 | `Esc` / `Tab` | Open or close the pause menu |
@@ -54,12 +55,17 @@ image-aligned scanline shading. Clean pixels are always available.
 |---|---|
 | South | Walk the millpond bank to **Bel's landing**, where the ferryman rents a boat. Follow the ochre woods east to the Standing Stones, or take the southwest trail to the Sunscorch Flats. |
 | East | Step out by the inn and take the meadow lane to **the Agents' Commons** — a ring of standing stones that records what every agent has built here. |
-| West | Find reed beds, willow pools and a causeway through Mirefen to the Old Watchtower. |
-| North | Circle the chapel, follow the road through Briarwood and the heath, then climb the snow track to the Castle of Elm. |
+| West | Take the spur to **Hollow Hill**, or continue through Mirefen to the Old Watchtower. |
+| North | Follow the road through Briarwood, the mountain pass and the heath to the Castle of Elm. |
 
-Every gate also opens onto a **King's Road** — follow it and it will arrive at a
-village. `Esc → Journal → THE SURVEY` draws where those roads go, and names the
-country you are standing in.
+The intended route through the three countries is: descend Hollow Hill, awaken
+its deepest vault's runes and defeat the guardian for the **Waystone**; take
+the North Road through the first pass and defeat the **Slime King**; then
+follow the road beyond the castle, through the far pass, to a seeded cavern in
+the **Far Marches**. Its guardian is another challenge. Roads and the Survey
+show crossings, while sealed passes explain what opens them. Press `M` for a
+travelling map of the same world, or open `Esc → Journal → THE SURVEY` for a
+local sketch.
 
 **The water is a road.** South of the square the Millbrook runs into the millpond,
 and a millrace carries it on into the wide lake behind the mill. **Ferryman Bel**
@@ -72,7 +78,8 @@ Little Kettle. Each has a stone Tidewell; find all three and Bel settles the
 tiles, ≤20%) so the crossing stays a journey, not a gauntlet. Press `SPACE` at any
 beach to step ashore — that is how you land on an isle.
 
-These story routes are fixed; beyond them, the seed shapes the terrain,
+Elmswick and the main story landmarks remain in place; the seed shapes the
+mountain ranges, most passes, frontier cavern, dungeons, guardians, terrain,
 settlements, landmarks and treasure. Use the **Sound Room** in **Esc → Options**
 to listen to the score without roaming the wilds.
 
@@ -88,7 +95,8 @@ not dining furniture standing in for smithing equipment.
 The added homes occupy spaced ridge, chapel and orchard plots rather than
 overlapping existing roofs and decorations. Generated villages reserve a
 smithy before placing cottages and route shared lanes around building envelopes.
-- **Seven regions, and names for all of them.** Meadows, evergreen woods, autumn
+- **Three countries and seven biomes.** Seed-shaped mountain ranges and passes
+separate Elmswick Vale, the Crownlands and the Far Marches. Meadows, evergreen woods, autumn
 forests, fen, heath, frozen highlands and dunes have different ground, plants,
 encounter pools and battle horizons. They are also *named*: every 128-tile
 country gets a stable name from the seed and the land ("Millbrook", "Thornmire",
@@ -140,14 +148,14 @@ Elmswick: eleven hand-set sarsens of three heights, a paved floor, a cold
 brazier at the centre, the keeper's board and a stone seat. **Sable, Keeper of
 the Commons** keeps it, and each stone in the ring is real work a previous agent
 finished — the base game, the overworld, the score, Elmswick, the seeded world,
-the caverns. Three plots are reserved and visibly empty for whoever comes next.
+the caverns and the countries. Two plots remain reserved for whoever comes next.
 The place is a table (`src/commons.cpp`), so a future agent adds one line and
 raises one stone.
-- **Five quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
+- **Six quests.** Help Farmer Hedrick with the slimes, find a traveller's lost
 locket, recover the Crown of Elm from the Slime King, bring star metal up from
-the deep vaults for Nell at the forge, and answer the keeper's errand —
-**The Kept Light** — by clearing the wisps from the ring's hedge so the brazier
-can be lit for good. The quest log tracks progress and points toward story
+the deep vaults for Nell at the forge, find the island Tidewells for Bel, and
+answer the keeper's errand — **The Kept Light** — by clearing the wisps from
+the ring's hedge so the brazier can be lit for good. The quest log tracks progress and points toward story
 destinations; the Journal's **The Commons** tab shows the ring's chronicle, and
 its **The Survey** tab draws the country around you — terrain, roads, settlements,
 caverns and named regions — with the distance to the nearest town and cavern.
@@ -336,6 +344,8 @@ only builds and packages the Windows exe and Linux binary.
   pathfinding, and the stamping of surveyed roads into the ground. Rendering,
   collision and pathfinding all read `propAt()` / `sampleGround()` so they
   cannot disagree.
+- `src/regions.cpp` / `src/regions.hpp` — seeded mountain ranges and passes,
+  country access, the northern frontier spur and the travelling map.
 - `src/atlas.cpp` / `src/atlas.hpp` — **the Survey**, the one authority on where
   a place is: three lattices (villages 112 tiles, ruin-kinds 96, caverns 88),
   A*-routed roads joining them, stable region names, and the Journal's survey

@@ -7,6 +7,7 @@
 #include "atlas.hpp"
 #include "world.hpp"
 #include "commons.hpp"
+#include "regions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -82,6 +83,8 @@ bool nearStory(int tx, int ty, int pad) {
     if (abs(tx - BOSS_CASTLE_TX) < pad + 10 && abs(ty - BOSS_CASTLE_TY) < pad + 10) return true;
     if (abs(tx - LOCKET_SITE_TX) < pad + 6 && abs(ty - LOCKET_SITE_TY) < pad + 6) return true;
     if (abs(tx - TOWER_SITE_TX) < pad + 6 && abs(ty - TOWER_SITE_TY) < pad + 6) return true;
+    int fx, fy; frontierCavernSite(fx, fy);
+    if (abs(tx - fx) < pad + 7 && abs(ty - fy) < pad + 7) return true;
     return false;
 }
 
@@ -122,6 +125,9 @@ namespace {
 // 17 probes: the heart, a ring at 7 tiles and a ring at 13 (inside a 15-tile plot).
 int villageScore(int tx, int ty) {
     if (tx * tx + ty * ty < 58 * 58) return 0;      // Elmswick's meadow is hers
+    // A settlement's entire service quarter must fit on one side, not have
+    // its inn or a doorway swallowed by a mountain after placement.
+    if (regionNearRange(tx, ty, 16.0f)) return 0;
     if (nearStory(tx, ty, 26)) return 0;
     const int TOTAL = 17;
     int score = 0, seen = 0;
@@ -170,6 +176,7 @@ SiteCell placeLandmark(int cx, int cy) {
     int kind = AS_RUINS + (int)(kh % 5u);
     for (const Cand& c : cands) {
         if (c.x * c.x + c.y * c.y < 44 * 44) continue;
+        if (regionNearRange(c.x, c.y, 10.0f)) continue;
         if (nearStory(c.x, c.y, 22)) continue;
         if (!spotClear(c.x, c.y, true, true, false)) continue;
         AtlasSite village;
@@ -190,6 +197,7 @@ SiteCell placeCavern(int cx, int cy) {
     cellCandidates(cx, cy, ATLAS_CAVERN_CELL, 21, 21, g.worldSeed ^ 0xCA7E51u, cands);
     for (const Cand& c : cands) {
         if (c.x * c.x + c.y * c.y < 46 * 46) continue;           // Hollow Hill owns that spur
+        if (regionNearRange(c.x, c.y, 9.0f)) continue;
         if (nearStory(c.x, c.y, 26)) continue;
         SurveyTerrain st = worldSurveyTerrain(c.x, c.y);
         if (st.water || st.deep || st.crag) continue;
@@ -365,6 +373,9 @@ struct RoadCostEntry { int x = 1 << 30, y = 1 << 30; uint32_t seed = 0; float co
 RoadCostEntry gRoadCostCache[1 << 14];
 
 float roadCostRaw(int tx, int ty) {
+    RegionCell rc = regionCellAt(tx, ty);
+    if (rc.terrain == REGION_RANGE) return 10000.0f;
+    if (rc.terrain == REGION_PASS || frontierRoadAt(tx, ty)) return 1.0f;
     SurveyTerrain st = worldSurveyTerrain(tx, ty);
     float c = 1.0f;
     if (st.deep) c = 120.0f;
@@ -386,11 +397,11 @@ float roadCostAt(int tx, int ty) {
 // Dijkstra over a 3-tile grid. Water is expensive but crossable (the ground
 // generator draws a plank bridge over it), crag and ice are simply slow, and
 // both towns are skirted so a road arrives at a gate instead of a roof.
-bool routeRoad(int ax, int ay, int bx, int by, RoadPath& out, float portal = 19.0f) {
+bool routeSegment(int ax, int ay, int bx, int by, RoadPath& out, float portal) {
     out.pts.clear();
     float dx = (float)(bx - ax), dy = (float)(by - ay);
     float len = sqrtf(dx * dx + dy * dy);
-    if (len < 24.0f) return false;
+    if (len < 1.0f) return false;
     float ux = dx / len, uy = dy / len;
     int sx = ax + (int)roundf(ux * portal);
     int sy = ay + (int)roundf(uy * portal);
@@ -465,6 +476,9 @@ bool routeRoad(int ax, int ay, int bx, int by, RoadPath& out, float portal = 19.
             int px = nx + DX[k], py = ny + DY[k];
             if (px < 0 || py < 0 || px >= W || py >= H) continue;
             int ni = py * W + px;
+            int midX = minX + nx * ROAD_STEP + DX[k] * (ROAD_STEP / 2);
+            int midY = minY + ny * ROAD_STEP + DY[k] * (ROAD_STEP / 2);
+            if (nodeCost(ni) >= 10000.0f || regionCellAt(midX, midY).terrain == REGION_RANGE) continue;
             float step = (k < 4) ? (float)ROAD_STEP : (float)ROAD_STEP * 1.41421356f;
             float nd = g + step * (0.5f * nodeCost(at) + 0.5f * nodeCost(ni));
             if (nd >= dist[ni]) continue;
@@ -491,14 +505,74 @@ bool routeRoad(int ax, int ay, int bx, int by, RoadPath& out, float portal = 19.
         std::vector<std::pair<int, int>> smooth;
         smooth.reserve(out.pts.size());
         smooth.push_back(out.pts.front());
-        for (size_t i = 1; i + 1 < out.pts.size(); ++i)
-            smooth.push_back({ (out.pts[i - 1].first + 2 * out.pts[i].first + out.pts[i + 1].first) / 4,
-                               (out.pts[i - 1].second + 2 * out.pts[i].second + out.pts[i + 1].second) / 4 });
+        for (size_t i = 1; i + 1 < out.pts.size(); ++i) {
+            // Do not round the bends in a defile into the mountainside.
+            if (regionNearRange(out.pts[i].first, out.pts[i].second, 10.0f))
+                smooth.push_back(out.pts[i]);
+            else
+                smooth.push_back({ (out.pts[i - 1].first + 2 * out.pts[i].first + out.pts[i + 1].first) / 4,
+                                   (out.pts[i - 1].second + 2 * out.pts[i].second + out.pts[i + 1].second) / 4 });
+        }
         smooth.push_back(out.pts.back());
         out.pts.swap(smooth);
     }
     out.x0 = minX; out.y0 = minY; out.x1 = maxX; out.y1 = maxY;
     return true;
+}
+
+// Join different countries through a real pass, rather than asking a local
+// A* to dig through whichever piece of mountain happens to be closest. The
+// short line through a defile is explicit, so the coarse routing grid cannot
+// miss a narrow opening or smooth it into the cliff.
+bool routeRoad(int ax, int ay, int bx, int by, RoadPath& out, float portal = 19.0f) {
+    float dx = (float)(bx - ax), dy = (float)(by - ay);
+    float len = sqrtf(dx * dx + dy * dy);
+    if (len < 24.0f) return false;
+    int sx = ax + (int)roundf(dx / len * portal), sy = ay + (int)roundf(dy / len * portal);
+    int gx = bx - (int)roundf(dx / len * portal), gy = by - (int)roundf(dy / len * portal);
+    int from = regionAt((float)sx, (float)sy), to = regionAt((float)gx, (float)gy);
+    out = RoadPath{};
+    out.x0 = std::min(sx, gx) - 24; out.y0 = std::min(sy, gy) - 24;
+    out.x1 = std::max(sx, gx) + 24; out.y1 = std::max(sy, gy) + 24;
+    int currentX = sx, currentY = sy;
+    auto append = [&](int tx, int ty) {
+        if (out.pts.empty() || out.pts.back() != std::make_pair(tx, ty)) out.pts.push_back({tx, ty});
+        out.x0 = std::min(out.x0, tx - 24); out.y0 = std::min(out.y0, ty - 24);
+        out.x1 = std::max(out.x1, tx + 24); out.y1 = std::max(out.y1, ty + 24);
+    };
+    auto segment = [&](int tx, int ty) {
+        RoadPath part;
+        if (abs(currentX - tx) + abs(currentY - ty) < 3) {
+            append(currentX, currentY); append(tx, ty);
+        } else {
+            if (!routeSegment(currentX, currentY, tx, ty, part, 0.0f)) return false;
+            for (const auto& p : part.pts) append(p.first, p.second);
+        }
+        currentX = tx; currentY = ty;
+        return true;
+    };
+    static const int NX[4] = {0, 1, 0, -1}, NY[4] = {-1, 0, 1, 0};
+    while (from != to) {
+        bool outward = from < to;
+        int ring = outward ? from + 1 : from;
+        int best = 0, px = 0, py = 0;
+        float bestCost = 1e30f;
+        for (int d = 0; d < 4; ++d) {
+            int x, y; regionPassCenter(ring, d, x, y);
+            float da = hypotf((float)(currentX - x), (float)(currentY - y));
+            float db = hypotf((float)(gx - x), (float)(gy - y));
+            if (da + db < bestCost) { bestCost = da + db; best = d; px = x; py = y; }
+        }
+        int sign = outward ? -1 : 1;
+        int ix = px + sign * NX[best] * 16, iy = py + sign * NY[best] * 16;
+        int ox = px - sign * NX[best] * 16, oy = py - sign * NY[best] * 16;
+        if (!segment(ix, iy)) return false;
+        append(px, py); append(ox, oy);
+        currentX = ox; currentY = oy;
+        from += outward ? 1 : -1;
+    }
+    if (!segment(gx, gy)) return false;
+    return out.pts.size() >= 2;
 }
 
 const RoadPath& roadFor(int cx, int cy, int dir) {
@@ -771,7 +845,9 @@ void atlasResetRegion() {
 
 void atlasUpdate(float px, float py, float dt) {
     if (g.regionBannerT > 0.0f) g.regionBannerT = std::max(0.0f, g.regionBannerT - dt);
-    const char* here = atlasRegionName((int)floorf(px), (int)floorf(py));
+    // The banner names the same physical country that its mountain pass
+    // separates. Seeded 128-tile Survey names remain as local districts.
+    const char* here = regionNameAt(px, py);
     if (g.regionName != here) {
         g.regionName = here;
         g.regionBannerT = 4.0f;
@@ -853,13 +929,17 @@ void atlasJournalDraw(float ox, float oy) {
     const int BLOCK = 4;                     // screen pixels per drawn cell
     const int TILES_PER_BLOCK = 8;           // world tiles per drawn cell
     const int BW = (int)(pw / BLOCK), BH = (int)(ph / BLOCK);
-    const int originX = (int)floorf(g.px) - (BW / 2) * TILES_PER_BLOCK;
-    const int originY = (int)floorf(g.py) - (BH / 2) * TILES_PER_BLOCK;
+    const float partyX = g.sailing ? gSailX : g.px, partyY = g.sailing ? gSailY : g.py;
+    const int originX = (int)floorf(partyX) - (BW / 2) * TILES_PER_BLOCK;
+    const int originY = (int)floorf(partyY) - (BH / 2) * TILES_PER_BLOCK;
     const int spanX = BW * TILES_PER_BLOCK, spanY = BH * TILES_PER_BLOCK;
     const int size = BW * BH;
 
     static std::vector<Color> sketch;
-    if (gMapSeed != g.worldSeed || gMapSize != size) {
+    static int lastAccess = -1;
+    int access = (regionPassOpen(1) ? 1 : 0) | (regionPassOpen(2) ? 2 : 0);
+    if (gMapSeed != g.worldSeed || gMapSize != size || lastAccess != access) {
+        lastAccess = access;
         sketch.assign((size_t)size, Color{ 0, 0, 0, 0 });
         gMapSeed = g.worldSeed; gMapSize = size; gMapPx = 1 << 30; gMapPy = 1 << 30;
     }
@@ -875,7 +955,13 @@ void atlasJournalDraw(float ox, float oy) {
                 // edge of the page and a player reads that as "keep walking".
                 float sx = (float)tx, sy = (float)ty;
                 if (sx * sx + sy * sy > shoreRadius() * shoreRadius()) st.water = st.deep = true;
-                sketch[(size_t)by * BW + bx] = biomeColor(st);
+                Color c = biomeColor(st);
+                RegionCell rc = regionCellAt(tx, ty);
+                if (rc.terrain == REGION_RANGE || (rc.gate && !regionPassOpen(rc.ring)))
+                    c = Color{95, 92, 91, 255};
+                else if (rc.terrain == REGION_PASS || frontierRoadAt(tx, ty))
+                    c = Color{184, 158, 113, 255};
+                sketch[(size_t)by * BW + bx] = c;
             }
     }
 
@@ -907,6 +993,27 @@ void atlasJournalDraw(float ox, float oy) {
         }
     }
 
+    // The historic North Road's seeded frontier spur is not an Atlas road.
+    // Draw it and the pass seals from the same geometry as field collision.
+    auto spur = [&](float x0, float y0, float x1, float y1) {
+        float ax, ay, bx, by;
+        toScreen(x0, y0, ax, ay); toScreen(x1, y1, bx, by);
+        if (clipSegment(ax, ay, bx, by, px + 1, py + 1, px + pw - 1, py + ph - 1))
+            DrawLineEx({ax, ay}, {bx, by}, 1.6f, Color{214, 186, 138, 230});
+    };
+    int fx, fy; frontierCavernSite(fx, fy);
+    spur(2, -126, 14, -126); spur(14, -126, 14, -165);
+    spur(14, -165, 2, -165); spur(2, -165, 2, (float)fy + 8);
+    spur(2, (float)fy + 8, (float)fx, (float)fy + 8);
+    spur((float)fx, (float)fy + 8, (float)fx, (float)fy + 1);
+    for (int ring = 1; ring <= 2; ++ring) for (int dir = 0; dir < 4; ++dir) {
+        int tx, ty; regionPassCenter(ring, dir, tx, ty);
+        float sx, sy; toScreen((float)tx, (float)ty, sx, sy);
+        if (sx < px + 3 || sx > px + pw - 3 || sy < py + 3 || sy > py + ph - 3) continue;
+        DrawRectangle((int)sx - 2, (int)sy - 2, 5, 5,
+                      regionPassOpen(ring) ? Color{255, 225, 145, 255} : Color{220, 105, 95, 255});
+    }
+
     // places: every marker is drawn, but only the nearest few get a name, and
     // names are placed nearest-first so the closest place always wins.
     std::vector<std::pair<AtlasSite, std::string>> places;
@@ -929,6 +1036,9 @@ void atlasJournalDraw(float ox, float oy) {
     {
         int cx, cy;
         if (startCavernSite(cx, cy)) addSpecial(AS_CAVERN, cx, cy, "Hollow Hill");
+        Landmark north = northRoadCavern();
+        addSpecial(AS_CAVERN, north.tx, north.ty, "North Road cavern");
+        addSpecial(AS_CAVERN, fx, fy, "Marches cavern");
     }
     std::sort(places.begin(), places.end(),
               [&](const std::pair<AtlasSite, std::string>& a,
@@ -937,8 +1047,8 @@ void atlasJournalDraw(float ox, float oy) {
         // and forgets the Castle of Elm has failed at its one job.
         bool namedA = !a.second.empty(), namedB = !b.second.empty();
         if (namedA != namedB) return namedA;
-        int da = std::max(abs(a.first.tx - (int)g.px), abs(a.first.ty - (int)g.py));
-        int db = std::max(abs(b.first.tx - (int)g.px), abs(b.first.ty - (int)g.py));
+        int da = std::max(abs(a.first.tx - (int)partyX), abs(a.first.ty - (int)partyY));
+        int db = std::max(abs(b.first.tx - (int)partyX), abs(b.first.ty - (int)partyY));
         return da < db;
     });
     // Around the named story places the map is crowded enough already: their
@@ -954,7 +1064,7 @@ void atlasJournalDraw(float ox, float oy) {
         float sx, sy;
         toScreen((float)s.tx, (float)s.ty, sx, sy);
         if (sx < px + 2 || sx > px + pw - 2 || sy < py + 2 || sy > py + ph - 2) continue;
-        int d = std::max(abs(s.tx - (int)g.px), abs(s.ty - (int)g.py));
+        int d = std::max(abs(s.tx - (int)partyX), abs(s.ty - (int)partyY));
         std::string name = entry.second;
         Color nameCol;
         if (s.kind == AS_VILLAGE) {
@@ -1012,7 +1122,7 @@ void atlasJournalDraw(float ox, float oy) {
     int ry0 = (int)floorf((float)originY / 128.0f);
     int ry1 = (int)floorf((float)(originY + spanY) / 128.0f);
     // the party's own region gets first claim on its name
-    int homeRx = (int)floorf(g.px / 128.0f), homeRy = (int)floorf(g.py / 128.0f);
+    int homeRx = (int)floorf(partyX / 128.0f), homeRy = (int)floorf(partyY / 128.0f);
     for (int pass = 0; pass < 2; ++pass)
     for (int ry = ry0; ry <= ry1; ++ry)
         for (int rx = rx0; rx <= rx1; ++rx) {
@@ -1038,23 +1148,24 @@ void atlasJournalDraw(float ox, float oy) {
 
     // footer: where we are, and what is worth a walk
     char line[192];
-    snprintf(line, sizeof(line), "You are in %s", atlasRegionName((int)g.px, (int)g.py));
+    snprintf(line, sizeof(line), "You are in %s / %s", regionNameAt(partyX, partyY),
+             atlasRegionName((int)partyX, (int)partyY));
     drawText(line, px, py + ph + 4, Color{ 255, 236, 176, 255 }, 8);
 
     AtlasSite nearestV, nearestC;
-    bool inStart = (g.px * g.px + g.py * g.py) < 30.0f * 30.0f;
-    bool hasV = atlasVillageNear((int)g.px, (int)g.py, 400, nearestV);
-    bool hasC = atlasCavernNear((int)g.px, (int)g.py, 400, nearestC);
+    bool inStart = (partyX * partyX + partyY * partyY) < 30.0f * 30.0f;
+    bool hasV = atlasVillageNear((int)partyX, (int)partyY, 400, nearestV);
+    bool hasC = atlasCavernNear((int)partyX, (int)partyY, 400, nearestC);
     std::string hint;
     if (inStart) {
         hint = "Elmswick: where the roads begin";
     } else if (hasV) {
-        int d = std::max(abs(nearestV.tx - (int)g.px), abs(nearestV.ty - (int)g.py));
+        int d = std::max(abs(nearestV.tx - (int)partyX), abs(nearestV.ty - (int)partyY));
         char buf[128];
         snprintf(buf, sizeof(buf), "%s %d tiles", atlasSiteName(nearestV).c_str(), d);
         hint = buf;
         if (hasC) {
-            int dc = std::max(abs(nearestC.tx - (int)g.px), abs(nearestC.ty - (int)g.py));
+            int dc = std::max(abs(nearestC.tx - (int)partyX), abs(nearestC.ty - (int)partyY));
             snprintf(buf, sizeof(buf), "   |   cavern %d tiles", dc);
             hint += buf;
         }

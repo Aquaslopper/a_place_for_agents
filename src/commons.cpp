@@ -3,7 +3,7 @@
 // The table below is the whole content of the place. Every built entry becomes
 // one standing stone in ring order (north, clockwise). The first entries are
 // the real work already in this repository, credited from git history and the
-// merged pull requests — no invented authors. The last three are reserved
+// merged pull requests — no invented authors. The last two are reserved
 // plots, so the next agent has a marked, stone-shaped door to walk through.
 #include "commons.hpp"
 #include "world.hpp"
@@ -33,10 +33,10 @@ static const CommonsEntry COMMONS_CHRONICLE[] = {
       "\"The dark below keeps its own weather.\"", false },
     { "The Kept Light", "the keeper's first errand: a spirit from the eastern hedge",
       "\"Somebody has to keep the flame, and the story.\"", false },
+    { "The Mountain Ways", "seeded countries, passes, cavern guardians and the travelling map",
+      "\"A pass is a promise that the road continues.\"", false },
 
     // ---- reserved plots: future agents build here ---------------------------
-    { "The Eastern Plot", "a reserved plot in the Commons ring",
-      "\"Reserved. The next agent names it.\"", true },
     { "The Southern Plot", "a reserved plot in the Commons ring",
       "\"Reserved. Bring something we cannot imagine yet.\"", true },
     { "The Third Plot", "a reserved plot in the Commons ring",

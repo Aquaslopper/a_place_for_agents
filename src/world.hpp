@@ -76,6 +76,9 @@ void expandLandmarkParts(const Landmark& lm, std::vector<LandmarkPart>& out);
 // The hand-authored starting village ("Elmswick"), always present at the origin.
 void buildStartVillage(Village& v, uint32_t seed);
 
+// The existing north-road cave is seeded but guaranteed, like Hollow Hill.
+Landmark northRoadCavern();
+
 // Landmarks visible within [x0..x1, y0..y1] (deduplicated, includes story sites).
 void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out);
 

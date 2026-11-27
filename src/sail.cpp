@@ -32,6 +32,7 @@
 // map is still the same world underneath, so the Journal works unchanged.
 #include "game.hpp"
 #include "world.hpp"
+#include "regions.hpp"
 #include "battle.hpp"
 #include <algorithm>
 #include <cmath>
@@ -79,6 +80,16 @@ const char* sailZoneName() {
 }
 
 // ================================================================ docks
+// Boarding and landing search a few tiles from the bank. Do not let that
+// convenience hop move a party across a still-sealed regional boundary.
+static bool sealedBorderBetween(int ax, int ay, int bx, int by) {
+    int a = regionAt(ax + 0.5f, ay + 0.5f);
+    int b = regionAt(bx + 0.5f, by + 0.5f);
+    for (int ring = 1; ring <= 2; ++ring)
+        if (!regionPassOpen(ring) && ((a < ring) != (b < ring))) return true;
+    return false;
+}
+
 // Landing needs a beach: a walkable tile with water beside it. The party steps
 // ashore onto that tile; the boat stays at the water's edge behind them.
 static bool landingNear(int wx, int wy, int maxR, int& ox, int& oy) {
@@ -86,7 +97,7 @@ static bool landingNear(int wx, int wy, int maxR, int& ox, int& oy) {
         for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) {
             if (std::max(abs(dx), abs(dy)) != r) continue;
             int x = wx + dx, y = wy + dy;
-            if (!cellWalkable(x, y)) continue;
+            if (sealedBorderBetween(wx, wy, x, y) || !cellWalkable(x, y)) continue;
             for (int oy2 = -1; oy2 <= 1; oy2++) for (int ox2 = -1; ox2 <= 1; ox2++) {
                 if (sampleGround(x + ox2, y + oy2).kind == G_WATER) { ox = x; oy = y; return true; }
             }
@@ -103,7 +114,9 @@ static bool mooringNear(int tx, int ty, int maxR, int& ox, int& oy) {
     for (int r = 1; r <= maxR; r++) {
         for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) {
             if (std::max(abs(dx), abs(dy)) != r) continue;
-            if (cellSailable(tx + dx, ty + dy)) { ox = tx + dx; oy = ty + dy; return true; }
+            if (!sealedBorderBetween(tx, ty, tx + dx, ty + dy) && cellSailable(tx + dx, ty + dy)) {
+                ox = tx + dx; oy = ty + dy; return true;
+            }
         }
     }
     return false;
@@ -153,6 +166,10 @@ void sailExit() {
     g.py = ly + 0.5f;
     g.facing = 0;
     g.moving = false;
+    // A beach or island is a place to explore at field scale. The normal
+    // boundary check can switch back to the travel map after leaving it.
+    g.travelMap = false;
+    g.travelContext = 0;
     g.encounterGrace = 3.0f;
     g.stepDist = 0;
     overworldSnapCamera();

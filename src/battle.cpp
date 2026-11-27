@@ -59,6 +59,8 @@ struct BattleState {
     uint64_t fieldMonsterId = 0;
     bool isBoss = false;
     bool crownDropped = false;
+    bool kingKilled = false;
+    GuardianReward guardianReward = GUARDIAN_NONE;
     int zoneLevel = 1;
 };
 
@@ -107,11 +109,13 @@ static int aliveHeroCount() {
     return n;
 }
 
-void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fieldMonsterId, bool isBoss) {
+void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fieldMonsterId,
+                 bool isBoss, GuardianReward guardianReward) {
     B = BattleState{};
     B.fieldMonsterId = fieldMonsterId;
     B.zoneLevel = std::max(1, zoneLevel);
     B.isBoss = isBoss;
+    B.guardianReward = guardianReward;
     B.phase = BP_INTRO;
     B.phaseT = 0.55f;
     gPendingSpellIdx = -1;
@@ -122,19 +126,21 @@ void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fi
         EnemyKind k = kinds[i];
         const EnemyDef& d = enemyDef(k);
         if (k == EN_SLIME_KING) B.isBoss = true;
+        bool guardian = isBoss && i == 0 && k != EN_SLIME_KING;
         float scale = (k == EN_SLIME_KING)
             ? (1.0f + 0.08f * std::max(0, B.zoneLevel - 4))
-            : (1.0f + 0.14f * (B.zoneLevel - 1));
+            : guardian ? (1.0f + 0.06f * std::max(0, B.zoneLevel - 1))
+                       : (1.0f + 0.14f * (B.zoneLevel - 1));
         BattleEnemy e;
         e.kind = k;
-        e.boss = (k == EN_SLIME_KING);
-        e.maxHp = std::max(10, (int)roundf(d.hp * scale));
+        e.boss = (k == EN_SLIME_KING || guardian);
+        e.maxHp = std::max(10, (int)roundf(d.hp * scale * (guardian ? 1.55f : 1.0f)));
         e.hp = e.maxHp;
         e.atk = std::max(4, (int)roundf(d.atk * scale));
         e.def = std::max(1, (int)roundf(d.def * scale));
         e.spd = d.spd;
-        e.xp  = (int)roundf(d.xp * scale);
-        e.gil = (int)roundf(d.gil * scale);
+        e.xp  = (int)roundf(d.xp * scale * (guardian ? 2.0f : 1.0f));
+        e.gil = (int)roundf(d.gil * scale * (guardian ? 2.0f : 1.0f));
         e.weak = d.weak;
         e.drop = d.drop;
         e.dropChance = d.dropChance;
@@ -154,7 +160,8 @@ void battleStart(const std::vector<EnemyKind>& kinds, int zoneLevel, uint64_t fi
         B.heroLungeT[i] = 0;
     }
 
-    if (B.isBoss) setBanner("The Slime King blocks the gate!", 2.2f);
+    if (B.isBoss && kinds[0] == EN_SLIME_KING) setBanner("The Slime King blocks the gate!", 2.2f);
+    else if (B.isBoss) setBanner(std::string("The vault guardian: ") + enemyDef(kinds[0]).name + "!", 2.2f);
     else if (count == 1) setBanner(std::string("A wild ") + enemyDef(kinds[0]).name + " draws near!", 1.8f);
     else setBanner("A band of monsters attacks!", 1.8f);
 
@@ -219,13 +226,9 @@ static void damageFoe(int idx, int dmg, bool crit, bool weak, FxKind fx = FX_SLA
                 g.quests[QUEST_SLIMES].progress = std::min(6, g.slimesSlain);
         }
         if (f.kind == EN_SLIME_KING) {
-            g.bossDefeated = true;
-            if (itemCount(IT_CROWN) == 0) {
-                addItem(IT_CROWN, 1, true);
-                B.crownDropped = true;
-            }
-            if (g.quests[QUEST_CROWN].state == QS_ACTIVE)
-                g.quests[QUEST_CROWN].progress = 1;
+            // The guards can still defeat the party. Do not open a region or
+            // grant its key until the whole encounter has actually been won.
+            B.kingKilled = true;
         } else if (f.drop >= 0 && f.drop < IT_COUNT && f.drop != IT_CROWN &&
                    GetRandomValue(0, 99) < f.dropChance) {
             addItem(f.drop, 1, true);
@@ -265,6 +268,23 @@ static void checkBattleEnd() {
         B.phaseT = 0.45f;
         g.gil += B.gilGain;
         if (B.fieldMonsterId != 0) g.defeatedMonsters.insert(B.fieldMonsterId);
+        if (B.kingKilled) {
+            g.bossDefeated = true;
+            if (itemCount(IT_CROWN) == 0) {
+                addItem(IT_CROWN, 1, true);
+                B.crownDropped = true;
+            }
+            if (g.quests[QUEST_CROWN].state == QS_ACTIVE) g.quests[QUEST_CROWN].progress = 1;
+            B.rewards.push_back("Crown found! Far passes open.");
+            B.rewards.push_back("Follow the road beyond the castle.");
+        } else if (B.guardianReward == GUARDIAN_WAYSTONE) {
+            g.hasWaystone = true;
+            B.rewards.push_back("Waystone found! Vale passes open.");
+        } else if (B.guardianReward == GUARDIAN_FRONTIER) {
+            g.frontierGuardian = true;
+            addItem(IT_ELIXIR, 1, true);
+            B.rewards.push_back("Frontier guardian felled! Elixir found.");
+        }
         for (int i = 0; i < 3; i++) {
             Hero& h = g.party[i];
             int share = h.ko ? std::max(1, B.xpGain / 4) : B.xpGain;
@@ -275,11 +295,9 @@ static void checkBattleEnd() {
                 B.rewards.push_back(buf);
             }
         }
-        if (B.crownDropped) {
-            B.rewards.push_back("Reclaimed the Crown of Elm!");
-        }
         playSoundIf(g.assets.levelup);
-        setBanner(B.isBoss ? "The Slime King dissolves into harmless jelly!" : "Victory!", 4.0f);
+        setBanner(B.kingKilled ? "The Slime King dissolves into harmless jelly!"
+                              : (B.isBoss ? "The vault guardian falls!" : "Victory!"), 4.0f);
     } else if (aliveHeroCount() == 0) {
         B.phase = BP_DEFEAT;
         B.phaseT = 1.4f;
@@ -300,7 +318,7 @@ static void runEnemyTurn(int fi) {
     if (targets.empty()) return;
 
     // Slime King special: Royal Quake AoE
-    if (f.boss && GetRandomValue(0, 99) < 35) {
+    if (f.kind == EN_SLIME_KING && GetRandomValue(0, 99) < 35) {
         setBanner("Slime King uses Royal Quake!", 1.5f);
         for (int ti : targets) {
             int dmg = magicDamage(f.atk / 2, 14, heroDef(g.party[ti]), false);
@@ -616,7 +634,7 @@ void battleUpdate(float dt) {
             } else if (c == 4) {
                 if (B.isBoss) {
                     playSoundIf(g.assets.cancel);
-                    setBanner("You can't flee from the Slime King!", 1.5f);
+                    setBanner("You can't flee from a guardian!", 1.5f);
                 } else if (GetRandomValue(0, 99) < 68) {
                     B.phase = BP_FLED;
                     B.phaseT = 0.25f;
@@ -830,24 +848,45 @@ static Texture2D* fxTex(FxKind k) {
 }
 
 static void drawBattleBackdrop(float sx, float sy) {
+    if (g.battleReturn == MODE_DUNGEON && dungeonActive()) {
+        // A cavern encounter should not suddenly take place in a sunny field.
+        // Compose a battle chamber from the same OpenRTP-derived materials as
+        // the explored floor; no additional or replacement art is needed.
+        int th = std::max(0, std::min((int)TH_COUNT - 1, dungeonTheme()));
+        const Color tints[TH_COUNT] = {
+            {175,190,158,255}, {184,169,151,255}, {220,192,150,255},
+            {143,182,165,255}, {183,186,181,255}, {168,196,222,255},
+            {226,194,153,255}, WHITE
+        };
+        bool natural = th != TH_CRYPT && g.assets.caveRock[0].id && g.assets.caveFloor[0].id;
+        int stageH = (int)btTrayY() + 6;
+        int wallH = stageH * 52 / 100;
+        ClearBackground(Color{25, 24, 31, 255});
+        for (int y = 0; y < stageH; y += TILE) for (int x = 0; x < g.vw + TILE; x += TILE) {
+            bool wall = y < wallH;
+            unsigned variant = hash2i(x / TILE, y / TILE, (uint32_t)th * 971u + 0x217u) % 4u;
+            Texture2D tex = natural ? (wall ? g.assets.caveRock[variant] : g.assets.caveFloor[variant])
+                                    : (wall ? g.assets.dunWall[th] : g.assets.dunFloor[th]);
+            if (!tex.id) continue;
+            Color tint = wall ? Color{(unsigned char)(tints[th].r * 0.68f),
+                                       (unsigned char)(tints[th].g * 0.68f),
+                                       (unsigned char)(tints[th].b * 0.68f), 255} : tints[th];
+            DrawTexturePro(tex, {0, 0, (float)tex.width, (float)tex.height},
+                           {(float)x + sx, (float)y + sy, TILE, TILE}, {0, 0}, 0, tint);
+        }
+        DrawRectangle(0, wallH - 4, g.vw, 6, Fade(BLACK, 0.55f));
+        DrawRectangleGradientV(0, 0, g.vw, stageH, Fade(BLACK, 0.32f), Fade(BLACK, 0.05f));
+        if (g.assets.torch.id) for (int x : {48, g.vw - 48}) {
+            float pulse = 0.5f + 0.5f * sinf(g.totalTime * 4.0f + x);
+            DrawCircleGradient(x, wallH / 2, 36 + pulse * 5, Fade(Color{255, 177, 80, 255}, 0.25f), BLANK);
+            DrawTexturePro(g.assets.torch, {0, 0, (float)g.assets.torch.width, (float)g.assets.torch.height},
+                           {(float)x - 8 + sx, (float)wallH / 2 - 8 + sy, 16, 20}, {0, 0}, 0, WHITE);
+        }
+        return;
+    }
     Texture2D tex;
     if (B.isBoss) tex = g.assets.castleBattlefield;
-    else if (g.mode == MODE_DUNGEON || dungeonActive()) {
-        int th = dungeonTheme();
-        int bi = 0;
-        switch (th) {
-            case TH_ROOTED: bi = BI_FOREST; break;
-            case TH_AMBER: bi = BI_AMBER; break;
-            case TH_MIRE: bi = BI_FEN; break;
-            case TH_HEATH: bi = BI_HEATH; break;
-            case TH_FROST: bi = BI_FROST; break;
-            case TH_SUNSCORCH: bi = BI_DUNES; break;
-            case TH_MOSSY: bi = BI_MEADOW; break;
-            case TH_CRYPT: bi = BI_HEATH; break;
-            default: bi = sampleGround((int)floorf(g.px),(int)floorf(g.py)).biome; break;
-        }
-        tex = g.assets.battlefield[bi];
-    } else {
+    else {
         GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
         tex = g.assets.battlefield[gt.biome];
     }

@@ -5,6 +5,7 @@
 // retain their masonry. Both layers are deterministic for (seed, site, floor).
 #include "game.hpp"
 #include "world.hpp"
+#include "regions.hpp"
 #include "battle.hpp"
 #include <cstdio>
 
@@ -33,6 +34,9 @@ struct DunFloor {
     std::vector<uint8_t> tiles;
     int entryTx = 0, entryTy = 0;
     int downTx = -1, downTy = -1;
+    int vaultTx = -1, vaultTy = -1;
+    uint64_t vaultId = 0, guardianId = 0;
+    std::vector<std::pair<int, int>> runes;
     std::vector<DunChest> chests;
     std::vector<DunMob>   mobs;
     // Includes defeated spawn sites so weathering never follows the kill log.
@@ -46,6 +50,9 @@ struct Dungeon {
     int siteTx = 0, siteTy = 0;
     uint32_t seed = 0;
     bool startCavern = false;
+    bool frontierCavern = false;
+    EnemyKind guardian = EN_WOLF;
+    int runeMask = 0;               // resets only when leaving the cavern
     int floor = 0, floors = 3;
     int zoneBase = 1;
     int theme = TH_MOSSY;
@@ -59,6 +66,7 @@ struct Dungeon {
     float stepDist = 0; int stepCounter = 0;
     float encounterGrace = 0;
     float camX = 0, camY = 0;
+    int screenX = -1, screenY = -1;
     std::vector<std::pair<int, int>> path;
     bool pendingInteract = false;
     uint64_t pendingChestId = 0;
@@ -789,6 +797,25 @@ void generateFloor() {
                 }
             }
         placeChest(vx, vy, true);
+        if (F.chests.empty()) {
+            // A furnished farthest cell can reject the reserved vault. Clear
+            // only the conflicting solids and retry; its coordinate and ID do
+            // not change, and no new random draws are consumed on rejection.
+            F.props.erase(std::remove_if(F.props.begin(), F.props.end(), [&](const DunProp& p) {
+                return p.solid && fabsf(p.x - (vx + 0.5f)) < p.w * 0.45f + 0.28f &&
+                       fabsf(p.y - (vy + 0.5f)) < p.h * 0.42f + 0.28f;
+            }), F.props.end());
+            placeChest(vx, vy, true);
+        }
+        if (!F.chests.empty()) {
+            F.vaultTx = vx; F.vaultTy = vy; F.vaultId = F.chests.back().id;
+            F.guardianId = mobIdAt(vx, vy, D.floor, 777);
+            if (D.startCavern && !g.hasWaystone && g.openedChests.count(F.vaultId)) {
+                // A pre-range save may already have opened this very vault.
+                g.hasWaystone = true;
+                pushToast("Your old Hollow Hill discovery opens the passes.");
+            }
+        }
         for (int k = 0; k < 2; k++) {          // two guards for the hoard
             int gx = vx + (k == 0 ? -1 : 1), gy = vy + 1;
             if (!cellOpen(gx, gy)) { gx = vx; gy = vy - 1; }
@@ -854,7 +881,53 @@ void generateFloor() {
     }
 
     weatherCavern(F);
+
+    // On the last floor the seed puts two rune stones on reachable branches.
+    // This is a separate hash stream: adding a puzzle must not move any old
+    // chest, guard, stair or persistent ID. A switch never blocks movement.
+    if (F.vaultTx >= 0) {
+        for (int rune = 0; rune < 2; ++rune) {
+            int bestX = -1, bestY = -1;
+            uint32_t bestScore = 0;
+            // Prefer separated side branches; on an unusually small floor,
+            // relax spacing rather than leave a required switch unplaceable.
+            for (int relaxed = 0; relaxed < 2 && bestX < 0; ++relaxed) {
+                for (int y = 1; y < F.h - 1; ++y) for (int x = 1; x < F.w - 1; ++x) {
+                    int index = dIdx(x, y, F.w);
+                    if (dist[index] < (relaxed ? 2 : 7) || !cellOpen(x, y) ||
+                        dunBlocked(x + 0.5f, y + 0.5f, 0.28f)) continue;
+                    if (abs(x - F.vaultTx) + abs(y - F.vaultTy) < (relaxed ? 3 : 5)) continue;
+                    bool reserved = false;
+                    for (const auto& c : F.chests)
+                        if (abs(x - c.tx) + abs(y - c.ty) < (relaxed ? 2 : 4)) reserved = true;
+                    for (const auto& m : F.mobAnchors)
+                        if (abs(x - m.first) + abs(y - m.second) < (relaxed ? 1 : 3)) reserved = true;
+                    for (const auto& r : F.runes)
+                        if (abs(x - r.first) + abs(y - r.second) < (relaxed ? 3 : 10)) reserved = true;
+                    if (reserved) continue;
+                    uint32_t score = hash2i(x, y, D.seed ^ (0xb719u + (uint32_t)rune * 0x73a1u));
+                    if (bestX < 0 || score > bestScore) { bestX = x; bestY = y; bestScore = score; }
+                }
+            }
+            if (bestX >= 0) F.runes.push_back({bestX, bestY});
+        }
+    }
     D.encounterGrace = 2.0f;
+}
+
+bool guardianCleared() {
+    if (D.F.vaultTx < 0) return true;
+    // An old save may already have opened this vault. Never reclaim the chest
+    // or introduce a new guardian on top of previously earned treasure.
+    if (g.openedChests.count(D.F.vaultId)) return true;
+    if (D.startCavern && g.hasWaystone) return true;
+    if (D.frontierCavern && g.frontierGuardian) return true;
+    return g.defeatedMonsters.count(D.F.guardianId) != 0;
+}
+
+bool runesLit() {
+    int required = (1 << (int)D.F.runes.size()) - 1;
+    return (D.runeMask & required) == required;
 }
 
 // ================================================================ pathfinding
@@ -911,6 +984,21 @@ void revealDungeon() {
         }
 }
 
+void snapDungeonPage(bool transition) {
+    // Leave room for the fixed title and party HUD. A full-screen page would
+    // put the hero underneath the bottom panel when entering from the south.
+    int pageW = std::max(8, g.vw / TILE - 12) * TILE; // clear the survey at upper right
+    int pageH = std::max(6, g.vh / TILE - 9) * TILE;  // clear the party strip below
+    int pageX = (int)floorf(D.px * TILE / pageW);
+    int pageY = (int)floorf(D.py * TILE / pageH);
+    if (transition && (pageX != D.screenX || pageY != D.screenY)) {
+        g.fade = 0.55f; g.fadeDir = -1;
+    }
+    D.screenX = pageX; D.screenY = pageY;
+    D.camX = (float)(pageX * pageW - 3 * TILE);
+    D.camY = (float)(pageY * pageH - 4 * TILE);
+}
+
 void generateAndEnterFloor(bool fromBelow = false) {
     generateFloor();
     D.px = D.F.entryTx + 0.5f;
@@ -925,13 +1013,8 @@ void generateAndEnterFloor(bool fromBelow = false) {
     D.pendingInteract = false;
     D.clickFlashT = 0;
     D.stepDist = 0;
-    // Snap the camera onto the new floor.
-    float tx = D.px * TILE - g.vw * 0.5f;
-    float ty = D.py * TILE - g.vh * 0.5f;
-    float maxX = (float)D.F.w * TILE - g.vw;
-    float maxY = (float)D.F.h * TILE - g.vh;
-    D.camX = (maxX > 0) ? std::max(0.0f, std::min(tx, maxX)) : tx;
-    D.camY = (maxY > 0) ? std::max(0.0f, std::min(ty, maxY)) : ty;
+    // Each page shares the same connected BSP passages.
+    snapDungeonPage(false);
 }
 
 } // namespace
@@ -944,7 +1027,18 @@ void enterDungeon(int siteTx, int siteTy, bool startCavern) {
     D.active = true;
     D.siteTx = siteTx; D.siteTy = siteTy;
     D.startCavern = startCavern;
+    int fx, fy; frontierCavernSite(fx, fy);
+    D.frontierCavern = siteTx == fx && siteTy == fy;
     D.seed = g.worldSeed ^ hash2i(siteTx, siteTy, 0xD0A6Eu) ^ (startCavern ? 0x57ACu : 0u);
+    // A separate seed roll chooses an appropriate guardian for each cavern;
+    // revisiting or reloading it cannot turn one boss into another.
+    static const EnemyKind nearGuardians[] = {EN_WOLF, EN_GOBLIN, EN_BANDIT, EN_PORCUPINE};
+    static const EnemyKind midGuardians[] = {EN_ORC, EN_GHOST, EN_REAPER, EN_SERPENT};
+    static const EnemyKind farGuardians[] = {EN_GOLEM, EN_DREAD_KNIGHT, EN_DRAKE, EN_NAGA};
+    const EnemyKind* pool = startCavern || regionAt((float)siteTx, (float)siteTy) == 0
+                          ? nearGuardians : (regionAt((float)siteTx, (float)siteTy) == 1
+                                             ? midGuardians : farGuardians);
+    D.guardian = pool[hash2i(siteTx, siteTy, D.seed ^ 0x609d1u) % 4u];
     // theme is derived from surface biome + seed so every mouth has a stable identity
     if (startCavern) D.theme = TH_MOSSY;
     else D.theme = themeForSite(siteTx, siteTy, D.seed);
@@ -966,6 +1060,8 @@ void enterDungeon(int siteTx, int siteTy, bool startCavern) {
     D.zoneBase = std::max(1, zoneLevelAt((float)siteTx + 0.5f, (float)siteTy + 1.5f));
     generateAndEnterFloor();
     g.mode = MODE_DUNGEON;
+    g.travelMap = false;
+    g.travelContext = 0;
     g.fade = 1.0f; g.fadeDir = -1;
     g.encounterGrace = 3.0f;
     playSoundIf(g.assets.door);
@@ -1014,12 +1110,43 @@ static void giveChestLoot(const DunChest& c) {
 }
 
 static void dungeonInteract(bool silent, uint64_t chestId = 0) {
+    // Rune stones are non-solid, reachable switches. Their positions are made
+    // from this dungeon's seed, and both are shown on the discovered map.
+    if (!chestId && !guardianCleared()) {
+        for (size_t i = 0; i < D.F.runes.size(); ++i) {
+            float dx = D.F.runes[i].first + 0.5f - D.px;
+            float dy = D.F.runes[i].second + 0.5f - D.py;
+            if (dx * dx + dy * dy > 1.4f * 1.4f) continue;
+            int bit = 1 << (int)i;
+            if (D.runeMask & bit) pushToast("This rune is already awake.");
+            else {
+                D.runeMask |= bit;
+                playSoundIf(g.assets.chime);
+                pushToast(runesLit() ? "The vault seal opens. The guardian stirs!"
+                                     : "A rune wakes. Find the other stone.");
+            }
+            return;
+        }
+    }
     // 1. chests
     for (const auto& c : D.F.chests) {
         if (chestId && c.id != chestId) continue;
         float dx = (c.tx + 0.5f) - D.px, dy = (c.ty + 0.5f) - D.py;
         if (dx * dx + dy * dy > 1.7f * 1.7f) continue;
         if (g.openedChests.count(c.id)) continue;
+        if (c.id == D.F.vaultId && !guardianCleared()) {
+            if (!runesLit()) {
+                pushToast("The vault is sealed. Wake both rune stones on this floor.");
+                playSoundIf(g.assets.cancel);
+                return;
+            }
+            GuardianReward reward = D.startCavern ? GUARDIAN_WAYSTONE
+                                  : (D.frontierCavern ? GUARDIAN_FRONTIER : GUARDIAN_NONE);
+            D.path.clear(); D.pendingInteract = false;
+            battleStart({D.guardian}, D.zoneBase + D.floor, D.F.guardianId, true, reward);
+            g.encounterGrace = 3.5f;
+            return;
+        }
         g.openedChests.insert(c.id);
         giveChestLoot(c);
         playSoundIf(g.assets.treasure);
@@ -1065,10 +1192,20 @@ static void dungeonInteract(bool silent, uint64_t chestId = 0) {
 const char* dungeonPrompt() {
     if (!D.active || g.mode != MODE_DUNGEON) return nullptr;
     static char buf[96];
+    if (!guardianCleared()) {
+        for (size_t i = 0; i < D.F.runes.size(); ++i) {
+            float dx = D.F.runes[i].first + 0.5f - D.px, dy = D.F.runes[i].second + 0.5f - D.py;
+            if (dx * dx + dy * dy < 1.4f * 1.4f)
+                return (D.runeMask & (1 << (int)i)) ? "SPACE: inspect the lit rune" : "SPACE: awaken the rune";
+        }
+    }
     for (const auto& c : D.F.chests) {
         float dx = (c.tx + 0.5f) - D.px, dy = (c.ty + 0.5f) - D.py;
-        if (dx * dx + dy * dy < 1.7f * 1.7f && !g.openedChests.count(c.id))
+        if (dx * dx + dy * dy < 1.7f * 1.7f && !g.openedChests.count(c.id)) {
+            if (c.id == D.F.vaultId && !guardianCleared())
+                return runesLit() ? "SPACE: challenge the guardian" : "SPACE: inspect the sealed vault";
             return "SPACE: open chest";
+        }
     }
     if (D.F.downTx >= 0) {
         float dx = (D.F.downTx + 0.5f) - D.px, dy = (D.F.downTy + 0.5f) - D.py;
@@ -1085,19 +1222,8 @@ const char* dungeonPrompt() {
 
 // ================================================================ update
 static void updateDungeonCamera(float dt) {
-    float targetX = D.px * TILE - g.vw * 0.5f;
-    float targetY = D.py * TILE - g.vh * 0.5f;
-    float maxX = (float)D.F.w * TILE - g.vw;
-    float maxY = (float)D.F.h * TILE - g.vh;
-    if (maxX > 0) targetX = std::max(0.0f, std::min(targetX, maxX));
-    else targetX = maxX * 0.5f;
-    if (maxY > 0) targetY = std::max(0.0f, std::min(targetY, maxY));
-    else targetY = maxY * 0.5f;
-    float k = 1.0f - powf(0.0004f, dt);
-    D.camX += (targetX - D.camX) * k;
-    D.camY += (targetY - D.camY) * k;
-    if (!std::isfinite(D.camX)) D.camX = targetX;
-    if (!std::isfinite(D.camY)) D.camY = targetY;
+    (void)dt;
+    snapDungeonPage(true);
 }
 
 static void dungeonStartBattle(EnemyKind primary, uint64_t monsterId = 0) {
@@ -1459,6 +1585,11 @@ void dungeonDraw() {
         list.push_back({ (D.F.chests[i].ty + 1.0f) * TILE, 1, i });
     for (int i = 0; i < (int)D.F.mobs.size(); i++)
         list.push_back({ (D.F.mobs[i].y + 0.35f) * TILE, 2, i });
+    if (!guardianCleared()) {
+        for (int i = 0; i < (int)D.F.runes.size(); ++i)
+            list.push_back({ (D.F.runes[i].second + 0.8f) * TILE, 4, i });
+        list.push_back({ (D.F.vaultTy + 0.8f) * TILE, 5, 0 });
+    }
     list.push_back({ (D.py + 0.35f) * TILE, 3, 0 });
     std::stable_sort(list.begin(), list.end(),
                      [](const Item& a, const Item& b) { return a.footY < b.footY; });
@@ -1505,6 +1636,28 @@ void dungeonDraw() {
             if (dx * dx + dy * dy < 9.0f && fmodf(g.totalTime * 2.0f, 1.0f) < 0.6f)
                 drawWorldLabel("!", sx, sy - t.height * 0.62f - 13,
                                Color{ 255, 110, 110, 255 }, 8);
+        } else if (it.kind == 4) {
+            const auto& rune = D.F.runes[it.idx];
+            float sx = (rune.first + 0.5f) * TILE - camX;
+            float sy = (rune.second + 0.85f) * TILE - camY;
+            bool lit = (D.runeMask & (1 << it.idx)) != 0;
+            DrawCircleGradient((int)sx, (int)(sy - 8), 20,
+                               Fade(lit ? Color{255, 222, 128, 255} : Color{120, 180, 255, 255}, 0.35f), BLANK);
+            texFootLocal(g.assets.crystal, sx, sy, lit ? Color{255, 232, 145, 255} : Color{170, 205, 255, 255});
+            float dx = D.px - rune.first - 0.5f, dy = D.py - rune.second - 0.5f;
+            if (dx * dx + dy * dy < 16.0f)
+                drawWorldLabel(lit ? "AWAKE" : "RUNE", sx, sy - 35, Color{210, 228, 255, 255}, 8);
+        } else if (it.kind == 5) {
+            Texture2D& t = g.assets.enemy[D.guardian];
+            float sx = (D.F.vaultTx + 0.5f) * TILE - camX;
+            float sy = (D.F.vaultTy + 0.65f) * TILE - camY;
+            DrawCircleGradient((int)sx, (int)(sy - 12), 23,
+                               Fade(Color{210, 95, 105, 255}, 0.28f), BLANK);
+            if (t.id) texFootLocal(t, sx, sy, WHITE, 0.74f);
+            float dx = D.px - D.F.vaultTx - 0.5f, dy = D.py - D.F.vaultTy - 0.5f;
+            if (dx * dx + dy * dy < 36.0f)
+                drawWorldLabel(runesLit() ? "GUARDIAN" : "SEALED VAULT", sx, sy - 48,
+                               Color{255, 209, 148, 255}, 8);
         } else {
             Texture2D& sheet = g.assets.heroWalk[std::max(0, std::min(2, g.party[0].klass))];
             int row = (D.facing == 0) ? 0 : (D.facing == 1 ? 1 : 2);
@@ -1555,11 +1708,19 @@ void dungeonDraw() {
 
     // --- HUD — show cavern base name plus theme for at-a-glance variety
     char header[128];
-    snprintf(header, sizeof(header), "%s — %s  B%d", D.name.c_str(), D.themeName.c_str(), D.floor + 1);
+    snprintf(header, sizeof(header), "%s - %s  B%d", D.name.c_str(), D.themeName.c_str(), D.floor + 1);
     Vector2 tsz = measureText(header, 8);
     float tw = std::max(170.0f, tsz.x + 24.0f);
     drawWindow({ floorf(g.vw * 0.5f - tw * 0.5f), 5.0f, tw, 21.0f });
     drawTextCentered(header, g.vw * 0.5f, 12.0f, Color{ 255, 236, 176, 255 }, 8);
+    if (!guardianCleared() && !D.F.runes.empty()) {
+        int lit = 0;
+        for (size_t i = 0; i < D.F.runes.size(); ++i) if (D.runeMask & (1 << (int)i)) ++lit;
+        char status[64];
+        snprintf(status, sizeof(status), "RUNES %d/%d  |  %s", lit, (int)D.F.runes.size(),
+                 runesLit() ? "GUARDIAN AWAKE" : "VAULT SEALED");
+        drawWorldLabel(status, g.vw * 0.5f, 30, Color{200, 226, 255, 255}, 8);
+    }
 
     // Survey map: discovered passages persist while revisiting this cavern.
     const int mapX = g.vw - D.F.w * 2 - 11, mapY = 38;
@@ -1582,6 +1743,12 @@ void dungeonDraw() {
         marker(D.F.downTx, D.F.downTy, Color{125, 171, 255, 255});
         for (const auto& chest : D.F.chests)
             if (!g.openedChests.count(chest.id)) marker(chest.tx, chest.ty, Color{255, 211, 115, 255});
+        if (!guardianCleared()) {
+            for (size_t i = 0; i < D.F.runes.size(); ++i)
+                marker(D.F.runes[i].first, D.F.runes[i].second,
+                       (D.runeMask & (1 << (int)i)) ? Color{255, 226, 145, 255} : Color{117, 196, 255, 255});
+            marker(D.F.vaultTx, D.F.vaultTy, Color{235, 105, 105, 255});
+        }
         marker((int)floorf(D.px), (int)floorf(D.py), WHITE);
     }
 

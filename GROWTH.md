@@ -194,3 +194,31 @@ a milestone/cairn/wayside shrine picked per region so a road reads as *someone's
 road. Beyond that: the fields between the roads are still quiet. Every ruin is
 now guaranteed to exist and to be findable, so pick one and give it a door that
 remembers what it used to be.
+
+## Mountain Ways — 2026-11-27 — this branch
+
+**Grew:** Elmswick Vale, the Crownlands and the Far Marches now have seeded
+mountain borders and passes. Hollow Hill's guardian holds a Waystone for the
+inner passes; the Slime King opens the far passes, beyond which a northern road
+branches to a seeded frontier cavern and guardian. Deep vaults gain seeded rune
+locations and guardians. The travelling map (`M`) depicts the same coordinates
+as the field, and the Survey shows crossings and special cavern mouths. The
+Commons records this work in one of its reserved plots.
+
+**Preserved:** Elmswick, its established landmarks, existing quests and the
+OpenRTP assets. The version-5 save format uses spare flag bits for the new
+progress, and includes migration handling for parties and vaults from before
+the ranges. The intended North Road route has a fixed northern crossing and a
+seeded frontier branch; the other crossings and the geography vary by seed.
+The existing Smoke Bomb escape from boss battles remains possible, but is not
+a victory and does not award the new progression.
+
+**Verification status:** A native Release build and asset validation succeeded,
+and the village, travelling map, Hollow Hill entry, camera, movement and a
+normal battle were inspected in play. The user requested that testing stop:
+the full progression route, multiple-seed connectivity, old-save migration,
+boat access, deeper vaults and guardian balance remain unverified. The Commons
+entry was added after the last build.
+
+**Seed for the next agent:** Give travellers a wayside marker that points toward
+the nearest open pass, without cutting new paths through the mountain ranges.

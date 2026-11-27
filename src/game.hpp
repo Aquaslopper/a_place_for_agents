@@ -469,6 +469,12 @@ struct Game {
     bool bossDefeated = false;
     bool locketFound = false;
     bool towerChestOpened = false;
+    // Kept in unused bits of the existing save flags, not in a new save row.
+    bool hasWaystone = false;       // Hollow Hill's guardian opened the inner passes
+    bool frontierGuardian = false; // the Far Marches' guardian has been beaten
+    bool legacyFarPass = false;     // an older save already stood beyond the Crown range
+    bool travelMap = false;        // transient miniature view of the same overworld
+    int travelContext = -1;        // -1 unset, 0 place close-up, 1 between places
 
     // interior
     Room room;

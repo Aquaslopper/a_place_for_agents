@@ -2,6 +2,7 @@
 #include "game.hpp"
 #include "world.hpp"
 #include "atlas.hpp"
+#include "regions.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -272,7 +273,7 @@ static const char* QUEST_TITLES[QUEST_COUNT] = {
 static const char* QUEST_GOALS[QUEST_COUNT] = {
     "Thin out 6 slimes in the meadow for Farmer Hedrick.",
     "Find Tamsin's locket at the Standing Stones SE of Elmswick.",
-    "Defeat the Slime King at the Northern Castle and return the Crown.",
+    "Find Hollow Hill's Waystone; defeat the Slime King and return the Crown.",
     "Recover Star Metal from a cavern's deepest vault.",
     "Tend the Agents' Commons for its keeper: still the Wisp in the hedge, then light the brazier.",
     "Hire Bel's boat at the millpond, find the three island Tidewells, and sail home.",
@@ -356,13 +357,14 @@ static void parkSavedParty() {
         lx = (int)floorf(g.px); ly = (int)floorf(g.py);
     }
     int wx = 0, wy = 0;
-    for (int r = 0; r <= 6 && !wx; r++) {
-        for (int dy = -r; dy <= r && !wx; dy++) for (int dx = -r; dx <= r; dx++) {
+    bool found = false;
+    for (int r = 0; r <= 6 && !found; r++) {
+        for (int dy = -r; dy <= r && !found; dy++) for (int dx = -r; dx <= r; dx++) {
             if (std::max(abs(dx), abs(dy)) != r) continue;
-            if (cellWalkable(lx + dx, ly + dy)) { wx = lx + dx; wy = ly + dy; break; }
+            if (cellWalkable(lx + dx, ly + dy)) { wx = lx + dx; wy = ly + dy; found = true; break; }
         }
     }
-    if (wx) { g.px = wx + 0.5f; g.py = wy + 0.5f; }
+    if (found) { g.px = wx + 0.5f; g.py = wy + 0.5f; }
 }
 
 void returnToTitle() {
@@ -978,7 +980,8 @@ struct SaveBlob {
     uint32_t flags;                // bit0 bossDefeated, bit1 locketFound, bit2 towerChestOpened,
                                    // bit3 startVillageSeen, bit4 musicOn, bit5 waitBattle,
                                    // bit6 crtOn, bit7 hasBoat (older saves read as no boat),
-                                   // bits 8-9 tideFound (island Tidewells, 0..3)
+                                   // bits 8-9 tideFound, bit10 waystone, bit11 frontier guardian,
+                                   // bit12 regional-save marker, bit13 grandfathered far passage
     int32_t openedChestCount;
     uint64_t openedChests[SAVE_MAX_IDS];
     int32_t defeatedMonsterCount;
@@ -1098,6 +1101,10 @@ bool saveGame() {
     if (g.crtOn)            b.flags |= (1u << 6);
     if (g.hasBoat)          b.flags |= (1u << 7);
     b.flags |= ((uint32_t)std::max(0, std::min(TIDE_ISLANDS, g.tideFound))) << 8;
+    if (g.hasWaystone)      b.flags |= (1u << 10);
+    if (g.frontierGuardian) b.flags |= (1u << 11);
+    b.flags |= (1u << 12);          // distinguishes a new save from a pre-range v5 save
+    if (g.legacyFarPass)    b.flags |= (1u << 13);
 
     int oc = 0;
     for (uint64_t id : g.openedChests) {
@@ -1258,6 +1265,20 @@ bool loadGame() {
     g.hasBoat          = (b.flags & (1u << 7)) != 0;
     g.tideFound        = std::max(0, std::min(TIDE_ISLANDS, (int)((b.flags >> 8) & 3u)));
     g.sailing          = false;
+    g.travelMap        = false;
+    g.travelContext    = -1;
+    g.hasWaystone      = (b.flags & (1u << 10)) != 0;
+    g.frontierGuardian = (b.flags & (1u << 11)) != 0;
+    g.legacyFarPass    = (b.flags & (1u << 13)) != 0;
+    if (!(b.flags & (1u << 12))) {
+        // Old games had no ranges. Never strand a returning party or take away
+        // the route it already earned; this does not complete the Crown quest.
+        int oldCountry = regionAt(g.px, g.py);
+        if (oldCountry >= 1 || g.bossDefeated || itemCount(IT_STAR_METAL) > 0 ||
+            g.quests[QUEST_DEEP].progress > 0 || g.quests[QUEST_DEEP].state == QS_DONE)
+            g.hasWaystone = true;
+        if (oldCountry >= 2 && !g.bossDefeated) g.legacyFarPass = true;
+    }
 
     g.openedChests.clear();
     int oc = std::max(0, std::min(SAVE_MAX_IDS, (int)b.openedChestCount));
@@ -1350,6 +1371,11 @@ void newGameState(uint32_t seed) {
     g.bossDefeated = false;
     g.locketFound = false;
     g.towerChestOpened = false;
+    g.hasWaystone = false;
+    g.frontierGuardian = false;
+    g.legacyFarPass = false;
+    g.travelMap = false;
+    g.travelContext = -1;
     g.startVillageSeen = false;
     g.hasBoat = false;
     g.sailing = false;

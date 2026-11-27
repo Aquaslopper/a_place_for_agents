@@ -2,6 +2,7 @@
 #include "world.hpp"
 #include "atlas.hpp"
 #include "commons.hpp"
+#include "regions.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -292,6 +293,9 @@ static void flattenSpecialSites(float x, float y, float& e, float& t, float& m) 
                 e, t, m, 0.52f, 0.54f, 0.52f);
     flattenSite(x, y, (float)TOWER_SITE_TX, (float)TOWER_SITE_TY, 7.0f, 13.0f,
                 e, t, m, 0.53f, 0.50f, 0.50f);
+    int fx, fy; frontierCavernSite(fx, fy);
+    flattenSite(x, y, (float)fx, (float)fy, 6.0f, 10.0f,
+                e, t, m, 0.52f, 0.36f, 0.48f);
 }
 
 static bool nearSpecialSite(int tx, int ty) {
@@ -409,7 +413,7 @@ static bool nearTrail(int tx, int ty, int r) {
 // lattice cell, on ground a party can walk to. Hollow Hill and the north-road
 // mouth are authored, and are consulted first.
 
-static Landmark northRoadCavern() {
+Landmark northRoadCavern() {
     static uint32_t seed = 0;
     static bool valid = false;
     static Landmark cached;
@@ -433,6 +437,10 @@ static bool surveyedCavernNear(int tx, int ty, int radius, Landmark& out) {
     Landmark north = northRoadCavern();
     if (abs(tx - north.tx) <= radius && abs(ty - north.ty) <= radius) {
         out = north; return true;
+    }
+    int fx, fy; frontierCavernSite(fx, fy);
+    if (abs(tx - fx) <= radius && abs(ty - fy) <= radius) {
+        out = {LK_CAVERN, fx, fy, 0xf204u}; return true;
     }
     AtlasSite site;
     if (atlasCavernNear(tx, ty, radius, site)) {
@@ -487,6 +495,24 @@ static GroundTile generateGround(int tx, int ty) {
     if (out.biome == BI_AMBER && canopy > 0.43f) out.kind = G_LEAVES;
     if (out.biome == BI_DUNES && patch > 0.47f) out.kind = G_RIPPLES;
     if (out.biome == BI_FOREST && canopy < 0.40f) out.kind = G_GRASS;
+
+    // Mountain ranges are the authority over every later land-cutting system:
+    // authored trails, royal roads, cave aprons and wild ways cannot tunnel a
+    // second opening through them. Only the seeded defiles may be crossed.
+    RegionCell rc = regionCellAt(tx, ty);
+    if (rc.terrain != REGION_NONE) {
+        out.kind = (rc.terrain == REGION_RANGE || (rc.gate && !regionPassOpen(rc.ring)))
+                 ? G_ROCK : G_DIRT;
+        out.biome = BI_HEATH;
+        out.deco = 0;
+        return out;
+    }
+    // A legible, dry spur links the historic North Road, the Crown pass and
+    // the guaranteed frontier mouth without erasing the castle's own yard.
+    if (frontierRoadAt(tx, ty)) {
+        out.kind = G_DIRT; out.deco = 0;
+        return out;
+    }
 
     // The Tidemill Isles are built, not found: stamp them before the water
     // rules below so the pond closes around their sand skirts naturally.
@@ -782,11 +808,12 @@ SurveyTerrain worldSurveyTerrain(int tx, int ty) {
 }
 
 GroundTile sampleGround(int tx, int ty) {
-    struct Entry { int x = 0, y = 0; uint32_t seed = 0, epoch = 0; bool valid = false; GroundTile tile; };
+    struct Entry { int x = 0, y = 0; uint32_t seed = 0, epoch = 0; int access = 0; bool valid = false; GroundTile tile; };
     static Entry cache[8192];
     Entry& c = cache[((uint32_t)ty * 131u + (uint32_t)tx) & 8191];
-    if (!c.valid || c.x != tx || c.y != ty || c.seed != g.worldSeed || c.epoch != gWayEpoch)
-        c = { tx, ty, g.worldSeed, gWayEpoch, true, generateGround(tx, ty) };
+    int access = (regionPassOpen(1) ? 1 : 0) | (regionPassOpen(2) ? 2 : 0);
+    if (!c.valid || c.x != tx || c.y != ty || c.seed != g.worldSeed || c.epoch != gWayEpoch || c.access != access)
+        c = { tx, ty, g.worldSeed, gWayEpoch, access, true, generateGround(tx, ty) };
     return c.tile;
 }
 
@@ -835,6 +862,11 @@ static const int d8Static[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 
 // roofs, paving, soil, a landmark's own stones, a dungeon mouth, the road, or a
 // scripted story site.
 static bool wayCarvable(int tx, int ty) {
+    // The sector lattice joins paths within a country, not through a range or
+    // a sealed pass. The ground generator enforces the same boundary as a
+    // second line of defence, even for ways surveyed before a gate opened.
+    if (regionCellAt(tx, ty).terrain != REGION_NONE) return false;
+    if (frontierRoadAt(tx, ty)) return false;
     // The Open Water: the wild ways connect the LAND, not the sea. A way may
     // plank across a brook or a pond arm inside the coast, but never past the
     // coast, never across the millpond's deep middle, and never onto one of
@@ -1518,6 +1550,8 @@ PropKind propAt(int tx, int ty) {
 static PropKind propAtUncached(int tx, int ty) {
     if (g.villageLoaded && (inVillage((float)tx + 0.5f, (float)ty + 0.5f) || inCommons((float)tx + 0.5f, (float)ty + 0.5f)))
         return P_NONE;
+    // Passes and their approaches must stay clear even after a seal opens.
+    if (regionCellAt(tx, ty).terrain == REGION_PASS || frontierRoadAt(tx, ty)) return P_NONE;
 
     // A wild way is a worn line through the terrain: keep it trodden, never
     // walled by a tree or boulder that happens to fall on it.
@@ -2939,6 +2973,8 @@ void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out)
     }
     Landmark northCave = northRoadCavern();
     maybeAdd(northCave.kind, northCave.tx, northCave.ty, northCave.seed);
+    int fx, fy; frontierCavernSite(fx, fy);
+    maybeAdd(LK_CAVERN, fx, fy, 0xf204u);
 
     // The three Tidemill Isles, each with a standing Tidewell at its heart.
     buildIslets();
@@ -3059,6 +3095,9 @@ void fieldMonstersInView(float x, float y, std::vector<FieldMonster>& out) {
 int zoneLevelAt(float x, float y) {
     float dist = sqrtf(x * x + y * y);
     int zl = 1 + (int)(dist / 95.0f);
+    // Each country has a readable minimum danger, while the existing distance
+    // and party-level scaling still shapes its encounters and shop stock.
+    zl = std::max(zl, regionAt(x, y) == 2 ? 4 : (regionAt(x, y) == 1 ? 2 : 1));
     int avg = partyLevel();
     return std::max(1, std::min(zl + (avg - 1) / 3, 26));
 }
