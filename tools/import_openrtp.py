@@ -401,7 +401,7 @@ def build_items():
     save(art_misc.icon_ether(), 'icons', 'ether.png')
     save(art_misc.icon_elixir(), 'icons', 'elixir.png')
     save(centered_mid(trim(tcell(INT, 25, 4, 1, 1, k)), (16, 16)), 'icons', 'book.png')
-    save(centered_mid(trim(tcell(INT, 24, 6, 1, 1, k)), (16, 16)), 'icons', 'candle.png')
+    save(centered_mid(trim(tcell(INT, 24, 6, 1, 1, k)), (16, 16)), 'icons', 'icon_candle.png')
     save(centered_mid(trim(tcell(INT, 28, 6, 1, 1, k)), (16, 16)), 'icons', 'food.png')        # herbs / antidote
     save(centered_mid(trim(tcell(INT, 22, 11, 1, 1, k)), (16, 16)), 'icons', 'feather.png')    # phoenix feather
     save(centered_mid(trim(tcell(DUN, 28, 3, 1, 1, k)), (16, 16)), 'icons', 'gem.png')         # blue gem / key

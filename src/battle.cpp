@@ -986,8 +986,7 @@ void battleDraw() {
         bool sel = (B.phase == BP_COMMAND && B.cmdCursor == i);
         bool dis = (i == 4 && B.isBoss);
         if (sel) {
-            DrawRectangleRounded(r, 0.3f, 4, Color{ 56, 86, 164, 255 });
-            DrawRectangleRoundedLinesEx(r, 0.3f, 4, 1.0f, Color{ 255, 232, 150, 255 });
+            drawPixelPanel(r, Color{ 56, 86, 164, 255 }, Color{ 255, 232, 150, 255 });
         }
         Color c = dis ? Color{ 130, 130, 155, 220 }
                 : (B.phase == BP_COMMAND ? (sel ? Color{ 255, 236, 176, 255 } : WHITE)
@@ -1061,8 +1060,9 @@ void battleDraw() {
         bool act = (B.activeHero == i);
         bool allySel = (B.phase == BP_TARGET_ALLY && B.targetCursor == i);
         if (act || allySel) {
-            DrawRectangleRounded({ ox + 268, y - 2, 234, 25 }, 0.25f, 4,
-                                 allySel ? Color{ 44, 92, 118, 230 } : Color{ 44, 68, 138, 220 });
+            drawPixelPanel({ ox + 268, y - 2, 234, 25 },
+                             allySel ? Color{ 44, 92, 118, 230 } : Color{ 44, 68, 138, 220 },
+                             allySel ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
         }
         Color nc = h.ko ? Color{ 225, 110, 110, 255 }
                  : (h.poisoned ? Color{ 210, 155, 255, 255 }

@@ -362,7 +362,7 @@ bool loadAllAssets() {
     const char* scenes[BI_COUNT] = {"meadow", "forest", "amber", "fen", "heath", "frost", "dunes"};
     for (int i=0; i<BI_COUNT; ++i)
         a.battlefield[i] = loadTex(d,(std::string("backdrops/")+scenes[i]+".png").c_str());
-    a.castleBattlefield = loadTex(d,"backdrops/castle.png");
+    a.castleBattlefield = loadTex(d,"backdrops/castle_field.png");
 
     // --- props
     a.amberOak = loadTex(d,"sprites/amber_oak.png");
@@ -493,7 +493,7 @@ bool loadAllAssets() {
     // --- icons, in ICON_* order
     const char* icons[ICON_COUNT] = {
         "icons/potion.png", "icons/hi_potion.png", "icons/ether.png", "icons/elixir.png",
-        "icons/feather.png", "icons/food.png", "icons/book.png", "icons/candle.png",
+        "icons/feather.png", "icons/food.png", "icons/book.png", "icons/icon_candle.png",
         "icons/gem.png", "icons/coin.png",
         "icons/sword_0.png", "icons/sword_1.png", "icons/sword_2.png",
         "icons/armor_0.png", "icons/armor_1.png", "icons/armor_2.png", "icons/armor_3.png",
@@ -603,6 +603,27 @@ void drawWindowBlue(Rectangle r) {
         DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
                              1.0f, Color{ 118, 96, 56, 255 });
     }
+}
+
+void drawPixelPanel(Rectangle r, Color fill, Color border) {
+    int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
+    int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
+    if (rw <= 0 || rh <= 0) return;
+    DrawRectangle(rx + 1, ry + 2, rw, rh, Fade(BLACK, 0.35f));
+    DrawRectangle(rx, ry, rw, rh, fill);
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
+    if (rw > 2 && rh > 2) {
+        DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
+                             1.0f, border);
+    }
+}
+
+void drawPixelPanel(Rectangle r, bool selected) {
+    // Shared navy-and-gold selection language: bright navy + gold border
+    // when selected, deep navy + steel-blue border otherwise.
+    drawPixelPanel(r,
+                   selected ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 },
+                   selected ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
 }
 
 Vector2 measureText(const char* text, int size) {
@@ -724,9 +745,8 @@ void drawButton(const char* text, Rectangle r, int size, bool selected) {
     bool hover = CheckCollisionPointRec(m, r);
     if (hover) g.hotButtons++;
     bool hi = hover || selected;
-    DrawRectangleRounded(r, 0.25f, 4, hi ? Color{ 64, 74, 150, 255 } : Color{ 30, 38, 92, 255 });
-    DrawRectangleRoundedLinesEx(r, 0.25f, 4, 1.4f, hi ? Color{ 255, 214, 130, 255 }
-                                                      : Color{ 140, 150, 220, 255 });
+    drawPixelPanel(r, hi ? Color{ 64, 74, 150, 255 } : Color{ 30, 38, 92, 255 },
+                      hi ? Color{ 255, 214, 130, 255 } : Color{ 140, 150, 220, 255 });
     drawTextCentered(text, r.x + r.width / 2, r.y + r.height / 2 - size / 2.0f + 1,
                      hi ? WHITE : Color{ 214, 220, 250, 255 }, size);
 }

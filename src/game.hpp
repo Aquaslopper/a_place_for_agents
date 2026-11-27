@@ -534,6 +534,12 @@ void unloadScore();
 // ============================================================== ui helpers
 void drawWindow(Rectangle r, bool dimInside = true);
 void drawWindowBlue(Rectangle r);
+// One UI finish (docs/ART_BIBLE.md A6): square-corner navy panel with a
+// 1px dark outline and a 1px inner border — gold when selected, steel-blue
+// otherwise. This is the ONLY panel primitive for menus/buttons/cards;
+// rounded/pill/glass drawing is banned (no DrawRectangleRounded* in src/).
+void drawPixelPanel(Rectangle r, Color fill, Color border);
+void drawPixelPanel(Rectangle r, bool selected);
 void drawText(const char* text, float x, float y, Color c, int size = 8);
 void drawTextCentered(const char* text, float cx, float y, Color c, int size = 8);
 void drawTextWrapped(const char* text, float x, float y, float maxW, float lineH, Color c, int size = 8);
