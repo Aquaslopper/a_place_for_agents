@@ -1384,6 +1384,8 @@ const char* npcLine(const Npc& npc, int index) {
     if (npc.sprite == NS_CAT) return "The cat blinks slowly, then looks away.";
     if (npc.sprite == NS_CHICKEN) return "Cluck! She goes back to the turnips.";
     if (npc.sprite == NS_SHEEP) return SHEEP_LINES[(unsigned)index % 2u];
+    if (npc.sprite == NS_COW) return "Moo. She flicks her tail and keeps chewing the meadow grass.";
+    if (npc.sprite == NS_HORSE) return "The horse snorts softly, eager for the road beyond the village.";
     const char** set = VILLAGER_LINES;
     int n = 8;
     switch (npc.role) {
@@ -1461,6 +1463,7 @@ void npcsLoadFor(float x, float y, bool force) {
             add(NS_CHICKEN, -1,       NPC_ANIMAL,  -11.5f, 11.5f, "Hen",      1);
             add(NS_SHEEP,   -1,       NPC_ANIMAL,   11.5f, 10.5f, "Clover",   0);
             add(NS_SHEEP,   -1,       NPC_ANIMAL,   12.5f, 11.5f, "Woolly",   1);
+            add(NS_COW,     -1,       NPC_ANIMAL,  -13.5f, 10.5f, "Daisy",    0);
             add(NS_CAT,     -1,       NPC_ANIMAL,   11.5f,  2.5f, "Inn Cat",  0);
             add(NS_DOG,     FACE_DOG, NPC_ANIMAL,    2.5f,  1.5f, "Town Dog", 0);
 
@@ -1474,9 +1477,15 @@ void npcsLoadFor(float x, float y, bool force) {
             add(NS_VILLAGER3, FACE_VILLAGER3, NPC_VILLAGER, -8.5f, -5.5f, "Wren",            6);
             add(NS_FARMER,    FACE_SMITH,     NPC_QUEST,    -6.5f, 10.5f, "Farmer Hedrick",  0, QUEST_SLIMES);
         } else {
-            const int sprites[] = { NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3 };
-            const int faces[] = { FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3 };
-            const char* names[] = { "Elder Rowan", "Kip", "Guard Bram", "Elin", "Corin", "Mina" };
+            const int sprites[] = {
+                NS_VILLAGER0, NS_VILLAGER1, NS_VILLAGER2, NS_VILLAGER3, NS_VILLAGER4,
+                NS_VILLAGER5, NS_VILLAGER6, NS_VILLAGER7, NS_VILLAGER8, NS_VILLAGER9,
+            };
+            const int faces[] = {
+                FACE_VILLAGER0, FACE_VILLAGER1, FACE_VILLAGER2, FACE_VILLAGER3, FACE_VILLAGER4,
+                FACE_VILLAGER5, FACE_VILLAGER6, FACE_VILLAGER7, FACE_VILLAGER8, FACE_VILLAGER9,
+            };
+            const char* names[] = { "Elin", "Corin", "Mina", "Tomas", "Nessa", "Rook", "Sable", "Wren", "Tarin", "Lio" };
             int n = 5 + (int)(v.seed % 3);
             for (int i = 0; i < n; i++) {
                 float ang = hashf(i, 11, v.seed) * 6.2831853f;
@@ -1484,13 +1493,20 @@ void npcsLoadFor(float x, float y, bool force) {
                 float px = (float)v.cx + cosf(ang) * r;
                 float py = (float)v.cy + sinf(ang) * r * 0.8f;
                 int role = (i == 0) ? NPC_ELDER : (i == 1 ? NPC_CHILD : (i == 2 ? NPC_GUARD : NPC_VILLAGER));
-                int sprite = (role == NPC_ELDER) ? NS_ELDER : (role == NPC_CHILD ? NS_CHILD : (role == NPC_GUARD ? NS_GUARD : sprites[i % 4]));
-                int face = (role == NPC_ELDER) ? FACE_ELDER : (role == NPC_CHILD ? FACE_CHILD : (role == NPC_GUARD ? FACE_GUARD : faces[i % 4]));
-                add(sprite, face, role, px, py, names[i % 6], i);
+                int person = (int)((v.seed + (uint32_t)i * 7u) % 10u);
+                int sprite = (role == NPC_ELDER) ? NS_ELDER : (role == NPC_CHILD ? NS_CHILD : (role == NPC_GUARD ? NS_GUARD : sprites[person]));
+                int face = (role == NPC_ELDER) ? FACE_ELDER : (role == NPC_CHILD ? FACE_CHILD : (role == NPC_GUARD ? FACE_GUARD : faces[person]));
+                const char* name = role == NPC_ELDER ? "Elder Rowan" :
+                                   (role == NPC_CHILD ? "Kip" :
+                                   (role == NPC_GUARD ? "Guard Bram" : names[person]));
+                add(sprite, face, role, px, py, name, i);
             }
             add(NS_DOG, FACE_DOG, NPC_ANIMAL, (float)v.cx + 2.5f, (float)v.cy + 1.5f, "Village Dog", 0);
-            if ((v.seed & 1) == 0)
-                add(NS_SHEEP, -1, NPC_ANIMAL, (float)v.cx - 3.5f, (float)v.cy + 2.5f, "Village Sheep", 0);
+            switch (v.seed % 3u) {
+                case 0: add(NS_COW, -1, NPC_ANIMAL, (float)v.cx - 3.5f, (float)v.cy + 2.5f, "Village Cow", 0); break;
+                case 1: add(NS_HORSE, -1, NPC_ANIMAL, (float)v.cx - 3.5f, (float)v.cy + 2.5f, "Village Horse", 0); break;
+                default: add(NS_SHEEP, -1, NPC_ANIMAL, (float)v.cx - 3.5f, (float)v.cy + 2.5f, "Village Sheep", 0); break;
+            }
         }
     } else {
         uint32_t h = hash2i(sx, sy, g.worldSeed ^ 0x4e3c17u);
@@ -1499,7 +1515,7 @@ void npcsLoadFor(float x, float y, bool force) {
             float py = sy * 32 + 8.0f + hashf(sy, sx, h) * 14.0f;
             int tx = (int)floorf(px), ty = (int)floorf(py);
             if (cellWalkable(tx, ty))
-                add(NS_VILLAGER3, FACE_RANGER, NPC_VILLAGER, px, py, "Wandering Ranger", (int)(h % 8));
+                add(NS_RANGER, FACE_RANGER, NPC_VILLAGER, px, py, "Wandering Ranger", (int)(h % 8));
         }
     }
 }
@@ -1593,24 +1609,41 @@ bool inBossArena(float x, float y) {
 
 // ================================================================ field monsters
 EnemyKind rollBiomeEnemy(int tx, int ty, int zoneLevel) {
-    static const EnemyKind common[BI_COUNT][4] = {
-        { EN_SLIME, EN_SLIME, EN_IMP, EN_BAT }, { EN_BAT, EN_IMP, EN_WOLF, EN_BAT },
-        { EN_HORNET, EN_SLIME, EN_HORNET, EN_WOLF }, { EN_SLIME, EN_WISP, EN_BAT, EN_WISP },
-        { EN_WOLF, EN_IMP, EN_WOLF, EN_BAT }, { EN_WOLF, EN_WISP, EN_WOLF, EN_WISP },
-        { EN_HORNET, EN_IMP, EN_BAT, EN_IMP }
+    // The six-entry local pools now mix the original cast with OpenRTP's
+    // previously unused wildlife and lower-tier creatures.
+    static const EnemyKind common[BI_COUNT][6] = {
+        { EN_SLIME, EN_SLIME, EN_IMP, EN_BAT, EN_GOBLIN, EN_BANDIT },
+        { EN_BAT, EN_IMP, EN_WOLF, EN_BAT, EN_FAERIE, EN_GOBLIN },
+        { EN_HORNET, EN_SLIME, EN_HORNET, EN_WOLF, EN_FAERIE, EN_PORCUPINE },
+        { EN_SLIME, EN_WISP, EN_BAT, EN_WISP, EN_PORCUPINE, EN_GOBLIN },
+        { EN_WOLF, EN_IMP, EN_WOLF, EN_BAT, EN_BANDIT, EN_PORCUPINE },
+        { EN_WOLF, EN_WISP, EN_WOLF, EN_WISP, EN_TIGER, EN_REAPER },
+        { EN_HORNET, EN_IMP, EN_BAT, EN_IMP, EN_PORCUPINE, EN_GOBLIN }
     };
-    static const EnemyKind frontier[BI_COUNT][2] = {
-        { EN_WOLF, EN_ORC }, { EN_GHOST, EN_WOLF }, { EN_WOLF, EN_HORNET }, { EN_GHOST, EN_SKELETON },
-        { EN_ORC, EN_SKELETON }, { EN_WISP, EN_GHOST }, { EN_SKELETON, EN_ORC }
+    static const EnemyKind frontier[BI_COUNT][4] = {
+        { EN_WOLF, EN_ORC, EN_BANDIT, EN_TIGER },
+        { EN_GHOST, EN_WOLF, EN_REAPER, EN_TIGER },
+        { EN_WOLF, EN_HORNET, EN_GOBLIN, EN_TIGER },
+        { EN_GHOST, EN_SKELETON, EN_SHADE, EN_NAGA },
+        { EN_ORC, EN_SKELETON, EN_REAPER, EN_DREAD_KNIGHT },
+        { EN_WISP, EN_GHOST, EN_TIGER, EN_SHADE },
+        { EN_SKELETON, EN_ORC, EN_NAGA, EN_DRAKE }
     };
-    static const EnemyKind far[BI_COUNT] = {
-        EN_NIGHT_RIDER, EN_NIGHT_RIDER, EN_SERPENT, EN_SERPENT, EN_GOLEM, EN_GOLEM, EN_SERPENT
+    static const EnemyKind far[BI_COUNT][3] = {
+        { EN_NIGHT_RIDER, EN_DREAD_KNIGHT, EN_DRAKE },
+        { EN_NIGHT_RIDER, EN_DRAKE, EN_ARCHFIEND },
+        { EN_SERPENT, EN_DRAKE, EN_ARCHFIEND },
+        { EN_SERPENT, EN_NAGA, EN_SHADE },
+        { EN_GOLEM, EN_DREAD_KNIGHT, EN_ARCHFIEND },
+        { EN_GOLEM, EN_ARCHFIEND, EN_DRAKE },
+        { EN_SERPENT, EN_DRAKE, EN_ARCHFIEND }
     };
     auto biome = sampleGround(tx, ty).biome;
     auto h = hash2i(tx, ty, g.worldSeed ^ 0xbad1ceu);
-    if (zoneLevel >= 12 && h % 3 != 0) return far[biome];
-    if (zoneLevel >= 3 && (h % 3 == 0 || zoneLevel >= 7)) return frontier[biome][(h >> 8) % 2];
-    return common[biome][(h >> 8) % 4];
+    if (zoneLevel >= 12 && h % 3 != 0) return far[biome][(h >> 8) % 3];
+    if (zoneLevel >= 3 && (h % 3 == 0 || zoneLevel >= 7))
+        return frontier[biome][(h >> 8) % 4];
+    return common[biome][(h >> 8) % 6];
 }
 
 std::vector<EnemyKind> buildEncounterGroup(EnemyKind primary, int tx, int ty, int zoneLevel) {

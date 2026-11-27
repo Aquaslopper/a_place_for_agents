@@ -202,6 +202,13 @@ def build_heroes():
     save(portrait(P, 0, 1), 'sprites', 'face_mayor.png')
     save(portrait(P, 1, 1), 'sprites', 'face_woman.png')
     save(portrait(P, 1, 0), 'sprites', 'face_child.png')
+    # Extra faces for the larger generated-village roster; all from OpenRTP People1.
+    for name, col, row in (
+        ('face_villager4', 0, 3), ('face_villager5', 1, 3),
+        ('face_villager6', 0, 1), ('face_villager7', 2, 1),
+        ('face_villager8', 0, 2), ('face_villager9', 3, 3),
+    ):
+        save(portrait(P, col, row), 'sprites', name + '.png')
     P2 = 'FaceSet/People2.png'
     save(portrait(P2, 0, 0), 'sprites', 'face_smith.png')
     save(portrait(P2, 3, 2), 'sprites', 'face_bard.png')
@@ -219,6 +226,12 @@ def build_villagers():
         ('npc_villager1', 'CharSet/People1.png', 1, 0),
         ('npc_villager2', 'CharSet/People1.png', 2, 0),
         ('npc_villager3', 'CharSet/People1.png', 3, 0),
+        ('npc_villager4', 'CharSet/People3.png', 2, 0),  # orange-haired traveller
+        ('npc_villager5', 'CharSet/People3.png', 3, 0),  # village woman
+        ('npc_villager6', 'CharSet/People4.png', 0, 1),  # woodland farmer
+        ('npc_villager7', 'CharSet/People4.png', 2, 1),  # orange-capped traveller
+        ('npc_villager8', 'CharSet/People5.png', 2, 0),  # dark-haired townsfolk
+        ('npc_villager9', 'CharSet/People5.png', 3, 0),  # flower-haired townsfolk
         ('npc_elder',     'CharSet/People1.png', 2, 1),
         ('npc_mayor',     'CharSet/People1.png', 0, 1),
         ('npc_woman',     'CharSet/People1.png', 1, 1),
@@ -230,6 +243,7 @@ def build_villagers():
         ('npc_smith',     'CharSet/People2.png', 3, 0),
         ('npc_priest',    'CharSet/People4.png', 0, 0),
         ('npc_farmer',    'CharSet/People5.png', 0, 1),   # straw-hat farmer
+        ('npc_ranger',    'CharSet/People5.png', 0, 0),   # blue-capped field ranger
     ]
     for name, sheet, col, row in npcs:
         frames=walk_sheet(sheet,col,row)
@@ -241,23 +255,38 @@ def build_villagers():
                     small.alpha_composite(cell.resize((19,25),Image.Resampling.NEAREST),(x*24+2,y*32+7))
             frames=small
         save(frames,'sprites',name+'.png')
-    # animals: (0,0)=dog, (1,0)=cat, (2,0)=chicken, (3,0)=sheep
-    for name, col, row in (('npc_dog', 0, 0), ('npc_chicken', 2, 0),
-                           ('npc_sheep', 3, 0), ('npc_cat', 1, 0)):
+    # OpenRTP Animal: the first row supplies the town pets, the second adds farm stock.
+    for name, col, row in (
+        ('npc_dog', 0, 0), ('npc_cat', 1, 0), ('npc_chicken', 2, 0), ('npc_sheep', 3, 0),
+        ('npc_cow', 0, 1), ('npc_horse', 1, 1),
+    ):
         save(walk_sheet('CharSet/Animal.png', col, row), 'sprites', name + '.png')
 
 
 # =============================================================== 5. monsters
 # name: (sheet, char col, char row, field sprite size, optional tint)
 MONSTERS = {
-    'slime':       ('CharSet/Monster1.png', 0, 0, (36, 28), None),
-    'imp':         ('CharSet/Monster1.png', 1, 0, (34, 40), None),
-    'hornet':      ('Monster/Hornet.png',   0, 0, (38, 34), None),
-    'skeleton':    ('CharSet/Monster1.png', 0, 1, (32, 42), None),
-    'ghost':       ('CharSet/Monster1.png', 3, 0, (34, 40), None),
-    'orc':         ('CharSet/Monster1.png', 3, 1, (38, 42), None),             # horned warrior orc
-    'golem':       ('CharSet/Monster2.png', 0, 1, (40, 44), None),             # stone golem
-    'night_rider': ('CharSet/Monster3.png', 3, 0, (42, 46), None),
+    'slime':        ('CharSet/Monster1.png', 0, 0, (36, 28), None),
+    'imp':          ('CharSet/Monster1.png', 1, 0, (34, 40), None),
+    'hornet':       ('Monster/Hornet.png',   0, 0, (38, 34), None),
+    'skeleton':     ('CharSet/Monster1.png', 0, 1, (32, 42), None),
+    'ghost':        ('CharSet/Monster1.png', 3, 0, (34, 40), None),
+    'orc':          ('CharSet/Monster1.png', 3, 1, (38, 42), None),             # horned warrior orc
+    'golem':        ('CharSet/Monster2.png', 0, 1, (40, 44), None),             # stone golem
+    'night_rider':  ('CharSet/Monster3.png', 3, 0, (42, 46), None),
+    # Previously unused OpenRTP monster frames: varied humanoids, spirits, and dragons.
+    'bandit':       ('CharSet/Monster1.png', 2, 0, (38, 42), None),
+    'goblin':       ('CharSet/Monster1.png', 1, 1, (38, 42), None),
+    'reaper':       ('CharSet/Monster1.png', 2, 1, (40, 42), None),
+    'faerie':       ('CharSet/Monster2.png', 0, 0, (38, 44), None),
+    'drake':        ('CharSet/Monster2.png', 1, 0, (48, 50), None),
+    'naga':         ('CharSet/Monster3.png', 1, 0, (46, 48), None),
+    'shade':        ('CharSet/Monster3.png', 2, 0, (38, 46), None),
+    'dread_knight': ('CharSet/Monster2.png', 3, 0, (48, 52), None),
+    'archfiend':    ('CharSet/Monster2.png', 3, 1, (48, 52), None),
+    # OpenRTP wildlife is also a useful fit for wilderness encounters.
+    'tiger':        ('CharSet/Animal.png',   2, 1, (44, 36), None),
+    'porcupine':    ('CharSet/Animal.png',   3, 1, (42, 36), None),
 }
 
 
@@ -324,8 +353,8 @@ def build_monsters():
         battle_sp = monster_sprite(entry, battle=True)
         save(centered(field_sp, (w, h)), 'sprites', name + '.png')
         save(centered(battle_sp, (w * 2, h * 2)), 'sprites', name + '_battle.png')
-    # No standalone wolf, bat, wisp or snake on these character sheets:
-    # the old selections were a tiger, armoured fiend, hooded man and scorpion.
+    # The OpenRTP sheets do not provide matching wolf, bat, wisp or small-snake
+    # silhouettes, so keep those four hand-drawn adaptations distinct.
     serpent=canvas(36,31); d=ImageDraw.Draw(serpent)
     d.ellipse((6,19,33,29),fill='#456457',outline='#344946');d.ellipse((10,20,26,26),fill='#87a469',outline='#587958')
     d.line([(26,22),(23,15),(17,12),(16,7)],fill='#344946',width=7)
