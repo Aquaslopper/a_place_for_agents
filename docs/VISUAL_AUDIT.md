@@ -176,3 +176,64 @@ wrong variable.
 `docs/NEXT_AGENT_PROMPT.md`, and line 21 links to it. **That file does not
 exist in the repository.** Agents following the README hit a 404 on the
 repository's own onboarding document.
+
+---
+
+## 7. This pass: the field is painted, not palette-swapped
+
+The diagnosis above was right about *what* was wrong and wrong about *what to
+do about it*. Sections 1-6 proposed re-sharing the source sheets and re-capping
+the palette; four passes tried that. The actual disease was the pipeline itself:
+`landscape_art.py::ramp()` takes a 109-step source cell and maps it onto three
+hard-coded colours, so **nothing in the source sheet can survive**. No amount of
+re-sourcing fixes a function that throws the texture away.
+
+`tools/field_art.py` replaces that path for the field. It paints the 21 terrain
+materials directly:
+
+* **five values per material** with a hue shift (cool shadow, warm light), where
+  the old pipeline used three;
+* **structured texture** instead of speckle — grass clumps and blades, sand
+  scallops, stone beds with faceted tops and dark mortar, wave glints, snow
+  drifts, ice cracks, leaf litter, cobble courses;
+* **1px hard contours at every material seam**: dark under the lip, lit along
+  the top, mid on the sides, plus Bayer dithering in the transition band;
+* **relief** rebuilt (`relief.png`) so a bank casts a three-band shadow onto the
+  water below it and an escarpment gets a lit rim and a dark lip;
+* water seams deliberately do **not** get the lit rim, or a pond's depth
+  boundaries read as stripes across it.
+
+### Measured, same scene, same pipeline
+
+`tools/field_preview.py` composes a 512×288 field from the shipped assets using
+the renderer's own corner-masked stamping, so the two rows differ only in the
+atlas. Run `python3 tools/field_preview.py` (and with `FIELD_ASSETS` pointing at
+an older checkout for the "before").
+
+| | colours/screen | colours per 16px tile | local contrast |
+|---|---|---|---|
+| Lufia II — Elcid (reference) | 70 | 8.0 | **26.7** |
+| field, before | 116 | 6.0 | **7.0** |
+| field, after | 116 | 7.6 | **20.0** |
+
+Local contrast — the thing that made the meadow look like felt — is up **2.9×**,
+and colours per tile are now inside the reference's band instead of being a
+three-value speckle. Colours per screen did not move (the palette was never the
+problem in the field).
+
+Preview: `docs/visual_audit/field_before_after.png`.
+
+### What is *not* fixed
+
+* **Grass repeats visibly at 1:1.** Three texture variants per material is not
+  enough to hide a 16px cell; the next pass should cut 5-6 variants per surface
+  and have `sampleGround` choose by hash, not by `variant % 3`.
+* **No in-game capture was possible in this environment.** There is no GL/X11
+  runtime here, so both rows are offline composites of the shipped assets, not
+  screenshots. The renderer path is unchanged; the atlas format is identical.
+* **Props were left alone.** A first attempt repainted the trees and made the
+  silhouettes worse, so the existing canopy sprites were restored. The trees in
+  the "before" row are the trees in the "after" row.
+* **UI chrome** was flattened in `core.cpp` (no drop shadow, no gradient, black /
+  light / black rules around a flat plate) and the missing `getVirtualMouse()`
+  was implemented, but neither can be seen here for the same reason.
