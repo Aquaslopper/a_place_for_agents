@@ -83,7 +83,8 @@ def check_duplicates(files):
 
 
 TILE_EXCEPTIONS = {  # trimmed overlays / atlases — see ART_BIBLE A4
-    "flower_0.png": (14, 13), "flower_1.png": (14, 13),
+    # SNES-retro scattered blossoms (retro_Exterior 18,11) since 10.3.
+    "flower_0.png": (16, 14), "flower_1.png": (16, 14),
     "landscape.png": (256, 1008), "relief.png": (256, 80),
     # Grid-aligned procedural town/interior materials — ART_BIBLE §10.
     "town_facade_atlas.png": (96, 96),

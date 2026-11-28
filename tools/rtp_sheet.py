@@ -111,3 +111,59 @@ def tint(img, rgb):
     return out
 
 
+
+
+# ------------------------------------------------ SNES-retro chipset sheets
+# The retro chipsets share the layout of their modern counterparts, but carry
+# the 16-bit-era pixel content (dithered texture, chunkier objects) in the same
+# cells. Crop coordinates verified cell-by-cell before use (ART_BIBLE 10.3).
+REXT = 'ChipSet/retro_Exterior.png'
+RWLD = 'ChipSet/retro_World.png'
+RDUN = 'ChipSet/retro_Dungeon.png'
+
+# Retro sheets mix several keys: pink (255,103,139), the 1-LSB object pink
+# (254,103,138) and retro_World's magenta (224,103,191); cyan (0,147,146)
+# also occurs. Key all of them with tolerance 12 (handoff note).
+RETRO_KEYS = (KEY_PINK, KEY_PINK2, (224, 103, 191), KEY_CYAN)
+
+
+def keyed_any(img, keys=RETRO_KEYS, tol=12):
+    """Remove any of several colour keys within tolerance."""
+    p = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = p[x, y]
+            if a and any(abs(r - k[0]) + abs(g - k[1]) + abs(b - k[2]) <= tol for k in keys):
+                p[x, y] = (0, 0, 0, 0)
+    return img
+
+
+def rtile(sheet, tx, ty, scale=1):
+    out = keyed_any(load(sheet).crop((tx * 16, ty * 16, tx * 16 + 16, ty * 16 + 16)))
+    if scale != 1:
+        out = out.resize((16 * scale, 16 * scale), Image.Resampling.NEAREST)
+    return out
+
+
+def rcell(sheet, tx, ty, tw=1, th=1):
+    return keyed_any(load(sheet).crop((tx * 16, ty * 16, (tx + tw) * 16, (ty + th) * 16)))
+
+
+def dither_texture(im, dark, light, amount=0.5, phase=0):
+    """Two-tone ordered dither between `dark`/`light` over opaque pixels.
+
+    Gives flat modern fills the banded 16-bit texture SNES surfaces use
+    (dithered sand, wave-lit water, sparkle snow). `phase` shifts the Bayer
+    threshold so the water animation frames read as moving light."""
+    from snes import BAYER4
+    px = im.load()
+    d = tuple(bytes.fromhex(dark)) if isinstance(dark, str) else dark
+    l = tuple(bytes.fromhex(light)) if isinstance(light, str) else light
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px[x, y]
+            if not a:
+                continue
+            thr = BAYER4[(y + phase) % 4][(x + phase * 2) % 4] / 16.0
+            px[x, y] = (l if thr < amount else d) + (a,)
+    return im

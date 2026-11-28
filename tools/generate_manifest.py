@@ -31,6 +31,34 @@ RETRO_BUILDING = (f"{OPENRTP} ChipSet/retro_Exterior.png composite — CC BY / C
                   "marianognu; see `AUTHORS.md`)")
 RETRO_BUILDINGS = {"house_0", "house_1", "house_2", "house_3", "house_4",
                    "shop", "inn", "temple", "manor", "smithy", "castle", "tower"}
+# 10.3 retro pass: terrain textures, flora, props and cave art now crop or
+# composite the SNES-retro chipsets instead of the modern chipsets.
+RETRO_CHIPSET = (f"{OPENRTP} ChipSet/retro_* chipsets crop/composite — CC BY / CC0 mix "
+                 "(MrBeast, Redshrike, surt, Ogrebane, Gwes, jikmok, Tom Lemmens, "
+                 "marianognu; see `AUTHORS.md`)")
+RETRO_TILES = {"landscape.png", "relief.png", "cobble.png", "flagstone.png",
+               "dirt.png", "sand.png", "beach.png", "swamp.png", "tundra.png",
+               "rock_hill.png", "rock_hill2.png", "soil.png", "snow.png",
+               "snow_drift.png", "ice.png", "ice_crack.png", "grass_0.png",
+               "grass_1.png", "grass_2.png", "grass_3.png", "grass_dark.png",
+               "tile_floor.png", "stone_floor.png", "dungeon_floor.png",
+               "cave_floor_0.png", "cave_floor_1.png", "cave_floor_2.png",
+               "cave_floor_3.png", "cave_rock_0.png", "cave_rock_1.png",
+               "cave_rock_2.png", "cave_rock_3.png", "flower_0.png", "flower_1.png",
+               "town_facade_atlas.png", "town_masonry_atlas.png",
+               "town_battlement_atlas.png", "town_shingles_red_atlas.png",
+               "town_shingles_blue_atlas.png"}
+RETRO_SPRITES = {"tree_0", "tree_1", "tree_2", "amber_oak", "copper_oak",
+                 "willow", "pine_0", "pine_1", "pine_2", "tree_snow",
+                 "bush", "bush_plain", "torch", "campfire", "fence",
+                 "fence_post", "fence_gate", "noticeboard", "barrel",
+                 "longtable", "rock_0", "rock_1", "crystal", "boulder",
+                 "cave_stalagmite", "cave_stalagmite_small", "cave_crystal_blue",
+                 "cave_crystal_cluster", "cave_rock_pile", "cave_boulder",
+                 "town_wall_ivy", "town_market_flowers_orange",
+                 "town_market_flowers_red"}
+# Procedural sea tiles: in-dialect composition on the locked 2.4 water ramps.
+SEA_TILES = {"water_0.png", "water_1.png", "deep_water.png"}
 CHARSET_BY = f"{OPENRTP} CharSet crop — CC BY 4.0 / CC0 per-sheet (see `AUTHORS.md`: VictorSena, Marina Navarro Travesset, Garakuta, MerchantShade et al.)"
 FACESET = f"{OPENRTP} FaceSet crop — CC0 (Garakuta)"
 MONSTER = f"{OPENRTP} CharSet/Monster crop — CC BY 4.0 / CC0 per-sheet (MerchantShade, VictorSena, R.C.O., Orochii Zouveleki et al.)"
@@ -86,9 +114,15 @@ def provenance(rel):
     if top == "sprites" and name.startswith("interior_door_"):
         return f"{OPENRTP} CharSet/Object1.png door poses — CC BY 4.0 (Tom Lemmens)"
     if top in ("tiles", "sprites") and name.startswith(("town_", "interior_")):
+        if name in RETRO_TILES or stem in RETRO_SPRITES:
+            return RETRO_CHIPSET
         sheet = "Exterior" if name.startswith("town_") else "Interior"
         return f"{OPENRTP} ChipSet/{sheet}.png crop — CC0 (Jason Perry / finalbossblues)"
     if top == "tiles":
+        if name in RETRO_TILES:
+            return RETRO_CHIPSET
+        if name in SEA_TILES:
+            return REPO + " (procedural sea on the ART_BIBLE 2.4 water ramps)"
         return CHIPSET
     if top == "backdrops":
         if stem in ("meadow", "fen"):
@@ -114,6 +148,8 @@ def provenance(rel):
             return REPO if base in REPO_SPRITES else MONSTER
         if stem in RETRO_BUILDINGS:
             return RETRO_BUILDING  # SNES-retro walking-scale architecture
+        if stem in RETRO_SPRITES:
+            return RETRO_CHIPSET  # 10.3 retro pass: flora, props, cave art
         return CHIPSET  # props, landmarks: ChipSet crops/composites
     if name == "title_atlas.png":
         return f"{OPENRTP} Title plate — CC0 (Francisco de la Peña)"

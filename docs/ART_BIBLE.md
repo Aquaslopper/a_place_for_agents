@@ -44,13 +44,14 @@ The audit (what is *actually* in use, not what we wish were in use):
 
 | Layer | Source in use | How it reaches runtime | License |
 |---|---|---|---|
-| Terrain, props | OpenRTP `ChipSet/{Exterior,Interior,Dungeon,World}.png` | `tools/import_openrtp.py` + `landscape_art.py` crops, palette ramps, corner-mask composition | CC0 (Jason Perry / finalbossblues) |
+| Terrain, props | OpenRTP `ChipSet/{retro_Exterior,retro_Dungeon,retro_World}.png` (10.3 pass; modern `Exterior/World/Dungeon` for the few props without a retro counterpart) | `tools/import_openrtp.py` + `landscape_art.py` crops, palette ramps, corner-mask composition | CC BY / CC0 mix (MrBeast, Redshrike, surt, Ogrebane, Gwes, jikmok, Tom Lemmens, marianognu) · CC0 (Jason Perry) |
 | Walking-scale buildings | OpenRTP `ChipSet/retro_Exterior.png` (SNES-retro) | `village_art.py` composes dithered-shingle roofs, half-timber walls, stone foundations; muted palette ramps (§10.2) | CC BY / CC0 mix (MrBeast, Redshrike, surt, Ogrebane, Gwes, jikmok, Tom Lemmens, marianognu) |
 | Heroes, NPCs, animals | OpenRTP `CharSet/{Actor,People,Animal}*.png` | colour-keyed crops, RM2k frame re-ordering in `import_openrtp.py` | CC BY 4.0 / CC0 per sheet (VictorSena, Marina Navarro Travesset, Garakuta…) |
 | Monsters | OpenRTP `CharSet/Monster*.png`, `Monster/Hornet.png` | keyed crops + exact 2× battle versions | CC BY 4.0 / CC0 per sheet |
 | Portraits | OpenRTP `FaceSet/*.png` | 48×48 crops | CC0 (Garakuta) |
 | Combat FX | OpenRTP `Battle/{Arrow,Blow,Sword1}.png` | green-keyed, trimmed frames | CC0 (Someoneman) |
 | UI plates | OpenRTP `System/{System,Royal}.png`, `GameOver`, `Panorama`, `Title` | crops/resizes in `import_openrtp.py` | CC BY / OGA-BY (andwhyisit), CC0 (jetrotal, Francisco de la Peña, Tom Lemmens) |
+| Interior furniture, town signs/banners | OpenRTP `ChipSet/Interior.png`, `Exterior.png` (no retro counterpart exists) | crops in `import_openrtp.py` / `town_art.py`, muted-family ramps (§10.3) | CC0 (Jason Perry / finalbossblues) |
 | Music | OpenRTP MIDIs (vendored) | offline render, `tools/render_score.py` | CC BY 4.0 (Juan Manuel Nigretti), CC0 (Someoneman) |
 | SFX, a few icons/sprites | repository-authored (`tools/gen_assets.py`, `tools/art_*.py`) | drawn in the same dialect, same grid/palette rules | CC0 (repository authors) |
 
@@ -271,8 +272,8 @@ Exactly one window language, implemented in `src/core.cpp`:
 
 - [ART_MANIFEST.md](../ART_MANIFEST.md) is **generated** by
   `tools/generate_manifest.py` (path, byte size, dimensions, category,
-  license/provenance for all **384** files under `assets/`) and is never
-  hand-edited.
+  license/provenance for every file under `assets/` — **471** as of the
+  §10.3 retro pass) and is never hand-edited.
 - `tools/validate_assets.py` (stdlib only) checks: duplicate runtime
   basenames; category dimensions (16×16 tiles/icons, 72×96 character
   sheets, 48×48 faces, 512×192 backdrops, 512×288 plates, fx/ui
@@ -611,3 +612,69 @@ credited in [CREDITS.md](../CREDITS.md). The manifest tags these twelve
 sprites with that retro provenance (`tools/generate_manifest.py`). Regenerate
 with `python3 tools/import_openrtp.py`, then `generate_manifest.py` and
 `validate_assets.py`.
+
+
+### 10.3 Field & prop retro pass (SNES / Lufia II texture sourcing)
+
+**Status: authoritative for terrain textures, flora, field props, cave art and
+the town material atlases.** §10.2 rebuilt the walking-scale buildings from
+`ChipSet/retro_Exterior.png`; this pass extends the same dialect decision to
+the rest of what a player sees. The modern OpenRTP chipsets draw ground and
+props with smooth, low-contrast texture — fine art, but a modern RPG-Maker
+look. The **SNES-retro chipsets carry the 16-bit texture** (speckle, dither,
+chunkier objects) and share the modern sheets' 30×16 cell layout, so the fix
+is mostly *re-sourcing at verified cells* plus palette discipline:
+
+1. **Re-sourced to a retro sheet (same cell, same concept — verified cell by
+   cell before switching, see `tools/rtp_sheet.rcell`):**
+
+   | Family | Now cropped from |
+   |---|---|
+   | Ground textures behind the whole `tiles/landscape.png` atlas + swatches (meadow/forest/amber/heath/fen/dunes/leaves/ripples/mesa/beach/dirt/soil, cobble, court, tile/stone floors) | `retro_Exterior` (1,10) (4,10) (4,14) (10,6) (7,10), `retro_World` (7,2) (4,10) |
+   | Rock/snow/ice ground, cave floors & rocks, dripstone and crystal formations, field rocks (`rock_0/1`, `boulder`, `crystal`) | `retro_Dungeon` (same cells as `Dungeon.png`) |
+   | Relief crag / sandstone / blue-stone cut banks | `retro_World` (22,6) |
+   | Flora: `tree_0..2`, `amber_oak`, `copper_oak`, `willow`, `pine_0..2`, `tree_snow`, `bush`, `bush_plain`, `flower_0/1` | `retro_Exterior` (22,8; 2×2) (20,8; 1×2) (18,9) (19,9) (18,11) |
+   | Props: `torch`, `campfire`, `fence`, `fence_post`, `fence_gate`, `noticeboard`, `barrel`, `longtable` | `retro_Exterior` (18,10) (21,12) (18–19,12) (20,10) (27,5) (24,7; 3×1) |
+   | Town material atlases: `town_facade_atlas`, `town_masonry_atlas`, `town_battlement_atlas`, `town_shingles_*`, `town_wall_ivy`, `town_market_flowers_*` | `retro_Exterior` (same cells as `Exterior.png`) |
+
+2. **Muted-family ramps (§0-allowed palette ramps) for props that keep a
+   modern crop** (no trustworthy retro counterpart at a verified cell): the
+   silhouette is unchanged and each is ramped into the §10.2 building
+   families — `WOOD_FAMILY` (`sign`, `bench`, `ladder`, `mailbox`, `stump`,
+   `dead_tree`), `STONE_FAMILY` (`well`, `statue`, `pillar`, `monument`,
+   `rock_2`), `CLAY_FAMILY` (`urn`). Ramps are declared once in
+   `tools/import_openrtp.py` and are each ≤ 6 colours.
+
+3. **Composed in-dialect pieces** (credited CC0, in the CREDITS "Additional
+   original artwork" dedication): the sea tiles (`water_0/1`, `deep_water`)
+   are ordered-dither bodies with phase-marching crest dashes
+   (`landscape_art.sea_frame`) on the locked §2.4 water ramps — the 16-bit
+   trick for animated water. The `interior_wall_face_atlas` faces are
+   palette-ramped into six muted families (wine brick, cream plaster, pale
+   stone = the `stone_floor` family, slate, warm rubble, blue brick) so
+   interiors sit beside the retro furniture without recolouring the
+   `Interior.png` furniture crops.
+
+4. **Muted hue-bucket harmonisation (`landscape_art.mute`) — pass 2.**
+   Modern-sheet crops that stay (interior furniture `bed`, `shelf`, `table`,
+   `counter`, `keg`, `stool`, `lantern`, `candle`, `plate`, `cauldron`,
+   `basin`, the interior floor tiles `brick*`, `plank_floor`, `carpet`, and
+   every remaining `town_*`/`interior_*` crop: signs, banners, turrets,
+   gables, windows, paintings, curtains, stairs, shop displays, piano,
+   throne, ritual circle) keep their silhouette but are harmonised by
+   `mute()`: each colour is bucketed by hue (wood/stone/ivory/clay/gold/
+   moss/slate/wine) and each bucket is ramped onto its own muted family —
+   a palette ramp per hue family, never a whole-sprite tint, never a
+   redraw. The `interior_door_*` Object1 pose strips are charset art and
+   stay untouched. The battle backdrops' sky and ground gradients are now
+   **quantised dither bands** (`battle_scenery.gradient`, Bayer 4×4) like
+   16-bit battle backgrounds, instead of smooth per-scanline blends.
+
+**Rules for the next pass:** change pixel content only through the tools
+(§0), prefer a verified retro-sheet cell over a redraw or a mute, keep every
+sprite's size/footprint (§10.1), keep ramps ≤ 8 colours with hue-shifted
+shadows (§2.3–2.4), regenerate the manifest and run `tools/validate_assets.py`,
+and record new cell coordinates here. `town_art.py --check`,
+`build_town_plates.py --check`, `build_interior_plates.py --check` and the
+three layout generators' `--check` all run against these assets and must
+stay green.

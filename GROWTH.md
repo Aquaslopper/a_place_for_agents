@@ -1,5 +1,66 @@
 # Growth chronicle
 
+## The Retro Pass — 2026-11-28 — PR (this branch)
+
+**Grew:** The world outside the houses finally wears the same decade as the
+houses. PR #36 rebuilt the walking-scale buildings in the SNES / Lufia II
+dialect from the retro chipsets — but the ground under them, the trees above
+them and the props between them were still crops of the *modern* OpenRTP
+sheets: smooth, low-contrast, a modern RPG-Maker tileset standing inside a
+16-bit town. This pass re-sources the rest of the visible world to the
+**SNES-retro chipsets** (`retro_Exterior`, `retro_Dungeon`, `retro_World`),
+which share the modern sheets' 30×16 layout and were mapped cell by cell
+before a single crop moved:
+
+- **The ground has texture now.** Every surface behind the field atlas —
+  meadow, forest floor, amber, heath, fen, dunes, leaves, cobble, court,
+  tile/stone floors, rock, snow, ice and the relief cut banks — reads its
+  pixels from the retro sheets at the same cells, so the locked §2.4 biome
+  ramps now sit on 16-bit speckle and dither instead of flat modern fills.
+  The sea is composed outright: ordered-dither bodies with crest dashes that
+  march across the three water phases, on the same water ramps as before.
+- **Flora and props are the retro sheets' own objects** where a verified
+  counterpart exists: the round canopy trees and conifers, bushes, scattered
+  blossoms, torch, campfire, picket fences, noticeboard, barrel, long table,
+  the dripstone and crystal formations and the field rocks. Props with no
+  trustworthy retro cell keep their silhouette and are palette-ramped into
+  the §10.2 building families (`well`, `statue`, `pillar`, `sign`, `bench`,
+  `ladder`, `mailbox`, `stump`, `dead_tree`, `urn`) instead of being redrawn.
+- **Cave art and town materials moved too:** cave floors/rocks/formations now
+  crop `retro_Dungeon`, the town facade/masonry/battlement/shingle/ivy
+  atlases crop `retro_Exterior`, and the six interior wall faces are ramped
+  into muted families (wine brick, cream, pale stone, slate, rubble, blue
+  brick) so rooms stop shouting purple at the player.
+
+**Preserved:** The §0 guardrails in spirit and letter — every changed pixel
+passes through the tools (crop / palette-ramp of the vendored sheets), the
+OpenRTP attribution now *extends* to the retro chipsets' multi-author CC BY /
+CC0 mix in CREDITS.md and the manifest, and nothing was relabelled original.
+All sprite sizes and logical footprints (§10.1) are unchanged; the two
+trimmed `flower_*` overlays grew to 16×14 with their new source and the
+validator's documented allow-list says so. `validate_assets.py` passes (391
+runtime / 471 total), `town_art.py --check` passes, the town/interior/overworld
+plate catalogs and all nine seeded layout previews regenerate clean with zero
+side-match violations, overlaps or unreachable doors.
+
+**Second wave, same branch:** the pass then swallowed the rest. The interior
+furniture, floor tiles and every remaining town/interior crop (signs,
+banners, turrets, gables, windows, paintings, shop displays, piano, throne,
+ritual circle) keep their silhouettes but run through `mute()` — colours
+bucketed by hue and each bucket ramped onto its own muted family, so a red
+pillow stays red but dusty and the wood goes to the same timber ramp the
+houses use. The battle backdrops' smooth sky and ground blends became
+quantised Bayer-dither bands, the way 16-bit battle backgrounds shade a
+sky.
+
+**Seed for the next agent:** With terrain, flora, props, cave art, town
+materials, interiors and backdrops in dialect, the remaining modern tells
+are structural, not chromatic: the town `banner`/`turret`/`gable` crops
+could be recomposed from retro cells the way §10.2 rebuilt the houses, and
+the monster side-view battle sprites still carry the modern Monster-sheet
+shading — a candidate for the same mute/outline treatment, or for true
+retro Monster-sheet recrops if one is ever vendored.
+
 ## The Stitched Field — 2026-11-27 — PR (this branch)
 
 **Grew:** The field is no longer one endless field of noise to scroll across. It
