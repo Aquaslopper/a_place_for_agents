@@ -24,6 +24,13 @@ ASSETS = ROOT / "assets"
 
 OPENRTP = "EasyRPG/OpenRTP `993d88c` (vendored `assets/source/openrtp/`)"
 CHIPSET = f"{OPENRTP} ChipSet crop/composite — CC0 (Jason Perry / finalbossblues)"
+# Walking-scale buildings are composed from the SNES-retro Exterior chipset,
+# a multi-author CC BY / CC0 mix (see assets/source/openrtp/AUTHORS.md).
+RETRO_BUILDING = (f"{OPENRTP} ChipSet/retro_Exterior.png composite — CC BY / CC0 mix "
+                  "(MrBeast, Redshrike, surt, Ogrebane, Gwes, jikmok, Tom Lemmens, "
+                  "marianognu; see `AUTHORS.md`)")
+RETRO_BUILDINGS = {"house_0", "house_1", "house_2", "house_3", "house_4",
+                   "shop", "inn", "temple", "manor", "smithy", "castle", "tower"}
 CHARSET_BY = f"{OPENRTP} CharSet crop — CC BY 4.0 / CC0 per-sheet (see `AUTHORS.md`: VictorSena, Marina Navarro Travesset, Garakuta, MerchantShade et al.)"
 FACESET = f"{OPENRTP} FaceSet crop — CC0 (Garakuta)"
 MONSTER = f"{OPENRTP} CharSet/Monster crop — CC BY 4.0 / CC0 per-sheet (MerchantShade, VictorSena, R.C.O., Orochii Zouveleki et al.)"
@@ -81,7 +88,11 @@ def provenance(rel):
     if top in ("tiles", "sprites") and name.startswith(("town_", "interior_")):
         sheet = "Exterior" if name.startswith("town_") else "Interior"
         return f"{OPENRTP} ChipSet/{sheet}.png crop — CC0 (Jason Perry / finalbossblues)"
-    if top == "tiles" or top == "backdrops":
+    if top == "tiles":
+        return CHIPSET
+    if top == "backdrops":
+        if stem in ("meadow", "fen"):
+            return CHIPSET + "; embeds a retro_Exterior building (CC BY / CC0 mix, see AUTHORS.md)"
         return CHIPSET
     if top == "ui":
         if name.startswith(("window", "gauge", "digits")):
@@ -101,7 +112,9 @@ def provenance(rel):
         base = stem.replace("_battle", "")
         if name.endswith("_battle.png") or base in BATTLE_BASES:
             return REPO if base in REPO_SPRITES else MONSTER
-        return CHIPSET  # props, buildings, landmarks: ChipSet crops/composites
+        if stem in RETRO_BUILDINGS:
+            return RETRO_BUILDING  # SNES-retro walking-scale architecture
+        return CHIPSET  # props, landmarks: ChipSet crops/composites
     if name == "title_atlas.png":
         return f"{OPENRTP} Title plate — CC0 (Francisco de la Peña)"
     if name == "title_bg.png":
