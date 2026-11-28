@@ -110,7 +110,11 @@ def main():
     # Adapt the vendored OpenRTP originals after generating the remaining art.
     import import_openrtp
     import_openrtp.main()
-    print(f"wrote {len(written)} files, then applied OpenRTP art")
+    # The field is painted from scratch last, so the palette-ramped chipset
+    # cells (flat 3-colour families) never reach assets/. See tools/field_art.py.
+    import field_art
+    field_art.main()
+    print(f"wrote {len(written)} files, then applied OpenRTP art, then painted the field")
 
 if __name__ == "__main__":
     main()

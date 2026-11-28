@@ -376,3 +376,44 @@ entry was added after the last build.
 
 **Seed for the next agent:** Give travellers a wayside marker that points toward
 the nearest open pass, without cutting new paths through the mountain ranges.
+
+## The Ground Under It — 2026-11-28 — this branch
+
+**Grew:** the field is painted instead of palette-swapped. `tools/field_art.py`
+draws all 21 terrain materials as five-value ramps with structured texture
+(clumps, blades, scallops, stone beds, wave glints, drifts, cracks, litter),
+1px contour rules at every seam, and dithered transitions; `relief.png` is
+rebuilt so banks cast shadow and escarpments get a lit rim. Measured on the same
+composed 512×288 field, local contrast goes **7.0 → 20.0** (Lufia II reference:
+26.7) and colours per 16px tile **6.0 → 7.6** (reference: 8.0). Grass tufts,
+blossoms, pebbles and lilies were repainted to match. The menu chrome lost its
+drop shadows and gradient fills and is now a flat plate inside black / light /
+black rules.
+
+**Fixed, and this is the part that matters:** the tree did not link. `sampleGround`,
+`propAt`, `cellWalkable`, `villageDecoTexture`, `zoneNameAt` and roughly thirty
+other field functions were declared, called from six translation units, and
+defined nowhere — so every "art pass" for ten PRs was changing files that no
+binary could load. `src/field.cpp` restores that implementation (with its
+`FieldSurvey` type kept separate from `world.hpp`'s plate `SurveyTerrain`), and
+`getVirtualMouse()` — also declared and never defined — is now implemented
+against `getPresentationRect()`. All 18 translation units compile and **every
+project symbol resolves**; only raylib's own symbols are outstanding, and raylib
+cannot be linked in this sandbox (no GL/X11 runtime).
+
+**Preserved:** the plate world, the dungeon generator, battles, shops, dialogue,
+the score, the save format. Props and building sprites are untouched.
+
+**Verification status:** `python3 tools/validate_assets.py` passes.
+`python3 tools/field_preview.py` renders the before/after field
+(`docs/visual_audit/field_before_after.png`) and the numbers above come from that
+pair. **The game was not run**: there is no display, no GL and no audio device in
+this environment, so the link is proven by symbol resolution, not by a launch.
+The UI changes are compile-checked only.
+
+**Seed for the next agent:** capture one real frame. The moment a build runs,
+the two open questions are (1) does the new atlas read correctly under the
+renderer's phase/variant selection, and (2) does the flat window chrome sit
+against the field without the party strip disappearing into it. After that: cut
+five or six texture variants per surface so the 16px cell stops repeating, and
+then, and only then, give the towns the same treatment the field just got.

@@ -686,42 +686,46 @@ static Color lerpCol(Color a, Color b, float t) {
 }
 
 void drawWindow(Rectangle r, bool dimInside) {
+    // A 16-bit menu window is a flat plate of colour inside two hard rules:
+    // 1px black, 1px light, 1px black, then the fill. No drop shadow, no
+    // gradient — a soft shadow offset is the single clearest "modern" tell in
+    // a screenshot, and the SNES could not draw one.
     int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
     int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
-    DrawRectangle(rx + 2, ry + 3, rw, rh, Fade(BLACK, 0.42f));
-    if (dimInside) {
-        for (int i = 0; i < rh; i++) {
-            float t = (float)i / std::max(1.0f, (float)rh - 1.0f);
-            Color c = lerpCol(Color{ 28, 44, 118, 250 }, Color{ 10, 16, 52, 252 }, t);
-            DrawRectangle(rx, ry + i, rw, 1, c);
-        }
-    } else {
-        DrawRectangle(rx, ry, rw, rh, Color{ 14, 20, 56, 236 });
-    }
-    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
-    if (rw > 4 && rh > 4) {
+    if (rw <= 0 || rh <= 0) return;
+    DrawRectangle(rx, ry, rw, rh, Color{ 10, 14, 40, 255 });
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 0, 0, 0, 255 });
+    if (rw > 2 && rh > 2) {
         DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
-                             1.0f, Color{ 236, 240, 255, 255 });
+                             1.0f, Color{ 232, 236, 248, 255 });
+    }
+    if (rw > 4 && rh > 4) {
+        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
+                             1.0f, Color{ 0, 0, 0, 255 });
     }
     if (rw > 6 && rh > 6) {
-        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
-                             1.0f, Color{ 96, 118, 208, 255 });
+        DrawRectangle(rx + 3, ry + 3, rw - 6, rh - 6,
+                      dimInside ? Color{ 8, 12, 34, 255 } : Color{ 16, 22, 62, 255 });
     }
 }
 
 void drawWindowBlue(Rectangle r) {
+    // The gold-framed variant: same construction, warm rule instead of white.
     int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
     int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
-    DrawRectangle(rx + 2, ry + 3, rw, rh, Fade(BLACK, 0.42f));
-    DrawRectangle(rx, ry, rw, rh, Color{ 16, 20, 48, 250 });
-    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
-    if (rw > 4 && rh > 4) {
+    if (rw <= 0 || rh <= 0) return;
+    DrawRectangle(rx, ry, rw, rh, Color{ 10, 14, 40, 255 });
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 0, 0, 0, 255 });
+    if (rw > 2 && rh > 2) {
         DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
-                             1.0f, Color{ 255, 214, 130, 255 });
+                             1.0f, Color{ 246, 214, 138, 255 });
+    }
+    if (rw > 4 && rh > 4) {
+        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
+                             1.0f, Color{ 0, 0, 0, 255 });
     }
     if (rw > 6 && rh > 6) {
-        DrawRectangleLinesEx({ (float)(rx + 2), (float)(ry + 2), (float)(rw - 4), (float)(rh - 4) },
-                             1.0f, Color{ 118, 96, 56, 255 });
+        DrawRectangle(rx + 3, ry + 3, rw - 6, rh - 6, Color{ 24, 20, 30, 255 });
     }
 }
 
@@ -729,9 +733,8 @@ void drawPixelPanel(Rectangle r, Color fill, Color border) {
     int rx = (int)floorf(r.x), ry = (int)floorf(r.y);
     int rw = (int)roundf(r.width), rh = (int)roundf(r.height);
     if (rw <= 0 || rh <= 0) return;
-    DrawRectangle(rx + 1, ry + 2, rw, rh, Fade(BLACK, 0.35f));
     DrawRectangle(rx, ry, rw, rh, fill);
-    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 8, 10, 24, 255 });
+    DrawRectangleLinesEx({ (float)rx, (float)ry, (float)rw, (float)rh }, 1.0f, Color{ 0, 0, 0, 255 });
     if (rw > 2 && rh > 2) {
         DrawRectangleLinesEx({ (float)(rx + 1), (float)(ry + 1), (float)(rw - 2), (float)(rh - 2) },
                              1.0f, border);
@@ -744,6 +747,17 @@ void drawPixelPanel(Rectangle r, bool selected) {
     drawPixelPanel(r,
                    selected ? Color{ 56, 86, 164, 255 } : Color{ 26, 36, 78, 255 },
                    selected ? Color{ 255, 232, 150, 255 } : Color{ 90, 110, 160, 255 });
+}
+
+Vector2 getVirtualMouse() {
+    // The presentation pass blits the virtual canvas into a letterboxed rect
+    // (getPresentationRect), so window pixels have to be mapped back before a
+    // click can land on a menu entry or a tile.
+    Rectangle dst = getPresentationRect();
+    Vector2 m = GetMousePosition();
+    if (dst.width <= 0.0f || dst.height <= 0.0f) return { 0.0f, 0.0f };
+    return { (m.x - dst.x) * (float)g.vw / dst.width,
+             (m.y - dst.y) * (float)g.vh / dst.height };
 }
 
 Vector2 measureText(const char* text, int size) {
