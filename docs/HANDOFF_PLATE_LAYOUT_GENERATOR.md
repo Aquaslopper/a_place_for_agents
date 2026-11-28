@@ -1,29 +1,28 @@
 # Handoff: seeded plate-layout generator (the first procedural overworld step)
 
 **Date:** 2026-11-27 · **Branch:** `arena/27049c45-a-place-for-agents`
-**Status: NOT STARTED — no code written. This document is the entire spec. Do not re-survey; build.**
+**Status: NOT STARTED — no code written. This document is the entire spec.**
 
 ---
 
 ## Why this handoff exists
 
 The previous agent spent the whole session surveying (reading docs, listing
-plates, viewing PNGs, installing Pillow) and never wrote a line of code —
-its turns were interrupted repeatedly before any file was created. There is
+plates, viewing PNGs, installing Pillow) and never wrote a line of code. There is
 **no technical blocker**: the task is a self-contained Python tool, fully
 specified below. If you are reading this, skip all exploration and go straight
 to "What to build".
 
 ---
 
-## The task (human's words)
+## The task
 
-> "we have these 3x3 plates now.... let us build a random seed generator that
-> places these plates together"
+> 3x3 plates, build a random seed generator
+> placing these plates together
 
 Step by step. One tool. Nothing else.
 
-## Hard constraints (from the human, repeated)
+## Hard constraints
 
 1. **Do NOT touch the deleted work:** `src/world.cpp`, `src/world.hpp`,
    `src/overworld.cpp` are deliberately deleted. Do not restore, recreate, or
@@ -32,10 +31,9 @@ Step by step. One tool. Nothing else.
 2. **One deliverable:** a Python tool that places the existing 3×3 plates into
    a seeded, edge-matched grid and renders a preview. No game integration, no
    docs rewrite, no water-plate fix, no C++ — unless the human asks next.
-3. **One step at a time.** The human dictates each step and dislikes scope
-   creep. Finish this tool, show the preview, stop.
 
-## What already exists (verified this session — do not re-check)
+
+## What already exists
 
 - **100 plates**, 48×48 px each (3×3 of 16×16 tiles), in
   `docs/overworld_assets/plates/<name>.png`, canonical list in
@@ -64,8 +62,7 @@ Step by step. One tool. Nothing else.
   — source art issue in `build_overworld_plates.py`, documented in its
   docstring. Ignore it; placement logic is independent of it.
 - Previews/contact sheets live in `docs/overworld_assets/` — put the layout
-  preview there too (e.g. `layout_seed<seed>.png`). Nothing under `assets/`,
-  so **no manifest/validator run is needed** (validator only scans `assets/`).
+  preview there too (e.g. `layout_seed<seed>.png`).
 
 ## What to build
 
@@ -83,13 +80,11 @@ cell-for-cell (west side of the right plate == east side of the left plate).
 This is the Carcassonne rule from the handoff doc and it makes roads/coasts
 continue automatically. Site plates: all four sides = `(grass, grass, grass)`.
 
-Alternative acceptable scheme (if cell-sequences prove awkward): one dominant
-label per side, with a small compatibility table (grass↔anything,
-water↔water, …). State which you used in the tool's docstring.
+Alternative acceptable scheme (if cell-sequences prove awkward): build a new 3x3 plate that fits.
 
 ### 2. Placement
 
-- CLI: `--seed` (required or default 1337), `--cols/--rows` (default
+- CLI: `--seed` (required or default 4444), `--cols/--rows` (default
   something preview-friendly, e.g. 16×12 plates = 48×36 tiles),
   `--out` (default `docs/overworld_assets/layout_seed<seed>.png`).
 - Seeded RNG only (`random.Random(seed)`) — same seed ⇒ byte-identical grid.
@@ -98,24 +93,19 @@ water↔water, …). State which you used in the tool's docstring.
   random; **on empty candidate set, backtrack** (or restart with a
   deterministic attempt counter). No artificial border plates — the grid edge
   has no constraint (or, if you prefer, mark edge sides "wildcard"; say so).
-- Terrain plates should appear as coherent patches, not salt-and-pepper:
+- Terrain plates should appear as coherent patches (BIOME), not salt-and-pepper:
   simplest way is to bias the candidate pick toward continuing the
   neighbour's terrain when compatible (e.g. weight same-terrain plates
   higher). Keep it simple; document the weighting.
 - **Special-plate rules (light version, from the handoff):** site plates are
   rare — after the terrain grid is filled, punch a few site plates into
-  grass-only cells (town spacing ≥ 4 plates apart; `cave`/`tower` only
-  adjacent to a mountain-labelled side if that falls out naturally, else
-  skip the rule and note it). Transporters (`bridge_over_water`,
+  cells (town spacing ≥ 4 plates apart; `cave`/`tower` only
+  adjacent to a mountain-labelled side if that falls out naturally). Transporters (`bridge_over_water`,
   `cave_in_mountain`, `gate_pass`) may replace their exact base plate
   (same side labels ⇒ always legal).
 
 ### 3. Output
 
-- Compose the grid by blitting the plate PNGs → one preview PNG (add a thin
-  seam grid line every 48 px so plate boundaries are visible).
-- Also write a small JSON next to it: `{"seed": …, "cols": …, "rows": …,
-  "plates": [[row of names], …]}` — the canonical layout for later steps.
 - Print a one-line summary: seed, grid size, counts per terrain, backtracks.
 
 ### 4. Verify (before reporting back)
@@ -125,15 +115,5 @@ water↔water, …). State which you used in the tool's docstring.
 3. Write a tiny self-check inside the tool (or a `--check` flag): every
    horizontal/vertical neighbour pair satisfies the side-match rule; assert
    0 violations.
-4. View the PNG yourself (`read_file`) — tiles must line up at seams.
 
-## Out of scope (do not do)
 
-- Fixing water plates · touching `src/` or the deleted files · C++ generator ·
-  updating README/ART_BIBLE/GROWTH · committing anything the human did not
-  ask for · opening a PR.
-
-## Report back with
-
-The command you ran, the preview image, the seed/size summary, the
-self-check result — then stop and await the human's next dictated step.
