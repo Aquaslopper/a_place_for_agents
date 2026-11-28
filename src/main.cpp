@@ -67,9 +67,8 @@ static void titleUpdate(float dt) {
             startNewAdventure();
         } else if (idx == 1) {
             if (g.saveExists && loadGame()) {
-                g.mode = MODE_OVERWORLD;
                 g.fade = 1.0f; g.fadeDir = -1;
-                overworldSnapCamera();
+                if (g.mode == MODE_OVERWORLD) overworldSnapCamera();
                 playSoundIf(g.assets.confirm);
             } else {
                 playSoundIf(g.assets.cancel);
@@ -103,16 +102,10 @@ static void introUpdate(float dt) {
     if ((g.introT > 0.9f && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER) ||
                              IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON)))
         || g.introT > 16.0f) {
-        // Not a cut: the palette comes up in steps while the camera pulls back
-        // from the north gate and glides in to the party, and the village names
-        // itself once the shot settles. This is the game's first impression, so
-        // it is staged like an opening shot rather than a fade to gameplay.
-        g.mode = MODE_OVERWORLD;
-        g.fade = 1.0f; g.fadeDir = -1;
-        g.facing = 1;
-        g.moving = false;
-        overworldSnapCamera();
-        cinemaArrive("ELMSWICK", "the last field office", 0.0f, -7.0f);
+        // Begin the adventure inside the bounded, walled town of Elmswick!
+        // Stepping out any town gate opens onto the Lufia II miniature World Map.
+        townEnterAtCoords(0, 0, 2);
+        cinemaArrive("ELMSWICK", "walk out any gate to reach the World Map", 0.0f, -4.0f);
         playSoundIf(g.assets.confirm);
     }
 }
@@ -176,20 +169,22 @@ int main() {
             if (g.fade >= 1.0f) { g.fade = 1.0f; g.fadeDir = 0; }
         }
 
-        // Keep monotonic animation clock and toasts alive in modes that don't tick them themselves
-        bool selfTicks = (g.mode == MODE_OVERWORLD || g.mode == MODE_ROOM ||
-                          g.mode == MODE_DUNGEON || g.mode == MODE_BATTLE ||
-                          g.mode == MODE_SAIL);
+        // Keep monotonic animation clock, region banner, and toasts alive in every mode
+        gAnimTime += dt;
+        if (g.toastT > 0) g.toastT = std::max(0.0f, g.toastT - dt);
+        if (g.regionBannerT > 0) g.regionBannerT = std::max(0.0f, g.regionBannerT - dt);
+        bool selfTicks = (g.mode == MODE_OVERWORLD || g.mode == MODE_TOWN ||
+                          g.mode == MODE_ROOM || g.mode == MODE_DUNGEON ||
+                          g.mode == MODE_BATTLE || g.mode == MODE_SAIL);
         if (!selfTicks) {
-            gAnimTime += dt;
             g.totalTime += dt;
-            if (g.toastT > 0) g.toastT = std::max(0.0f, g.toastT - dt);
         }
 
         switch (g.mode) {
             case MODE_TITLE:     titleUpdate(dt); break;
             case MODE_INTRO:     introUpdate(dt); break;
             case MODE_OVERWORLD: overworldUpdate(dt); break;
+            case MODE_TOWN:      townUpdate(dt); break;
             case MODE_ROOM:      roomUpdate(dt); break;
             case MODE_DUNGEON:   dungeonUpdate(dt); break;
             case MODE_SAIL:      sailUpdate(dt); break;
@@ -213,7 +208,12 @@ int main() {
                 drawIntroScreen();
                 break;
             case MODE_OVERWORLD:
-                if (g.travelMap) drawTravelMap(); else drawWorld();
+                drawWorld();
+                drawHUD();
+                drawCinemaOverlay();
+                break;
+            case MODE_TOWN:
+                townDraw();
                 drawHUD();
                 drawCinemaOverlay();
                 break;
@@ -234,14 +234,16 @@ int main() {
                 if (g.dialogReturn == MODE_ROOM) roomDraw();
                 else if (g.dialogReturn == MODE_DUNGEON) dungeonDraw();
                 else if (g.dialogReturn == MODE_SAIL) { sailDraw(); drawHUD(); }
-                else { if (g.travelMap) drawTravelMap(); else drawWorld(); drawHUD(); }
+                else if (g.dialogReturn == MODE_TOWN) { townDraw(); drawHUD(); }
+                else { drawWorld(); drawHUD(); }
                 drawDialogBox();
                 break;
             case MODE_MENU:
                 if (g.menuReturn == MODE_ROOM) roomDraw();
                 else if (g.menuReturn == MODE_DUNGEON) dungeonDraw();
                 else if (g.menuReturn == MODE_SAIL) { sailDraw(); drawHUD(); }
-                else { if (g.travelMap) drawTravelMap(); else drawWorld(); }
+                else if (g.menuReturn == MODE_TOWN) { townDraw(); }
+                else { drawWorld(); }
                 drawMenuScreen();
                 break;
             case MODE_BATTLE:

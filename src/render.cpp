@@ -1,6 +1,8 @@
 // render.cpp — the field renderer, HUD and mode screens
 #include "game.hpp"
 #include "world.hpp"
+#include "overworld_gen.hpp"
+#include "town.hpp"
 #include "regions.hpp"
 #include "battle.hpp"
 #include "commons.hpp"
@@ -327,6 +329,26 @@ void drawWorld() {
     g.camX = roundf(g.camX - shakeX);
     g.camY = roundf(g.camY - shakeY);
 
+    worldDrawOverworld();
+
+    if (!g.travelMap && !g.regionName.empty() && g.regionBannerT > 0.0f) {
+        float a = std::min(1.0f, g.regionBannerT * 1.5f);
+        Vector2 rs = measureText(g.regionName.c_str(), 8);
+        float cx = (float)g.vw * 0.5f;
+        drawWorldLabel(g.regionName.c_str(), cx, 28.0f,
+                       Fade(Color{ 255, 238, 190, 255 }, a * 0.95f), 8);
+        Color rule = Fade(Color{ 236, 214, 168, 255 }, a * 0.55f);
+        DrawRectangle((int)(cx - rs.x * 0.5f) - 26, 32, 18, 1, rule);
+        DrawRectangle((int)(cx + rs.x * 0.5f) + 8, 32, 18, 1, rule);
+    }
+
+    g.camX = saveCamX;
+    g.camY = saveCamY;
+}
+
+// Legacy field renderer retained only as helper references if needed
+[[maybe_unused]] static void drawLegacyFieldUnused() {
+    float saveCamX = g.camX, saveCamY = g.camY;
     int x0 = (int)floorf(g.camX / TILE) - 1;
     int y0 = (int)floorf(g.camY / TILE) - 1;
     int x1 = x0 + g.vw / TILE + 3;
@@ -745,16 +767,43 @@ void drawWorld() {
 
 // ================================================================ HUD
 void drawHUD() {
-    float wx = g.sailing ? gSailX : g.px, wy = g.sailing ? gSailY : g.py;
-    const char* zone = g.sailing ? sailZoneName() : zoneNameAt(wx, wy);
+    // Hide the normal exploration HUD while the full-screen [M] World Map is open
+    if (g.mode == MODE_OVERWORLD && g.travelMap) {
+        drawToast();
+        return;
+    }
+
+    uint32_t seed = g.worldSeed ? g.worldSeed : 1337u;
+    bool inTownMode = (g.mode == MODE_TOWN) || (g.mode == MODE_DIALOG && g.dialogReturn == MODE_TOWN);
     char zoneBuf[128];
-    snprintf(zoneBuf, sizeof(zoneBuf), "%s / %s  Lv.%d", regionNameAt(wx, wy), zone,
-             zoneLevelAt(wx, wy));
+    if (inTownMode) {
+        snprintf(zoneBuf, sizeof(zoneBuf), "%s  (Town)", townCurrentName());
+    } else if (g.sailing) {
+        snprintf(zoneBuf, sizeof(zoneBuf), "%s  (At Sea)", sailZoneName());
+    } else {
+        int tx = (int)floorf(g.px), ty = (int)floorf(g.py);
+        std::string reg = apfa::owRegionTitle(seed, tx, ty);
+        int tier = apfa::owDangerTier(tx, ty);
+        if (g.onShip) snprintf(zoneBuf, sizeof(zoneBuf), "%s  (Sailing)  [M] Map", reg.c_str());
+        else snprintf(zoneBuf, sizeof(zoneBuf), "%s  Tier %d  [M] Map", reg.c_str(), tier);
+    }
     Vector2 zsz = measureText(zoneBuf, 8);
     drawWindow({ 5, 5, zsz.x + 32, 20 });
     DrawTriangle({ 12, 16 }, { 16, 14 }, { 16, 7 }, Color{ 250, 218, 149, 255 });
     DrawTriangle({ 20, 12 }, { 16, 14 }, { 16, 21 }, Color{ 134, 173, 169, 255 });
     drawText(zoneBuf, 27, 11, Color{ 246, 238, 212, 255 }, 8);
+
+    // Subtle town arrival banner in MODE_TOWN
+    if (inTownMode && !g.regionName.empty() && g.regionBannerT > 0.0f) {
+        float a = std::min(1.0f, g.regionBannerT * 1.4f);
+        Vector2 rs = measureText(g.regionName.c_str(), 8);
+        float cx = (float)g.vw * 0.5f;
+        drawWorldLabel(g.regionName.c_str(), cx, 28.0f,
+                       Fade(Color{ 255, 238, 190, 255 }, a * 0.95f), 8);
+        Color rule = Fade(Color{ 236, 214, 168, 255 }, a * 0.55f);
+        DrawRectangle((int)(cx - rs.x * 0.5f) - 24, 32, 16, 1, rule);
+        DrawRectangle((int)(cx + rs.x * 0.5f) + 8, 32, 16, 1, rule);
+    }
 
     char buf[64];
     snprintf(buf, sizeof(buf), "%d", g.gil);
@@ -785,7 +834,6 @@ void drawHUD() {
                            { (float)x + 0.5f, (float)by + 6.5f, 18, 18 }, { 0, 0 }, 0,
                            h.ko ? Color{ 135, 135, 154, 255 } : WHITE);
         }
-        // Top row (by + 5): Hero name on left, KO / PSN badge right-aligned
         drawText(heroName(h.klass), (float)x + 22.f, (float)by + 5.f,
                  h.ko ? Color{ 226, 141, 139, 255 } : WHITE, 8);
         if (h.ko) {
@@ -796,7 +844,6 @@ void drawHUD() {
             drawText("PSN", (float)(x + slotW - 5) - pw, (float)by + 5.f, Color{ 205, 140, 255, 255 }, 8);
         }
 
-        // Bottom row (by + 17): Compact L# on left, crisp HP & MP gauges on right
         char lv[16];
         snprintf(lv, sizeof(lv), "L%d", h.level);
         drawText(lv, (float)x + 22.f, (float)by + 17.f, Color{ 175, 192, 232, 255 }, 8);
@@ -808,21 +855,23 @@ void drawHUD() {
     }
 
     // Active quest tracker (top-right, below Gil box)
+    float owX = inTownMode ? (float)g.currentTownOwTx : g.px;
+    float owY = inTownMode ? (float)g.currentTownOwTy : g.py;
     for (int q = 0; q < QUEST_COUNT; q++) {
         if (g.quests[q].state != QS_ACTIVE) continue;
         std::string line = questTitle(q);
         if (q == QUEST_SLIMES) {
-            snprintf(buf, sizeof(buf), " (%d/6)", std::min(6, g.slimesSlain));
+            int goal = std::max(1, g.quests[q].goal ? g.quests[q].goal : 3);
+            snprintf(buf, sizeof(buf), " (%d/%d)", std::min(goal, g.quests[q].progress), goal);
             line += buf;
         } else if (q == QUEST_LOCKET) {
-            if (g.locketFound) line += " (Return)";
-            else line += " [" + compassHint(g.px, g.py, LOCKET_PICKUP_X, LOCKET_PICKUP_Y) + "]";
+            auto lk = apfa::owLocketSite(seed);
+            if (g.locketFound) line += " (Return to Elmswick)";
+            else line += " [" + compassHint(owX, owY, (float)lk.tx, (float)lk.ty) + "]";
         } else if (q == QUEST_CROWN) {
-            if (itemCount(IT_CROWN) > 0 || g.bossDefeated) line += " (Return)";
-            else if (!g.hasWaystone) {
-                int tx, ty; startCavernSite(tx, ty);
-                line = "Waystone: Hollow Hill [" + compassHint(wx, wy, (float)tx, (float)ty) + "]";
-            } else line += " [" + compassHint(wx, wy, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY) + "]";
+            auto bc = apfa::owBossCastle(seed);
+            if (itemCount(IT_CROWN) > 0 || g.bossDefeated) line += " (Return to Elmswick)";
+            else line += " [" + compassHint(owX, owY, (float)bc.tx, (float)bc.ty) + "]";
         }
         Vector2 sz = measureText(line.c_str(), 8);
         float qw = sz.x + 14.0f;
@@ -832,7 +881,7 @@ void drawHUD() {
     }
 
     // Interaction prompt (right of Party HUD when wide enough, otherwise cleanly above Party HUD)
-    const char* prompt = g.sailing ? nullptr : interactionPrompt();
+    const char* prompt = inTownMode ? townPrompt() : (g.sailing ? nullptr : interactionPrompt());
     if (prompt) {
         Vector2 sz = measureText(prompt, 8);
         float pw = sz.x + 16.0f;

@@ -57,6 +57,9 @@ RETRO_SPRITES = {"tree_0", "tree_1", "tree_2", "amber_oak", "copper_oak",
                  "cave_crystal_cluster", "cave_rock_pile", "cave_boulder",
                  "town_wall_ivy", "town_market_flowers_orange",
                  "town_market_flowers_red"}
+# Overworld runtime art: MrBeast Worldmap (CC-BY 3.0) + retro_World.png (CC-BY / CC0 mix).
+OW_ASSET = ("MrBeast Worldmap/Overworld (`assets/source/overworld/mrbeast_worldmap/`, CC BY 3.0) "
+            "+ EasyRPG/OpenRTP `ChipSet/retro_World.png` (CC BY / CC0 mix; see `CREDITS.md`)")
 # Procedural sea tiles: in-dialect composition on the locked 2.4 water ramps.
 SEA_TILES = {"water_0.png", "water_1.png", "deep_water.png"}
 CHARSET_BY = f"{OPENRTP} CharSet crop — CC BY 4.0 / CC0 per-sheet (see `AUTHORS.md`: VictorSena, Marina Navarro Travesset, Garakuta, MerchantShade et al.)"
@@ -119,6 +122,8 @@ def provenance(rel):
         sheet = "Exterior" if name.startswith("town_") else "Interior"
         return f"{OPENRTP} ChipSet/{sheet}.png crop — CC0 (Jason Perry / finalbossblues)"
     if top == "tiles":
+        if name == "ow_atlas.png":
+            return OW_ASSET
         if name in RETRO_TILES:
             return RETRO_CHIPSET
         if name in SEA_TILES:
@@ -139,6 +144,8 @@ def provenance(rel):
     if top == "icons":
         return f"{OPENRTP} ChipSet (Interior/Dungeon) crop, some repository-drawn in-dialect — CC0"
     if top == "sprites":
+        if name.startswith("ow_"):
+            return OW_ASSET
         if name.startswith("face_"):
             return FACESET
         if name.startswith(("hero_", "npc_")):

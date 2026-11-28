@@ -3,6 +3,7 @@
 #include "commons.hpp"
 #include "atlas.hpp"
 #include "world.hpp"
+#include "overworld_gen.hpp"
 #include "battle.hpp"
 #include <algorithm>
 #include <cmath>
@@ -91,7 +92,7 @@ void resolveDialogAction(DialogAction a) {
             pushToast("Received Rusty Key!");
             break;
         case DLG_BOSS_SLIME_KING: {
-            int zl = std::max(4, zoneLevelAt(g.px, g.py));
+            int zl = std::max(4, apfa::owDangerTier((int)floorf(g.px), (int)floorf(g.py)) * 2);
             std::vector<EnemyKind> group = { EN_SLIME_KING, EN_SLIME, EN_SLIME };
             battleStart(group, zl, 0, true);
             break;
@@ -144,11 +145,10 @@ void resolveDialogAction(DialogAction a) {
                 g.quests[QUEST_TIDE].goal = TIDE_ISLANDS;
             }
             playSoundIf(g.assets.treasure);
-            pushToast("Boat hired! Stand by open water and press Space to push off.");
+            pushToast("Boat hired! Walk onto any coastline on the World Map to sail.");
             std::vector<DialogLine> after;
-            after.push_back({ -1, "", "Bel takes the coins, spits on the rope, and nods at the water." });
-            after.push_back({ -1, "", "\"Water's low this year. Mind the deep out past the point.\"" });
-            after.push_back({ -1, "", "Press Space beside any pond or river bank to cast off. Press F afloat to be towed home." });
+            after.push_back({ -1, "", "Bel takes the coins, spits on the rope, and nods toward the southern sea." });
+            after.push_back({ -1, "", "\"She's yours! Step off any shore on the World Map to board and sail for the Tidewell Isles.\"" });
             startDialog(after);
             break;
         }
@@ -235,7 +235,7 @@ static std::vector<int> shopStock() {
             IT_ARMOR_LEATHER, IT_ARMOR_CHAIN, IT_SHIELD_WOOD, IT_SHIELD_IRON,
             IT_ROBE_SILK
         };
-        int zl = zoneLevelAt(g.px, g.py);
+        int zl = townActive() ? (townDangerTier() * 2 - 1) : zoneLevelAt(g.px, g.py);
         if (zl >= 3 || g.bossDefeated) {
             stock.push_back(IT_SWORD_MYTHRIL);
             stock.push_back(IT_ARMOR_PLATE);
@@ -257,7 +257,7 @@ static std::vector<int> shopStock() {
         IT_SHIELD_WOOD, IT_SHIELD_IRON,
         IT_RING_POWER, IT_AMULET_MANA
     };
-    int zl = zoneLevelAt(g.px, g.py);
+    int zl = townActive() ? (townDangerTier() * 2 - 1) : zoneLevelAt(g.px, g.py);
     if (zl >= 3 || g.bossDefeated) {
         stock.push_back(IT_HIETHER);
         stock.push_back(IT_ELIXIR);
@@ -1144,28 +1144,30 @@ void drawMenuScreen() {
             drawTextWrapped(questGoalText(q), ox + 130, y + 16, 348, 9, Color{ 200, 212, 240, 255 }, 8);
 
             std::string prog;
+            uint32_t seed = g.worldSeed ? g.worldSeed : 1337u;
+            float owX = townActive() ? (float)g.currentTownOwTx : g.px;
+            float owY = townActive() ? (float)g.currentTownOwTy : g.py;
             if (q == QUEST_SLIMES && st == QS_ACTIVE)
                 prog = "Progress: " + std::to_string(std::min(6, g.slimesSlain)) + " / 6 slimes defeated";
-            else if (q == QUEST_LOCKET && st == QS_ACTIVE)
-                prog = g.locketFound ? "Locket found! Return to Tamsin."
-                                     : "Standing Stones: " + compassHint(g.px, g.py, LOCKET_PICKUP_X, LOCKET_PICKUP_Y);
-            else if (q == QUEST_CROWN && st == QS_ACTIVE) {
+            else if (q == QUEST_LOCKET && st == QS_ACTIVE) {
+                auto lk = apfa::owLocketSite(seed);
+                prog = g.locketFound ? "Locket found! Return to Maren in Elmswick."
+                                     : "Standing Stones: " + compassHint(owX, owY, (float)lk.tx, (float)lk.ty);
+            } else if (q == QUEST_CROWN && st == QS_ACTIVE) {
+                auto bc = apfa::owBossCastle(seed);
                 if (itemCount(IT_CROWN) > 0 || g.bossDefeated)
-                    prog = "Crown reclaimed! Return to Old Maren.";
-                else if (!g.hasWaystone) {
-                    int tx, ty; startCavernSite(tx, ty);
-                    prog = "Hollow Hill's Waystone: " + compassHint(g.px, g.py, (float)tx, (float)ty);
-                } else prog = "Castle of Elm: " + compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
+                    prog = "Crown reclaimed! Return to Elder Rowan in Elmswick.";
+                else
+                    prog = "Castle of Elm: " + compassHint(owX, owY, (float)bc.tx, (float)bc.ty);
             }
             else if (q == QUEST_TIDE && st == QS_ACTIVE)
-                prog = std::string(g.hasBoat ? "Boat hired" : "Boat: see Ferryman Bel at the millpond") +
+                prog = std::string(g.hasBoat ? "Boat hired — step onto any sea coast to sail" : "Boat: see Ferryman Bel in Elmswick") +
                        "  |  Tidewells " + std::to_string(g.tideFound) + " / " + std::to_string(TIDE_ISLANDS) +
                        (g.tideFound >= TIDE_ISLANDS ? "  (all found!)" : "");
             else if (q == QUEST_COMMONS && st == QS_ACTIVE)
                 prog = (g.quests[q].progress >= 2)
-                     ? "Hedge cleared! Return to Sable at the Commons brazier."
-                     : "Hedge wisps: " + std::to_string(std::min(2, g.quests[q].progress)) + " / 2  |  "
-                       + compassHint(g.px, g.py, 26.5f, 9.5f);
+                     ? "Ready! Return to Keeper Oren at the Commons in Elmswick."
+                     : "Progress: " + std::to_string(std::min(2, g.quests[q].progress)) + " / 2  |  Commons Grove in Elmswick";
             if (!prog.empty()) drawText(prog.c_str(), ox + 130, y + 31, Color{ 155, 235, 185, 255 }, 8);
         }
         char stat[96];

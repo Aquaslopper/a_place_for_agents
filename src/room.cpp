@@ -1,6 +1,7 @@
 // room.cpp — building interiors: shop, inn, temple, elder's hall & cottages
 #include "game.hpp"
 #include "world.hpp"
+#include "overworld_gen.hpp"
 #include <cstdio>
 
 enum RoomPropTex {
@@ -247,7 +248,7 @@ void enterBuilding(int buildingIndex) {
 }
 
 void exitRoom() {
-    g.mode = MODE_OVERWORLD;
+    g.mode = townActive() ? MODE_TOWN : MODE_OVERWORLD;
     g.roomHasTarget = false;
     g.roomClickTalk = false;
     g.roomClickExit = false;
@@ -257,8 +258,8 @@ void exitRoom() {
         int dtx = buildingDoorTx(b);
         int dty = buildingDoorTy(b);
         float ex = (float)dtx + 0.5f;
-        float ey = (float)dty + 0.55f;
-        if (positionBlocked(ex, ey, 0.28f)) {
+        float ey = (float)dty + 0.72f;
+        if (!townActive() && positionBlocked(ex, ey, 0.28f)) {
             int ox = dtx, oy = dty + 1;
             nearestWalkable(dtx, dty, ox, oy);
             ex = ox + 0.5f; ey = oy + 0.5f;
@@ -304,10 +305,10 @@ static void talkToKeeper() {
             lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Beyond the castle, follow the road through the far pass to another guardian's cavern.\"" });
             act = DLG_CROWN_REWARD;
         } else if (g.quests[QUEST_CROWN].state == QS_ACTIVE) {
-            std::string hint = compassHint(g.px, g.py, (float)BOSS_CASTLE_TX, (float)BOSS_CASTLE_TY);
-            if (!g.hasWaystone)
-                lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"First find the Waystone in Hollow Hill, west of town. Its guardian holds the pass key.\"" });
-            lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Follow the North Road (" + hint + ") to the old Castle of Elm.\"" });
+            auto bc = apfa::owBossCastle(g.worldSeed ? g.worldSeed : 1337u);
+            std::string hint = compassHint((float)g.currentTownOwTx, (float)g.currentTownOwTy,
+                                           (float)bc.tx, (float)bc.ty);
+            lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"Step out any gate onto the World Map and travel " + hint + " to Castle of Elm.\"" });
         } else {
             lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"The Slime King seized the old Castle of Elm up the North Road — along with our village's ancient Crown.\"" });
             lines.push_back({ g.roomNpcFace, g.roomNpcName, "\"First find the Waystone in Hollow Hill, west of town; its guardian opens the mountain passes.\"" });
@@ -489,10 +490,35 @@ void roomDraw() {
         }
     }
 
-    // Back wall trim strip + warm interior ambient vignette
-    DrawRectangle((int)(ox + TILE), (int)(oy + TILE), (r.w - 2) * TILE, 8, Color{ 62, 48, 42, 255 });
-    DrawLine((int)(ox + TILE), (int)(oy + TILE + 8), (int)(ox + (r.w - 1) * TILE), (int)(oy + TILE + 8),
-             Color{ 30, 22, 24, 255 });
+    // Authentic 3-row SNES interior back wall using interior_wall_face_atlas.png
+    // (64x192: 6 architectural styles x 2 rows of 16px — upper & base wall faces)
+    if (g.assets.interiorWallFaceAtlas.id != 0) {
+        int style = (r.kind == ROOM_TEMPLE) ? 4
+                  : (r.kind == ROOM_FORGE ? 5
+                  : (isHall ? 3
+                  : (r.kind == ROOM_INN ? 2
+                  : (r.kind == ROOM_SHOP ? 1 : 0))));
+        float atlasY = (float)(style * 32);
+        for (int x = 1; x < r.w - 1; ++x) {
+            float sx = ox + (float)(x * TILE);
+            float colX = (float)((x & 3) * 16);
+            // Row 0: crisp architectural top cap trim
+            DrawRectangle((int)sx, (int)oy, TILE, 5, Color{ 28, 24, 30, 255 });
+            // Upper wall face (y=0 lower band) & lower wainscot wall face (y=1)
+            DrawTexturePro(g.assets.interiorWallFaceAtlas,
+                           { colX, atlasY, 16.0f, 16.0f },
+                           { sx, oy + 4.0f, 16.0f, 14.0f }, { 0, 0 }, 0.0f, WHITE);
+            DrawTexturePro(g.assets.interiorWallFaceAtlas,
+                           { colX, atlasY + 16.0f, 16.0f, 16.0f },
+                           { sx, oy + 18.0f, 16.0f, 10.0f }, { 0, 0 }, 0.0f, WHITE);
+        }
+        DrawLine((int)(ox + TILE), (int)(oy + 28), (int)(ox + (r.w - 1) * TILE), (int)(oy + 28),
+                 Color{ 24, 18, 20, 255 });
+    } else {
+        DrawRectangle((int)(ox + TILE), (int)(oy + TILE), (r.w - 2) * TILE, 8, Color{ 62, 48, 42, 255 });
+        DrawLine((int)(ox + TILE), (int)(oy + TILE + 8), (int)(ox + (r.w - 1) * TILE), (int)(oy + TILE + 8),
+                 Color{ 30, 22, 24, 255 });
+    }
 
     // Central nave / council runner carpet for Chapel & Elder's Hall
     if ((r.kind == ROOM_TEMPLE || isHall) && g.assets.carpet.id) {

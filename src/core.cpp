@@ -1,6 +1,8 @@
 // core.cpp — tables, assets, UI drawing, save/load, quests
 #include "game.hpp"
 #include "world.hpp"
+#include "overworld_gen.hpp"
+#include "town.hpp"
 #include "atlas.hpp"
 #include "regions.hpp"
 #include <cstdio>
@@ -558,6 +560,47 @@ bool loadAllAssets() {
     a.tidewellDry = loadTex(d, "sprites/tidewell_dry.png");
     a.tideStone = loadTex(d, "sprites/tide_stone.png");
 
+    // --- Lufia II overworld tileset & miniature site icons
+    a.owAtlas      = loadTex(d, "tiles/ow_atlas.png");
+    a.owHamlet     = loadTex(d, "sprites/ow_hamlet.png");
+    a.owTown       = loadTex(d, "sprites/ow_town.png");
+    a.owTownRed    = loadTex(d, "sprites/ow_town_red.png");
+    a.owTownSnow   = loadTex(d, "sprites/ow_town_snow.png");
+    a.owCastleGrey = loadTex(d, "sprites/ow_castle_grey.png");
+    a.owCastleBlue = loadTex(d, "sprites/ow_castle_blue.png");
+    a.owCaveGrass  = loadTex(d, "sprites/ow_cave_grass.png");
+    a.owCaveSand   = loadTex(d, "sprites/ow_cave_sand.png");
+    a.owCaveSnow   = loadTex(d, "sprites/ow_cave_snow.png");
+    a.owTower      = loadTex(d, "sprites/ow_tower.png");
+    a.owTemple     = loadTex(d, "sprites/ow_temple.png");
+    a.owRuins      = loadTex(d, "sprites/ow_ruins.png");
+    a.owCamp       = loadTex(d, "sprites/ow_camp.png");
+    a.owGatePass   = loadTex(d, "sprites/ow_gate_pass.png");
+
+    // --- town fortification, ground, signage & 3-row interior wall atlases
+    for (int i = 0; i < 4; ++i) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "tiles/grass_%d.png", i);
+        a.grassTile[i] = loadTex(d, buf);
+    }
+    a.grassDarkTile         = loadTex(d, "tiles/grass_dark.png");
+    a.soilTile              = loadTex(d, "tiles/soil.png");
+    a.waterTile             = loadTex(d, "tiles/water_0.png");
+    a.townBattlementAtlas   = loadTex(d, "tiles/town_battlement_atlas.png");
+    a.townMasonryAtlas      = loadTex(d, "tiles/town_masonry_atlas.png");
+    a.interiorWallFaceAtlas = loadTex(d, "tiles/interior_wall_face_atlas.png");
+    a.townSignGoods         = loadTex(d, "sprites/town_sign_goods.png");
+    a.townSignInn           = loadTex(d, "sprites/town_sign_inn.png");
+    a.townSignWeapon        = loadTex(d, "sprites/town_sign_weapon.png");
+    a.townBannerVert        = loadTex(d, "sprites/town_banner_vert.png");
+    a.townBannerShort       = loadTex(d, "sprites/town_banner_short.png");
+    a.townMarketRed         = loadTex(d, "sprites/town_market_flowers_red.png");
+    a.townMarketOrange      = loadTex(d, "sprites/town_market_flowers_orange.png");
+    a.townMarketSacks       = loadTex(d, "sprites/town_market_sacks.png");
+    a.townRoundTurret       = loadTex(d, "sprites/town_round_turret.png");
+    a.townGateDouble        = loadTex(d, "sprites/town_gate_double.png");
+    a.townWallIvy           = loadTex(d, "sprites/town_wall_ivy.png");
+
     // --- heroes
     const char* heroes[3] = { "sprites/hero_knight.png", "sprites/hero_mage.png", "sprites/hero_cleric.png" };
     for (int i = 0; i < 3; i++) a.heroWalk[i] = loadTex(d, heroes[i]);
@@ -978,6 +1021,8 @@ bool applyConsumable(int itemId, int heroIdx) {
 
 // ================================================================ save / load
 constexpr int SAVE_MAX_IDS = 256;
+// Version 6 layout: adds active map mode (Overworld vs Town), active town
+// overworld coordinates, overworld return coords, and ship state.
 struct SaveBlob {
     uint32_t magic;
     uint32_t version;
@@ -996,6 +1041,29 @@ struct SaveBlob {
                                    // bit6 crtOn, bit7 hasBoat (older saves read as no boat),
                                    // bits 8-9 tideFound, bit10 waystone, bit11 frontier guardian,
                                    // bit12 regional-save marker, bit13 grandfathered far passage
+    int32_t openedChestCount;
+    uint64_t openedChests[SAVE_MAX_IDS];
+    int32_t defeatedMonsterCount;
+    uint64_t defeatedMonsters[SAVE_MAX_IDS];
+    // v6 map-session fields (overworld <-> bounded town persistence)
+    int32_t savedMode;             // MODE_OVERWORLD or MODE_TOWN
+    int32_t townOwTx, townOwTy;
+    float owReturnX, owReturnY;
+    int32_t onShip;
+    uint32_t checksum;
+};
+// Version 5b layout (6 quests, pre-bounded-town) — migrates cleanly into v6.
+struct SaveBlobV5Full {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t worldSeed;
+    float px, py;
+    float runTime;
+    int32_t gil, defeatedCount, slimesSlain;
+    int32_t inventory[IT_COUNT];
+    SaveBlob::HS heroes[3];
+    int32_t questState[QUEST_COUNT], questProgress[QUEST_COUNT], questGoal[QUEST_COUNT];
+    uint32_t flags;
     int32_t openedChestCount;
     uint64_t openedChests[SAVE_MAX_IDS];
     int32_t defeatedMonsterCount;
@@ -1024,8 +1092,6 @@ struct SaveBlobV4 {
     uint32_t checksum;
 };
 // Version 5a layout: the four-quest save written before the Agents' Commons.
-// The checksum cover is identical (it ends at the same fields), so an old blob
-// is byte-for-byte readable as a SaveBlob once the missing quest row is zeroed.
 struct SaveBlobV5 {
     uint32_t magic;
     uint32_t version;
@@ -1046,15 +1112,14 @@ struct SaveBlobV5 {
     uint64_t defeatedMonsters[SAVE_MAX_IDS];
     uint32_t checksum;
 };
-// Everything up to the quest table is byte-identical; the only difference is
-// the number of quest rows, and the old checksum covers exactly its own bytes.
 static_assert(offsetof(SaveBlobV5, questState) == offsetof(SaveBlob, questState),
               "fields before the quest table must not move");
 static_assert(sizeof(SaveBlobV5::HS) == sizeof(SaveBlob::HS), "hero rows must not move");
 static_assert(sizeof(SaveBlobV5) != sizeof(SaveBlob), "old and new saves must not collide");
+static_assert(sizeof(SaveBlobV5Full) != sizeof(SaveBlob), "v5 and v6 saves must not collide");
 
 static const uint32_t SAVE_MAGIC = 0x41504641;   // 'APFA'
-static const uint32_t SAVE_VERSION = 5;
+static const uint32_t SAVE_VERSION = 6;
 
 template <typename T>
 static uint32_t blobChecksumOf(const T& b) {
@@ -1134,6 +1199,17 @@ bool saveGame() {
     }
     b.defeatedMonsterCount = dm;
 
+    // v6 map session fields: remember whether the party is inside a Town or on the World Map!
+    Mode curScene = (g.mode == MODE_MENU) ? g.menuReturn
+                  : (g.mode == MODE_DIALOG ? g.dialogReturn : g.mode);
+    bool savingInTown = (curScene == MODE_TOWN) || (curScene == MODE_ROOM && townActive());
+    b.savedMode = savingInTown ? (int32_t)MODE_TOWN : (int32_t)MODE_OVERWORLD;
+    b.townOwTx  = g.currentTownOwTx;
+    b.townOwTy  = g.currentTownOwTy;
+    b.owReturnX = g.owReturnX;
+    b.owReturnY = g.owReturnY;
+    b.onShip    = g.onShip ? 1 : 0;
+
     b.checksum = blobChecksum(b);
     bool ok = SaveFileData(saveFilePath().c_str(), &b, sizeof(b));
     if (ok) g.saveExists = true;
@@ -1146,20 +1222,34 @@ bool loadGame() {
     if (!data) return false;
 
     SaveBlob b{};
-    bool fromV4 = false;
+    bool fromLegacy = false;
     if (size == (int)sizeof(SaveBlob)) {
         memcpy(&b, data, sizeof(b));
         UnloadFileData(data);
         if (b.magic != SAVE_MAGIC || b.version != SAVE_VERSION || blobChecksum(b) != b.checksum)
             return false;
+    } else if (size == (int)sizeof(SaveBlobV5Full)) {
+        SaveBlobV5Full o;
+        memcpy(&o, data, sizeof(o));
+        UnloadFileData(data);
+        if (o.magic != SAVE_MAGIC || o.version != 5 || blobChecksumOf(o) != o.checksum)
+            return false;
+        fromLegacy = true;
+        memcpy(&b, &o, offsetof(SaveBlobV5Full, checksum));
+        b.version = SAVE_VERSION;
+        b.savedMode = (int32_t)MODE_TOWN;
+        b.townOwTx = 0; b.townOwTy = 0;
+        b.owReturnX = 0.5f; b.owReturnY = 0.5f;
+        b.onShip = 0;
     } else if (size == (int)sizeof(SaveBlobV5)) {
         // Saves written before the Agents' Commons: same fields, one fewer
         // quest row. Copy the covered bytes and open the new errand fresh.
         SaveBlobV5 o;
         memcpy(&o, data, sizeof(o));
         UnloadFileData(data);
-        if (o.magic != SAVE_MAGIC || o.version != SAVE_VERSION || blobChecksumOf(o) != o.checksum)
+        if (o.magic != SAVE_MAGIC || o.version != 5 || blobChecksumOf(o) != o.checksum)
             return false;
+        fromLegacy = true;
         memcpy(&b, &o, offsetof(SaveBlob, questState));          // magic .. heroes
         memcpy(b.inventory, o.inventory, sizeof(b.inventory) < sizeof(o.inventory) ? sizeof(b.inventory) : sizeof(o.inventory));
         for (int q = 0; q < 4; q++) {
@@ -1175,14 +1265,18 @@ bool loadGame() {
         b.questState[QUEST_COMMONS] = QS_OFFERED;
         b.questProgress[QUEST_COMMONS] = 0;
         b.questGoal[QUEST_COMMONS] = 1;
+        b.savedMode = (int32_t)MODE_TOWN;
+        b.townOwTx = 0; b.townOwTy = 0;
+        b.owReturnX = 0.5f; b.owReturnY = 0.5f;
+        b.onShip = 0;
     } else if (size == (int)sizeof(SaveBlobV4)) {
-        // Pre-dungeon save: migrate inventory & quests to the v5 layout.
+        // Pre-dungeon save: migrate inventory & quests to the v6 layout.
         SaveBlobV4 o;
         memcpy(&o, data, sizeof(o));
         UnloadFileData(data);
         if (o.magic != SAVE_MAGIC || o.version != 4 || blobChecksumOf(o) != o.checksum)
             return false;
-        fromV4 = true;
+        fromLegacy = true;
         b.magic = SAVE_MAGIC;
         b.version = SAVE_VERSION;
         b.worldSeed = o.worldSeed;
@@ -1208,10 +1302,10 @@ bool loadGame() {
             b.questProgress[q] = o.questProgress[q];
             b.questGoal[q] = o.questGoal[q];
         }
-        b.questState[QUEST_DEEP] = QS_OFFERED;   // new quest, fresh in the log
+        b.questState[QUEST_DEEP] = QS_OFFERED;
         b.questProgress[QUEST_DEEP] = 0;
         b.questGoal[QUEST_DEEP] = 1;
-        b.questState[QUEST_COMMONS] = QS_OFFERED; // and the keeper's errand
+        b.questState[QUEST_COMMONS] = QS_OFFERED;
         b.questProgress[QUEST_COMMONS] = 0;
         b.questGoal[QUEST_COMMONS] = 1;
         b.flags = o.flags;
@@ -1219,12 +1313,15 @@ bool loadGame() {
         memcpy(b.openedChests, o.openedChests, sizeof(b.openedChests));
         b.defeatedMonsterCount = o.defeatedMonsterCount;
         memcpy(b.defeatedMonsters, o.defeatedMonsters, sizeof(b.defeatedMonsters));
+        b.savedMode = (int32_t)MODE_TOWN;
+        b.townOwTx = 0; b.townOwTy = 0;
+        b.owReturnX = 0.5f; b.owReturnY = 0.5f;
+        b.onShip = 0;
         b.checksum = blobChecksum(b);
     } else {
         UnloadFileData(data);
         return false;
     }
-    (void)fromV4;
 
     g.worldSeed = b.worldSeed;
     g.px = b.px; g.py = b.py;
@@ -1314,33 +1411,45 @@ bool loadGame() {
     g.walkTargetInteract = false;
     g.encounterGrace = 3.0f;
     g.stepDist = 0.0f;
-    parkSavedParty();   // a save can be read before the mode is set; be safe
-    if (g.sailing) { g.sailing = false; }
-    g.mode = MODE_OVERWORLD;
-    if (g.hasBoat && cellSailable((int)floorf(g.px), (int)floorf(g.py))) {
-        // The save was written afloat; parkSavedParty() has already moved the
-        // party onto a bank, so this is only a belt-and-braces check.
-        int x = (int)floorf(g.px), y = (int)floorf(g.py);
-        nearestWalkable(x, y, x, y);
-        if (cellWalkable(x, y)) { g.px = x + 0.5f; g.py = y + 0.5f; }
-    }
-    // Keep older saves playable if the new river, cliff or grove covers the
-    // saved position. The save layout and quest/chest IDs haven't changed.
-    villageLoadAt(g.px,g.py);
-    if (positionBlocked(g.px,g.py,0.25f)) {
-        int x=(int)floorf(g.px), y=(int)floorf(g.py);
-        nearestWalkable(x,y,x,y);
-        if (cellWalkable(x,y)) { g.px=x+0.5f; g.py=y+0.5f; }
-        else { g.px=0.5f; g.py=4.5f; }
-        villageLoadAt(g.px,g.py);
+    g.sailing = false;
+    worldInit(g.worldSeed);
+
+    g.owReturnX = b.owReturnX;
+    g.owReturnY = b.owReturnY;
+    g.currentTownOwTx = b.townOwTx;
+    g.currentTownOwTy = b.townOwTy;
+    g.onShip = (b.onShip != 0) && g.hasBoat;
+    g.owSiteDebounce = 0.85f;
+
+    if (fromLegacy || b.savedMode == (int32_t)MODE_TOWN) {
+        townRebuildRuntime(g.currentTownOwTx, g.currentTownOwTy);
+        const apfa::TownDef* td = townCurrent();
+        if (fromLegacy || !td || !apfa::townCellWalkable(*td, (int)floorf(g.px), (int)floorf(g.py))) {
+            if (td) { g.px = (float)td->spawnTx + 0.5f; g.py = (float)td->spawnTy + 0.5f; }
+        }
+        g.mode = MODE_TOWN;
+    } else {
+        g.mode = MODE_OVERWORLD;
+        auto cell = apfa::owSampleTile(g.worldSeed, (int)floorf(g.px), (int)floorf(g.py));
+        bool ok = g.onShip ? apfa::owIsSailable(cell.kind) : apfa::owIsWalkableOnFoot(cell.kind);
+        if (!ok) {
+            g.px = 0.5f; g.py = 1.5f; g.onShip = false;
+        }
+        overworldSnapCamera();
     }
     return true;
 }
 
 void newGameState(uint32_t seed) {
-    g.worldSeed = seed;
+    g.worldSeed = seed ? seed : 1337u;
+    worldInit(g.worldSeed);
     atlasResetRegion();
-    g.px = 0.5f; g.py = 4.5f;      // just south of the Elmswick plaza
+    g.px = 0.5f; g.py = 1.5f;
+    g.owReturnX = 0.5f; g.owReturnY = 0.5f;
+    g.currentTownOwTx = 0; g.currentTownOwTy = 0;
+    g.onShip = false;
+    g.owSiteDebounce = 0.0f;
+    g.owLastSiteTx = INT_MIN; g.owLastSiteTy = INT_MIN;
     g.facing = 0;
     g.sideFlip = false;
     g.runTime = 0;

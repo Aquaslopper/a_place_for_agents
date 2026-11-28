@@ -25,6 +25,9 @@ add_executable(aplaceforagents WIN32
     src/music.cpp
     src/map.cpp
     src/core.cpp
+    src/overworld_gen.cpp
+    src/town_gen.cpp
+    src/town.cpp
     src/world.cpp
     src/field.cpp
     src/regions.cpp
