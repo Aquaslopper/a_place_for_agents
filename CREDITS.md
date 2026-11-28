@@ -43,6 +43,14 @@ native-resolution crops of Jason Perry's **CC0** OpenRTP
 [Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles)
 are explicitly offered in RM2k/3 chipset format for EasyRPG under CC0.
 
+## Procedural town and interior source crops
+
+`tools/town_art.py` crops Jason Perry's CC0 `ChipSet/Exterior.png` and
+`ChipSet/Interior.png` at native resolution and removes the colour key. The
+three `interior_door_*` pose strips are keyed crops of **[Tom Lemmens](https://github.com/lemtom)**'s
+`CharSet/Object1.png` doors (CC BY 4.0 under the vendored `COPYING`; the
+CC0 chest attribution on that sheet does not apply to the doors).
+
 ## Overworld source sheets (gathered for the Lufia 2-style world map)
 
 Source sheets vendored under `assets/source/overworld/` for the upcoming

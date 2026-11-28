@@ -23,6 +23,7 @@ from rtp_sheet import (EXT, WLD, INT, DUN, KEY_CYAN, KEY_PINK, KEY_PINK2, load, 
                        tile, rect, tcell, save, trim, canvas, centered, centered_mid, tint)
 from landscape_art import make_landscape, ramp
 from village_art import build_buildings
+from town_art import build_town_art
 from battle_scenery import build_backdrops
 
 # =================================================================== 1. tiles
@@ -626,6 +627,7 @@ def main():
     build_objects()
     build_commons_stone()
     build_buildings()
+    build_town_art()
     build_backdrops()
     build_heroes()
     build_villagers()
