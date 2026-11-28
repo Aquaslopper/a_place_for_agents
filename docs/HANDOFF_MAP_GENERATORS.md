@@ -1,4 +1,4 @@
-# Handoff: Step-by-Step Procedural Map Pipeline (Towns, Interiors, Caves, Dungeons, Quest Maps)
+# Handoff: Procedural Map Pipeline (Towns, Interiors, Caves, Dungeons, Quest Maps)
 
 **Status:** Track 1 Steps 1.1 and 1.2 complete. Next: Step 1.3 (town/interior plates and stamps), then Step 1.4 (seeded layout generators).
 **Follows:** `docs/HANDOFF_PROCEDURAL_JRPG_WORLD.md` and `docs/HANDOFF_PLATE_LAYOUT_GENERATOR.md` (Overworld plate builder + `tools/build_overworld_layout.py` completed).
@@ -15,7 +15,7 @@ The overworld pipeline established a reliable four-step workflow that avoids was
 4. **Step 4 — Build Deterministic Seeded Randomizers & Verifiers (`tools/build_*_layout.py`):** Self-contained Python tools matching `tools/build_overworld_layout.py` (`--seed`, `--check`, byte-identical JSON + PNG preview, and domain invariants).
 5. **Step 5 — C++ Game Integration (only after Steps 1–4 pass visually and structurally):** Replace `src/room.cpp`, expand `src/dungeon.cpp`, wire towns + quest sites + `tools/build_overworld_layout.py` logic behind one shared `MapInstance` / portal system, and restore `CMakeLists.txt`.
 
-> **Important house discipline:** Run **one dictated track/step at a time**. PR #32 restored `src/world.*` and `src/overworld.cpp` with a first-pass overworld. Do not jump straight into C++ rewrites: the shared map integration below still waits on the procedural map tools. Keep `tools/validate_assets.py` passing at all times, and never create test suites, `AGENTS.md`, or `build.sh`.
+> **Scope discipline:** Stay focused on the requested deliverable. Complete it end-to-end, including necessary validation. Do not expand into adjacent tasks or lengthy speculative planning, but do not split bounded work into micro-steps or pause for approval between them. Follow the dependency order below: C++ integration depends on the procedural map tools and their checks. PR #32 restored `src/world.*` and `src/overworld.cpp` with a first-pass overworld; do not treat that as the completed MapSystem. Keep `tools/validate_assets.py` passing at all times, and never create test suites, `AGENTS.md`, or `build.sh`.
 
 ---
 
