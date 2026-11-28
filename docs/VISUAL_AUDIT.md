@@ -210,16 +210,31 @@ the renderer's own corner-masked stamping, so the two rows differ only in the
 atlas. Run `python3 tools/field_preview.py` (and with `FIELD_ASSETS` pointing at
 an older checkout for the "before").
 
-| | colours/screen | colours per 16px tile | local contrast |
-|---|---|---|---|
-| Lufia II — Elcid (reference) | 70 | 8.0 | **26.7** |
-| field, before | 116 | 6.0 | **7.0** |
-| field, after | 116 | 7.6 | **20.0** |
+Measured against a real Lufia II frame (Foomy Woods, 240×224, read from
+`image-search/`, which is gitignored — study only, never shipped), on the same
+terms: colours per 16px tile, local contrast (mean |ΔL| between neighbours),
+share of pixels equal to their right neighbour ("flat"), mean luminance, mean
+saturation.
 
-Local contrast — the thing that made the meadow look like felt — is up **2.9×**,
-and colours per tile are now inside the reference's band instead of being a
-three-value speckle. Colours per screen did not move (the palette was never the
-problem in the field).
+| | colours/tile | contrast | flat | luminance | saturation |
+|---|---|---|---|---|---|
+| Lufia II grass tiles (n=29) | 7.2 | 21.9 | 26.6% | 63.9 | 58.8 |
+| my grass tiles, first pass | 5.8 | 15.1 | 61.6% | 94.7 | 71.5 |
+| my grass tiles, now | 5.0 | 18.8 | 36.4% | 66.3 | 61.9 |
+
+The first pass got the *shape* of the problem wrong: it raised contrast with
+blobs on a flat fill, which measured 61.6% flat — three times the reference —
+because a blob-on-fill tile is large areas of one colour with busy patches. The
+reference is the opposite: an even, fine weave across the whole tile, with the
+strong values used sparingly. Rebuilt as a two-period diagonal weave with
+irregular gaps, the tile is now in the reference's band on every axis, and the
+whole outdoor palette was pulled 7% down and 8% toward grey to fix an exposure
+that had measured 48% too bright.
+
+Screen-level, same frame terms: before **7.4** contrast / **46%** flat, now
+**18.5** / **41%**; the reference screen is **27.3** / **36%**. The remaining gap
+is *not* in the tiles — it is object density, authored composition and
+elevation, which is the next pass.
 
 Preview: `docs/visual_audit/field_before_after.png`.
 
