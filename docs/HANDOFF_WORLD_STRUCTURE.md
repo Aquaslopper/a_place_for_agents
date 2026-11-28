@@ -18,9 +18,28 @@ letter:
 4. everything **procedurally generated from a seed**, and identical when
    regenerated.
 
-Right now this game has (1) a fractal noise field with no boundaries, (2) no
-town maps at all, (3) good dungeons, (4) three separate generators that never
-touch the runtime.
+### Implementation update — 2026-11-28
+
+This branch now has a **standalone MapDef data layer** in `src/map.hpp/.cpp`:
+seed-only bounded atlas cells, routes, towns, interiors, fields and four dungeon
+floors; reciprocal edge ports and door/stair portals; local reachability checks;
+and canonical map fingerprints. `tools/verify_world.py` exercises generation,
+links, scripted traversal and 201 eastward atlas cells. Its extended run passed
+100 seeds and an atlas radius of 8. A versioned, checksummed `MapSessionSave`
+payload also round-trips a generated-town identity, player tile and per-map
+object flags.
+
+This is **not yet runtime integration**. The legacy game modules still do not
+call `MapStore`; the new map-session payload is not embedded in `core.cpp`'s
+`SaveBlob`; no generated MapDef is rendered or playable in the game. The scoped
+headless verifier passes, and `g++ -fsyntax-only src/*.cpp` passes, but the full
+raylib target has not linked: CMake configuration is blocked by missing X11
+development files, and the legacy world helpers still have unresolved
+implementations. Do not describe the new world as playable.
+
+Right now this game has (1) legacy, unbounded-world call sites, (2) no generated
+town maps in the runtime, (3) good existing dungeons, and (4) the new bounded
+MapDef generators, still isolated from gameplay.
 
 ---
 
@@ -28,9 +47,11 @@ touch the runtime.
 
 | System | Reality | Where |
 |---|---|---|
-| The field the player walks on | **One infinite noise field.** `sampleGround(tx,ty)` is a pure function of world coordinates — there is no map, no boundary, no "you are now entering Mirefen". | `game.hpp:226`, `sampleGround` call sites in `render.cpp`, `battle.cpp`, `music.cpp`, `sail.cpp`, `pieces.cpp` |
+| The field the legacy player code expects | The modules still ask for arbitrary world-coordinate `sampleGround(tx,ty)` reads, but this checkout has no definition for that API and no active `MapId`; the game target therefore does not link. | `game.hpp`, call sites in `render.cpp`, `battle.cpp`, `music.cpp`, `sail.cpp`, `pieces.cpp` |
+| Bounded map data | **Implemented as a standalone layer, not used by gameplay.** `MapId`, `MapDef`, `MapStore`, atlas cells, two-ended routes, towns/interiors, fields, dungeon floors, portals and reachability live in the new C++ module. | `src/map.hpp`, `src/map.cpp` |
+| Map verifier / session payload | Determinism, boundary-port reciprocity, scripted traversal, 201-cell outward generation and a checksummed map-session save payload pass headlessly. The payload is not connected to `SaveBlob`. | `tools/verify_world.py`, `tools/verify_world.cpp`, `mapSessionSave*` |
 | "Map pieces" | `PIECE_W×PIECE_H` = 44×26 tiles of **camera framing + seam dressing** (treeline/hedge/rock/gate) computed from a hash. They are not maps: no identity, no ports, no state, no generation of contents. | `pieces.cpp/.hpp` |
-| Carcassonne overworld | A **100-plate** 3×3-tile overworld exists in `world.cpp`, and a working AC-3 edge-matching layout generator exists in Python. **It is dead code:** `worldInit()` / `worldReset()` are *never called* anywhere. Nothing but `worldEnterSiteAt()` is referenced. | `world.cpp`, `tools/build_overworld_layout.py`, `docs/overworld_assets/` |
+| Carcassonne overworld | A **100-plate** 3×3-tile generator and a Python AC-3 layout tool exist. Some query/entry functions are called, but `worldInit()` / `worldReset()` are never called and the plate data is not the renderer's terrain source; this is not a coherent active world. | `world.cpp`, `tools/build_overworld_layout.py`, `docs/overworld_assets/` |
 | Towns | **There are none.** Entering a `OW_SITE_TOWN` icon calls `enterBuilding(0)`, which opens a single **15×11 shop interior** (`MODE_ROOM`). That is a stub, not a town. | `world.cpp:307-319`, `room.cpp` |
 | Town / interior generators | Complete, seeded, with `--check` invariants (edge match, overlap, BFS door reachability, gate round-trips) — **in Python only, never integrated.** 45 town plates + 8 interior stamps. | `tools/build_town_layout.py`, `tools/build_interior_layout.py`, `docs/town_assets/` |
 | Dungeons | **Real and good.** Seeded BSP + cellular weathering, 56×40, multi-floor, chests, vault, guardians, themes. This is the one part built to spec. | `dungeon.cpp` (~1700 lines) |
@@ -38,19 +59,21 @@ touch the runtime.
 
 ### The disease
 
-There are **two contradictory world models in the same source tree** and the
-game runs on the wrong one:
+There are **three separate pieces, none of which is the complete active world**:
 
-- `world.cpp` + plates + `atlas.cpp` + `regions.cpp`: a **bounded, plate-based,
-  site-bearing world** with countries, ranges, passes and roads. Correct shape,
-  dead code.
-- `sampleGround()`: **infinite noise**, which is what actually renders, collides
-  and generates encounters.
+- `world.cpp` + plates + `atlas.cpp` + `regions.cpp`: a bounded, plate-based
+  world with countries and sites, but no active runtime call path.
+- Legacy field call sites: they request unbounded `sampleGround(tx,ty)` reads;
+  the definition is missing in this checkout, so those modules do not link.
+- `src/map.cpp`: the new pure, bounded `MapDef` generator and map graph. It is
+  the target model, but still isolated from rendering, movement and `SaveBlob`.
 
-Every previous pass tried to make the noise field *look* like a JRPG world
-(biomes, coasts, "pieces", seams, a travel map). That cannot succeed. Noise has
-no places in it. This is the same failure the human already documented as
-"the repo is a lie, this is not an snes jrpg" in
+The next step is to reconcile the runtime around `MapDef`, not add another
+terrain generator or revive noise as the source of truth. Every previous pass
+tried to make the noise field *look* like a JRPG world (biomes, coasts, "pieces",
+seams, a travel map). That cannot supply explicit places and exits. This is the
+same failure the human already documented as "the repo is a lie, this is not an
+snes jrpg" in
 [`HANDOFF_PROCEDURAL_JRPG_WORLD.md`](HANDOFF_PROCEDURAL_JRPG_WORLD.md) — and it
 is still true. Do not add a fourth coat of paint to the noise.
 
@@ -131,23 +154,27 @@ CI on `main` currently fails at the **Build** step (Linux and Windows both).
 That is parked by the human's instruction — do not spend a pass diagnosing it
 for its own sake, but **the first phase of world work is to get a green local
 build**, because every acceptance test here needs a binary. Known shape of the
-problem: declarations in `game.hpp`/`world.hpp` without definitions
-(`sampleGround`, `propAt`, `cellWalkable`, `inOpenSea` are called in 6+ TUs and
-defined in none as committed), and `atlas.cpp`/`commons.cpp` referencing fields
-and enum values that no longer exist (`SurveyTerrain::swamp`,
-`LOCKET_SITE_TX`, `VD_STATUS_STONE`). Treat it as "reconcile the two world
-models", not as "chase compiler errors".
+problem: legacy world helpers still have no definitions (`sampleGround`,
+`propAt`, `cellWalkable`, `inOpenSea`, and several rendering/village helpers),
+while CMake configuration is blocked here by missing X11 development files.
+The API/type drift in `world.hpp` has been reconciled enough for
+`g++ -fsyntax-only src/*.cpp` to pass, but the game has not linked. Treat this
+as "reconcile the runtime around the map model", not as "chase compiler errors".
 
-### Phase 1 — MapId, MapDef, MapStore; retire the blob
-- Add `src/map.hpp/.cpp` with the contracts above.
-- `sampleGround(tx,ty)` becomes `mapGround(MapId, lx, ly)` — a lookup into the
-  current `MapDef`. The name `sampleGround` may survive as a thin accessor while
-  you migrate call sites; the *semantics* must stop being "noise at world
-  coordinates".
-- `pieces.cpp` is either deleted or demoted to a **local-map décor pass** (a
-  forest map's interior composition). Seams between world cells stop existing;
-  ports replace them.
-- **Test:** `mapGenerate` on 10 seeds × 4 kinds, twice, byte-identical.
+### Phase 1 — MapId, MapDef, MapStore; retire the blob (data layer implemented)
+- `src/map.hpp/.cpp` now provide pure bounded map generation, `MapStore`,
+  canonical fingerprints, structural/reachability validation, reciprocal port
+  and portal records, and versioned `MapSessionSave` payload primitives.
+- The verifier covers determinism on 100 seeds, reciprocal routes/doors, a
+  scripted town/route/interior journey, 201 outward atlas cells, and a
+  generated-town session save round-trip. Those checks exercise map data only;
+  `sampleGround(tx,ty)` still has no runtime adapter and the payload is not in
+  `core.cpp`'s `SaveBlob`.
+- The remaining migration is to make `sampleGround`/movement/rendering read the
+  active `MapDef`, then add the save migration required by the game.
+- `pieces.cpp` is still a legacy global-field dressing pass; decide whether to
+  remove it or demote its useful pieces to local-map décor after runtime wiring.
+  The map generator does not call it.
 
 ### Phase 2 — the world atlas (the Lufia overworld)
 - Revive `world.cpp`'s plate world as the **atlas**, and call it. Use the
