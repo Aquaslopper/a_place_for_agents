@@ -139,6 +139,7 @@ OwSiteKind worldSiteAt(int tx, int ty);
 // Transporter / map transition helpers
 bool worldEnterSiteAt(int tx, int ty);
 void worldReturnToOverworld();
+void worldDrawGroundTiles(int x0, int y0, int x1, int y1);
 void worldDrawOverworld();
 void worldDrawOverviewMap();
 const char* worldSitePrompt(int tx, int ty);

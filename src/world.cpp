@@ -279,15 +279,11 @@ void worldReturnToOverworld() {
 }
 
 // ================================================================ Lufia II Overworld Renderer
-void worldDrawOverworld() {
+// The ground pass is shared with sailing: the sea must be the same atlas from
+// the deck of a boat as it is from the shore, not the interior landscape tiles
+// the old sail renderer used.
+void worldDrawGroundTiles(int x0, int y0, int x1, int y1) {
     uint32_t seed = activeSeed();
-    ClearBackground(Color{ 30, 74, 114, 255 });
-
-    int x0 = (int)floorf(g.camX / TILE) - 2;
-    int y0 = (int)floorf(g.camY / TILE) - 2;
-    int x1 = (int)ceilf((g.camX + (float)g.vw) / TILE) + 2;
-    int y1 = (int)ceilf((g.camY + (float)g.vh) / TILE) + 2;
-
     int waterFrame = ((int)(g.totalTime * 2.4f)) & 3;
 
     // Pass 1: Autotiled SNES Ocean, Rounded Coastlines, Biome Overlays, Forests, Mountains, Roads
@@ -402,10 +398,20 @@ void worldDrawOverworld() {
             }
         }
     }
+}
+
+void worldDrawOverworld() {
+    ClearBackground(Color{ 30, 74, 114, 255 });
+
+    int x0 = (int)floorf(g.camX / TILE) - 2;
+    int y0 = (int)floorf(g.camY / TILE) - 2;
+    int x1 = (int)ceilf((g.camX + (float)g.vw) / TILE) + 2;
+    int y1 = (int)ceilf((g.camY + (float)g.vh) / TILE) + 2;
+    worldDrawGroundTiles(x0, y0, x1, y1);
 
     // Pass 2: Y-Sorted Miniature Lufia II Site Icons + Hero / Ship!
     std::vector<apfa::OwSiteInfo> sites;
-    apfa::owSitesInRect(seed, x0 - 2, y0 - 2, x1 + 2, y1 + 2, sites);
+    apfa::owSitesInRect(activeSeed(), x0 - 2, y0 - 2, x1 + 2, y1 + 2, sites);
 
     struct OwDraw { float sortY; int kind; int idx; };
     std::vector<OwDraw> list;

@@ -9,6 +9,7 @@
 #include "world.hpp"
 #include "commons.hpp"
 #include "regions.hpp"
+#include "overworld_gen.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -862,30 +863,6 @@ void atlasUpdate(float px, float py, float dt) {
 // ================================================================ survey page
 namespace {
 
-struct SurveyTile { Color c; };
-int gMapPx = 0, gMapPy = 0, gMapSize = 0;
-uint32_t gMapSeed = 0;
-
-// A sketch has to stay inside its panel: clip every road segment to it.
-bool clipSegment(float& x0, float& y0, float& x1, float& y1,
-                 float minX, float minY, float maxX, float maxY) {
-    float dx = x1 - x0, dy = y1 - y0;
-    float t0 = 0.0f, t1 = 1.0f;
-    auto edge = [&](float p, float q) {
-        if (p == 0.0f) return q >= 0.0f;
-        float r = q / p;
-        if (p < 0.0f) { if (r > t1) return false; if (r > t0) t0 = r; }
-        else { if (r < t0) return false; if (r < t1) t1 = r; }
-        return true;
-    };
-    if (!edge(-dx, x0 - minX) || !edge(dx, maxX - x0) ||
-        !edge(-dy, y0 - minY) || !edge(dy, maxY - y0)) return false;
-    float nx0 = x0 + t0 * dx, ny0 = y0 + t0 * dy;
-    float nx1 = x0 + t1 * dx, ny1 = y0 + t1 * dy;
-    x0 = nx0; y0 = ny0; x1 = nx1; y1 = ny1;
-    return true;
-}
-
 // Labels are placed nearest-first and never on top of one another. A survey
 // page that smears six region names into one line is worse than a blank one.
 struct LabelBoxes {
@@ -907,273 +884,132 @@ struct LabelBoxes {
     }
 };
 
-Color biomeColor(const SurveyTerrain& st) {
-    if (st.deep) return Color{ 38, 62, 120, 255 };
-    if (st.water) return Color{ 62, 104, 168, 255 };
-    if (st.ice) return Color{ 196, 224, 236, 255 };
-    if (st.crag) return Color{ 118, 112, 106, 255 };
-    switch (st.biome) {
-        case BI_FOREST: return Color{ 48, 96, 62, 255 };
-        case BI_AMBER:  return Color{ 150, 118, 52, 255 };
-        case BI_FEN:    return Color{ 78, 96, 74, 255 };
-        case BI_HEATH:  return Color{ 132, 126, 94, 255 };
-        case BI_FROST:  return Color{ 208, 216, 226, 255 };
-        case BI_DUNES:  return Color{ 196, 168, 116, 255 };
-        default:        return Color{ 88, 134, 84, 255 };
-    }
-}
-
 } // namespace
 
 // The page is a field sketch, not a save-tracked atlas: it draws the country
 // the party is standing in — terrain, roads, named places — and it is rebuilt
 // whenever the party has moved far enough that the sketch would be stale.
 void atlasJournalDraw(float ox, float oy) {
+    // The Survey draws the same world the party is walking on. It used to draw
+    // the retired noise field, which meant the journal disagreed with the map
+    // under the party's feet; every cell below now comes from the one Lufia II
+    // world generator (src/overworld_gen.cpp).
     const float px = ox + 122.0f, py = oy + 36.0f;
     const float pw = 366.0f, ph = 206.0f;
-    const int BLOCK = 4;                     // screen pixels per drawn cell
-    const int TILES_PER_BLOCK = 8;           // world tiles per drawn cell
-    const int BW = (int)(pw / BLOCK), BH = (int)(ph / BLOCK);
-    const float partyX = g.sailing ? gSailX : g.px, partyY = g.sailing ? gSailY : g.py;
-    const int originX = (int)floorf(partyX) - (BW / 2) * TILES_PER_BLOCK;
-    const int originY = (int)floorf(partyY) - (BH / 2) * TILES_PER_BLOCK;
-    const int spanX = BW * TILES_PER_BLOCK, spanY = BH * TILES_PER_BLOCK;
-    const int size = BW * BH;
-
-    static std::vector<Color> sketch;
-    static int lastAccess = -1;
-    int access = (regionPassOpen(1) ? 1 : 0) | (regionPassOpen(2) ? 2 : 0);
-    if (gMapSeed != g.worldSeed || gMapSize != size || lastAccess != access) {
-        lastAccess = access;
-        sketch.assign((size_t)size, Color{ 0, 0, 0, 0 });
-        gMapSeed = g.worldSeed; gMapSize = size; gMapPx = 1 << 30; gMapPy = 1 << 30;
-    }
-    if (abs(gMapPx - originX) >= TILES_PER_BLOCK || abs(gMapPy - originY) >= TILES_PER_BLOCK) {
-        gMapPx = originX; gMapPy = originY;
-        for (int by = 0; by < BH; ++by)
-            for (int bx = 0; bx < BW; ++bx) {
-                int tx = originX + bx * TILES_PER_BLOCK + TILES_PER_BLOCK / 2;
-                int ty = originY + by * TILES_PER_BLOCK + TILES_PER_BLOCK / 2;
-                SurveyTerrain st = worldSurveyTerrain(tx, ty);
-                // The Open Water: past the coast the sketch is sea, not land.
-                // Without this the map lies — it paints a forest out to the
-                // edge of the page and a player reads that as "keep walking".
-                float sx = (float)tx, sy = (float)ty;
-                if (sx * sx + sy * sy > shoreRadius() * shoreRadius()) st.water = st.deep = true;
-                Color c = biomeColor(st);
-                RegionCell rc = regionCellAt(tx, ty);
-                if (rc.terrain == REGION_RANGE || (rc.gate && !regionPassOpen(rc.ring)))
-                    c = Color{95, 92, 91, 255};
-                else if (rc.terrain == REGION_PASS || frontierRoadAt(tx, ty))
-                    c = Color{184, 158, 113, 255};
-                sketch[(size_t)by * BW + bx] = c;
-            }
-    }
+    const int BLOCK = 3;                 // screen pixels per drawn cell
+    const int TILES_PER_BLOCK = 2;       // world tiles per drawn cell (a country, not an atlas)
+    const int BW = static_cast<int>(pw / BLOCK);
+    const int BH = static_cast<int>(ph / BLOCK);
+    const float partyX = g.sailing ? gSailX : g.px;
+    const float partyY = g.sailing ? gSailY : g.py;
+    const int originX = static_cast<int>(floorf(partyX)) - (BW / 2) * TILES_PER_BLOCK;
+    const int originY = static_cast<int>(floorf(partyY)) - (BH / 2) * TILES_PER_BLOCK;
+    const int spanX = BW * TILES_PER_BLOCK;
+    const int spanY = BH * TILES_PER_BLOCK;
+    const uint32_t seed = g.worldSeed ? g.worldSeed : 1337u;
 
     drawPixelPanel({ px - 2, py - 2, pw + 4, ph + 4 }, Color{ 20, 26, 46, 255 },
                    Color{ 70, 88, 140, 220 });
+
+    auto water = [](apfa::OwTileKind k) { return k == apfa::OWT_SEA || k == apfa::OWT_DEEP_SEA; };
     for (int by = 0; by < BH; ++by)
         for (int bx = 0; bx < BW; ++bx) {
-            Color c = sketch[(size_t)by * BW + bx];
-            DrawRectangle((int)(px + bx * BLOCK), (int)(py + by * BLOCK), BLOCK, BLOCK, c);
+            int tx = originX + bx * TILES_PER_BLOCK + TILES_PER_BLOCK / 2;
+            int ty = originY + by * TILES_PER_BLOCK + TILES_PER_BLOCK / 2;
+            auto cell = apfa::owSampleTile(seed, tx, ty);
+            Color c{ 88, 134, 84, 255 };
+            switch (cell.kind) {
+                case apfa::OWT_DEEP_SEA:      c = Color{ 30, 58, 104, 255 }; break;
+                case apfa::OWT_SEA:           c = Color{ 52, 100, 156, 255 }; break;
+                case apfa::OWT_GRASS:         c = Color{ 88, 134, 84, 255 }; break;
+                case apfa::OWT_FOREST_LEAF:   c = Color{ 48, 96, 62, 255 }; break;
+                case apfa::OWT_FOREST_PINE:   c = Color{ 42, 86, 56, 255 }; break;
+                case apfa::OWT_SAND:          c = Color{ 196, 168, 116, 255 }; break;
+                case apfa::OWT_SNOW:          c = Color{ 208, 216, 226, 255 }; break;
+                case apfa::OWT_FOREST_SNOW:   c = Color{ 168, 188, 194, 255 }; break;
+                case apfa::OWT_SWAMP:         c = Color{ 78, 96, 74, 255 }; break;
+                case apfa::OWT_MOUNTAIN:      c = Color{ 118, 112, 106, 255 }; break;
+                case apfa::OWT_MOUNTAIN_SNOW: c = Color{ 186, 190, 200, 255 }; break;
+                case apfa::OWT_BRIDGE_H:
+                case apfa::OWT_BRIDGE_V:      c = Color{ 184, 158, 113, 255 }; break;
+                case apfa::OWT_PASS_H:
+                case apfa::OWT_PASS_V:        c = Color{ 156, 132, 96, 255 }; break;
+                default: break;
+            }
+            if (cell.hasRoad && !water(cell.kind)) c = Color{ 214, 186, 138, 255 };
+            DrawRectangle(static_cast<int>(px + bx * BLOCK), static_cast<int>(py + by * BLOCK),
+                          BLOCK, BLOCK, c);
         }
-    // parchment wash so the sketch reads as a drawing of the land, not the land
-    DrawRectangle((int)px, (int)py, (int)pw, (int)ph, Fade(Color{ 226, 206, 160, 255 }, 0.14f));
+    DrawRectangle(static_cast<int>(px), static_cast<int>(py), static_cast<int>(pw), static_cast<int>(ph),
+                  Fade(Color{ 226, 206, 160, 255 }, 0.12f));
 
     auto toScreen = [&](float tx, float ty, float& sx, float& sy) {
-        sx = px + (tx - (float)originX) / (float)spanX * pw;
-        sy = py + (ty - (float)originY) / (float)spanY * ph;
+        sx = px + (tx - static_cast<float>(originX)) / static_cast<float>(spanX) * pw;
+        sy = py + (ty - static_cast<float>(originY)) / static_cast<float>(spanY) * ph;
     };
 
-    // roads
-    std::vector<AtlasRoad> roads;
-    atlasRoadsInRect(originX - 40, originY - 40, originX + spanX + 40, originY + spanY + 40, roads);
-    for (const AtlasRoad& r : roads) {
-        for (size_t i = 0; i + 1 < r.pts.size(); ++i) {
-            float ax, ay, bx, by;
-            toScreen((float)r.pts[i].first, (float)r.pts[i].second, ax, ay);
-            toScreen((float)r.pts[i + 1].first, (float)r.pts[i + 1].second, bx, by);
-            if (!clipSegment(ax, ay, bx, by, px + 1, py + 1, px + pw - 1, py + ph - 1)) continue;
-            DrawLineEx({ ax, ay }, { bx, by }, 1.6f, Color{ 214, 186, 138, 230 });
-        }
+    // The way the party came in: site markers, nearest first, story sites named
+    // first. Only a handful get names, or the sketch turns into a word cloud.
+    std::vector<apfa::OwSiteInfo> sites;
+    apfa::owSitesInRect(seed, originX - 8, originY - 8,
+                        originX + spanX + 8, originY + spanY + 8, sites);
+    std::vector<std::pair<int, const apfa::OwSiteInfo*>> ordered;
+    ordered.reserve(sites.size());
+    for (const auto& s : sites) {
+        int d = std::max(std::abs(s.tx - static_cast<int>(partyX)),
+                         std::abs(s.ty - static_cast<int>(partyY)));
+        ordered.push_back({ d, &s });
     }
-
-    // The historic North Road's seeded frontier spur is not an Atlas road.
-    // Draw it and the pass seals from the same geometry as field collision.
-    auto spur = [&](float x0, float y0, float x1, float y1) {
-        float ax, ay, bx, by;
-        toScreen(x0, y0, ax, ay); toScreen(x1, y1, bx, by);
-        if (clipSegment(ax, ay, bx, by, px + 1, py + 1, px + pw - 1, py + ph - 1))
-            DrawLineEx({ax, ay}, {bx, by}, 1.6f, Color{214, 186, 138, 230});
-    };
-    int fx, fy; frontierCavernSite(fx, fy);
-    spur(2, -126, 14, -126); spur(14, -126, 14, -165);
-    spur(14, -165, 2, -165); spur(2, -165, 2, (float)fy + 8);
-    spur(2, (float)fy + 8, (float)fx, (float)fy + 8);
-    spur((float)fx, (float)fy + 8, (float)fx, (float)fy + 1);
-    for (int ring = 1; ring <= 2; ++ring) for (int dir = 0; dir < 4; ++dir) {
-        int tx, ty; regionPassCenter(ring, dir, tx, ty);
-        float sx, sy; toScreen((float)tx, (float)ty, sx, sy);
-        if (sx < px + 3 || sx > px + pw - 3 || sy < py + 3 || sy > py + ph - 3) continue;
-        DrawRectangle((int)sx - 2, (int)sy - 2, 5, 5,
-                      regionPassOpen(ring) ? Color{255, 225, 145, 255} : Color{220, 105, 95, 255});
-    }
-
-    // places: every marker is drawn, but only the nearest few get a name, and
-    // names are placed nearest-first so the closest place always wins.
-    std::vector<std::pair<AtlasSite, std::string>> places;
-    {
-        std::vector<AtlasSite> sites;
-        atlasSitesInRect(originX - 8, originY - 8, originX + spanX + 8, originY + spanY + 8, sites);
-        for (const AtlasSite& s : sites) places.push_back({ s, std::string() });
-    }
-    // Hand-authored places belong on the sketch too: the town the party starts
-    // in, and the three story destinations the game is actually about.
-    auto addSpecial = [&](int kind, int tx, int ty, const char* name) {
-        AtlasSite a;
-        a.kind = kind; a.tx = tx; a.ty = ty;
-        places.push_back({ a, std::string(name) });
-    };
-    addSpecial(AS_VILLAGE, 0, 0, "Elmswick");
-    addSpecial(AS_CASTLE, BOSS_CASTLE_TX, BOSS_CASTLE_TY, "Castle of Elm");
-    addSpecial(AS_STONES, LOCKET_SITE_TX, LOCKET_SITE_TY, "The Standing Stones");
-    addSpecial(AS_TOWER, TOWER_SITE_TX, TOWER_SITE_TY, "The Old Watchtower");
-    {
-        int cx, cy;
-        if (startCavernSite(cx, cy)) addSpecial(AS_CAVERN, cx, cy, "Hollow Hill");
-        Landmark north = northRoadCavern();
-        addSpecial(AS_CAVERN, north.tx, north.ty, "North Road cavern");
-        addSpecial(AS_CAVERN, fx, fy, "Marches cavern");
-    }
-    std::sort(places.begin(), places.end(),
-              [&](const std::pair<AtlasSite, std::string>& a,
-                  const std::pair<AtlasSite, std::string>& b) {
-        // The story places are named first — a sketch that labels six hamlets
-        // and forgets the Castle of Elm has failed at its one job.
-        bool namedA = !a.second.empty(), namedB = !b.second.empty();
-        if (namedA != namedB) return namedA;
-        int da = std::max(abs(a.first.tx - (int)partyX), abs(a.first.ty - (int)partyY));
-        int db = std::max(abs(b.first.tx - (int)partyX), abs(b.first.ty - (int)partyY));
-        return da < db;
+    std::stable_sort(ordered.begin(), ordered.end(),
+                     [](const std::pair<int, const apfa::OwSiteInfo*>& a,
+                        const std::pair<int, const apfa::OwSiteInfo*>& b) {
+        return a.first < b.first;
     });
-    // Around the named story places the map is crowded enough already: their
-    // markers stay, but generic marks nearby do not get to shout over them.
-    std::vector<std::pair<int, int>> story;
-    for (const auto& entry : places)
-        if (!entry.second.empty()) story.push_back({ entry.first.tx, entry.first.ty });
 
     LabelBoxes labels;
     int named = 0;
-    for (const auto& entry : places) {
-        const AtlasSite& s = entry.first;
+    for (const auto& entry : ordered) {
+        const apfa::OwSiteInfo& s = *entry.second;
         float sx, sy;
-        toScreen((float)s.tx, (float)s.ty, sx, sy);
+        toScreen(static_cast<float>(s.tx), static_cast<float>(s.ty), sx, sy);
         if (sx < px + 2 || sx > px + pw - 2 || sy < py + 2 || sy > py + ph - 2) continue;
-        int d = std::max(abs(s.tx - (int)partyX), abs(s.ty - (int)partyY));
-        std::string name = entry.second;
-        Color nameCol;
-        if (s.kind == AS_VILLAGE) {
-            DrawRectangle((int)sx - 2, (int)sy - 2, 5, 5, Color{ 240, 228, 186, 255 });
-            DrawRectangleLines((int)sx - 2, (int)sy - 2, 5, 5, Color{ 92, 62, 40, 255 });
-            if (name.empty()) name = atlasSiteName(s);
-            nameCol = Color{ 255, 244, 210, 255 };
-        } else if (s.kind == AS_CAVERN) {
+        bool story = s.isStartTown || s.isBossCastle || s.isStartCavern ||
+                     s.isLocketSite || s.isTowerSite || s.tideIslandIdx >= 0;
+        if (apfa::owIsSettlement(s.type)) {
+            DrawRectangle(static_cast<int>(sx) - 2, static_cast<int>(sy) - 2, 5, 5,
+                          Color{ 240, 228, 186, 255 });
+            DrawRectangleLines(static_cast<int>(sx) - 2, static_cast<int>(sy) - 2, 5, 5,
+                               Color{ 92, 62, 40, 255 });
+        } else if (apfa::owIsDungeonSite(s.type)) {
             DrawTriangle({ sx, sy - 3.0f }, { sx - 3.0f, sy + 2.0f }, { sx + 3.0f, sy + 2.0f },
                          Color{ 44, 40, 54, 255 });
-            if (name.empty()) {
-                if (d > 90) continue;
-                name = "cavern";
-            }
-            nameCol = Color{ 226, 220, 240, 255 };
         } else {
-            DrawRectangle((int)sx - 1, (int)sy - 1, 3, 3, Color{ 176, 136, 78, 255 });
-            if (name.empty()) {
-                if (d > 110) continue;
-                name = atlasSiteKindName(s.kind);
-            }
-            nameCol = Color{ 242, 226, 190, 255 };
+            DrawRectangle(static_cast<int>(sx) - 2, static_cast<int>(sy) - 2, 4, 4,
+                          Color{ 255, 225, 145, 255 });
         }
-        bool shadowed = false;
-        if (entry.second.empty()) {                       // unnamed, generic mark
-            for (const auto& sp : story)
-                if (std::max(abs(sp.first - s.tx), abs(sp.second - s.ty)) < 70) { shadowed = true; break; }
-        }
-        if (named < 9 && !shadowed) {
-            // four tries per mark: right, below, left, above — so a name loses
-            // its slot only when the neighbourhood really is crowded
-            Vector2 size = measureText(name.c_str(), 8);
-            float rx = sx + 4.0f;
-            if (rx + size.x > px + pw - 2) rx = px + pw - 2 - size.x;   // slide, don't jump
-            float bx = sx - size.x * 0.5f;                 // centred on the mark
-            if (bx < px + 2) bx = px + 2;
-            if (bx + size.x > px + pw - 2) bx = px + pw - 2 - size.x;
-            const float tries[4][2] = {
-                { rx, sy - 4.0f },                          // beside, above
-                { bx, sy + 5.0f },                          // under the mark
-                { bx, sy - 13.0f },                         // over the mark
-                { sx - 4.0f - size.x, sy - 4.0f },          // finally, to the left
-            };
-            for (int t = 0; t < 4; ++t) {
-                if (labels.tryPlace(name.c_str(), tries[t][0], tries[t][1],
-                                    px + 2, py + 2, pw - 4, ph - 4, nameCol)) { named++; break; }
-            }
+        if (named < 14 && (story || entry.first < 110)) {
+            std::string name = s.name;
+            Color col = story ? Color{ 255, 244, 210, 255 } : Color{ 236, 222, 186, 255 };
+            if (labels.tryPlace(name.c_str(), sx + 4.0f, sy - 4.0f,
+                                px + 2, py + 2, pw - 4, ph - 4, col)) ++named;
         }
     }
 
-    // Region titles: one per named block in view, but only where a name fits
-    // without landing on a place name or another region's.
-    int rx0 = (int)floorf((float)originX / 128.0f);
-    int rx1 = (int)floorf((float)(originX + spanX) / 128.0f);
-    int ry0 = (int)floorf((float)originY / 128.0f);
-    int ry1 = (int)floorf((float)(originY + spanY) / 128.0f);
-    // the party's own region gets first claim on its name
-    int homeRx = (int)floorf(partyX / 128.0f), homeRy = (int)floorf(partyY / 128.0f);
-    for (int pass = 0; pass < 2; ++pass)
-    for (int ry = ry0; ry <= ry1; ++ry)
-        for (int rx = rx0; rx <= rx1; ++rx) {
-            bool home = (rx == homeRx && ry == homeRy);
-            if (pass == 0 && !home) continue;
-            if (pass == 1 && home) continue;
-            float sx, sy;
-            toScreen((float)(rx * 128 + 64), (float)(ry * 128 + 64), sx, sy);
-            const char* rname = atlasRegionName(rx * 128 + 64, ry * 128 + 64);
-            Vector2 size = measureText(rname, 8);
-            if (sx - size.x * 0.5f < px + 3 || sx + size.x * 0.5f > px + pw - 3) continue;
-            labels.tryPlace(rname, sx - size.x * 0.5f, sy - size.y * 0.5f,
-                            px + 2, py + 2, pw - 4, ph - 4, Color{ 74, 56, 34, 235 });
-        }
+    // Party marker
+    float hx, hy;
+    toScreen(partyX, partyY, hx, hy);
+    DrawRectangle(static_cast<int>(hx) - 2, static_cast<int>(hy) - 2, 5, 5, BLACK);
+    DrawRectangle(static_cast<int>(hx) - 1, static_cast<int>(hy) - 1, 3, 3,
+                  Color{ 255, 228, 132, 255 });
 
-    // the party
-    {
-        float cx = px + pw * 0.5f, cy = py + ph * 0.5f;
-        DrawTriangle({ cx, cy - 5.0f }, { cx - 4.0f, cy + 4.0f }, { cx + 4.0f, cy + 4.0f },
-                     Color{ 232, 72, 64, 255 });
-        DrawRectangle((int)cx - 1, (int)cy + 2, 2, 3, Color{ 120, 26, 22, 255 });
-    }
-
-    // footer: where we are, and what is worth a walk
-    char line[192];
-    snprintf(line, sizeof(line), "You are in %s / %s", regionNameAt(partyX, partyY),
-             atlasRegionName((int)partyX, (int)partyY));
-    drawText(line, px, py + ph + 4, Color{ 255, 236, 176, 255 }, 8);
-
-    AtlasSite nearestV, nearestC;
-    bool inStart = (partyX * partyX + partyY * partyY) < 30.0f * 30.0f;
-    bool hasV = atlasVillageNear((int)partyX, (int)partyY, 400, nearestV);
-    bool hasC = atlasCavernNear((int)partyX, (int)partyY, 400, nearestC);
-    std::string hint;
-    if (inStart) {
-        hint = "Elmswick: where the roads begin";
-    } else if (hasV) {
-        int d = std::max(abs(nearestV.tx - (int)partyX), abs(nearestV.ty - (int)partyY));
-        char buf[128];
-        snprintf(buf, sizeof(buf), "%s %d tiles", atlasSiteName(nearestV).c_str(), d);
-        hint = buf;
-        if (hasC) {
-            int dc = std::max(abs(nearestC.tx - (int)partyX), abs(nearestC.ty - (int)partyY));
-            snprintf(buf, sizeof(buf), "   |   cavern %d tiles", dc);
-            hint += buf;
-        }
-    }
-    drawText(hint.c_str(), px, py + ph + 14, Color{ 206, 216, 240, 255 }, 8);
+    // Heading: the continent, the province underfoot, and a compass.
+    drawText("THE SURVEY", px + 4.0f, py - 16.0f, Color{ 255, 232, 150, 255 }, 8);
+    std::string cont = apfa::owContinentName(seed, static_cast<int>(partyX), static_cast<int>(partyY));
+    std::string prov = apfa::owRegionTitle(seed, static_cast<int>(partyX), static_cast<int>(partyY));
+    Vector2 cw = measureText(cont.c_str(), 8);
+    drawText(cont.c_str(), px + pw - cw.x - 18.0f, py - 16.0f, Color{ 186, 214, 255, 255 }, 8);
+    drawText(prov.c_str(), px + 4.0f, py + ph + 3.0f, Color{ 226, 212, 178, 255 }, 8);
+    DrawRectangle(static_cast<int>(px + pw - 12), static_cast<int>(py - 15), 7, 7,
+                  Color{ 226, 212, 178, 255 });
+    drawText("N", px + pw - 12, py - 25, Color{ 226, 212, 178, 255 }, 8);
 }

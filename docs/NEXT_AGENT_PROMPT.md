@@ -123,6 +123,21 @@ prints PASS/FAIL for all of:
 - [ ] **Art budget** — no town screen > 120 colours, no 16×16 tile > 12.
 - [ ] Existing play still works: battles, shops, dialogue, sailing, the score.
 
+**Status on this branch (2026-11-28):** determinism, port reciprocity,
+reachability and the scripted cross-map traversal PASS in
+`tools/verify_world.py`; the 201-cell outward atlas PASSES; the map-session
+save round-trips. The runtime `SaveBlob` is v7, and v4–v6 saves migrate to
+Elmswick. `tools/verify_lufia_world.cpp` adds a designed-world suite: the
+homeland's story sites and 8+ settlements, 54 seeded continents whose sites
+are all walkable and reachable on foot, boat-only Tidewell isles, roads with
+real bridges and passes, outward continents, and a cold continent in ~106 ms.
+`tools/link_check.py` and `tools/validate_assets.py` are green. The art-budget
+check passes; a GUI frame cannot be captured in this sandbox, so world art is
+reviewed through `tools/preview_world.py`, which renders the same atlas and the
+same C++ world data (`docs/screenshots/overworld*.png`, `world_map.png`).
+Existing play is wired to the same world for encounters, sailing, towns,
+dungeons, shops and dialogue; verify it in a local GUI build.
+
 Report honestly. If a phase is half-done, say which one and why. A truthful
 "Phase 3 is 60% done, here is what is missing" is worth more than a green
 summary that the next agent has to un-believe.

@@ -1119,7 +1119,11 @@ static_assert(sizeof(SaveBlobV5) != sizeof(SaveBlob), "old and new saves must no
 static_assert(sizeof(SaveBlobV5Full) != sizeof(SaveBlob), "v5 and v6 saves must not collide");
 
 static const uint32_t SAVE_MAGIC = 0x41504641;   // 'APFA'
-static const uint32_t SAVE_VERSION = 6;
+// v7: the world was redrawn as designed continents (src/overworld_gen.cpp).
+// The save layout did not change, but world coordinates did, so a v6 save is
+// accepted and its party is returned to Elmswick rather than dropped into the
+// sea where its old coordinates now fall.
+static const uint32_t SAVE_VERSION = 7;
 
 template <typename T>
 static uint32_t blobChecksumOf(const T& b) {
@@ -1223,11 +1227,14 @@ bool loadGame() {
 
     SaveBlob b{};
     bool fromLegacy = false;
+    bool worldRedrawn = false;
     if (size == (int)sizeof(SaveBlob)) {
         memcpy(&b, data, sizeof(b));
         UnloadFileData(data);
-        if (b.magic != SAVE_MAGIC || b.version != SAVE_VERSION || blobChecksum(b) != b.checksum)
+        if (b.magic != SAVE_MAGIC || (b.version != SAVE_VERSION && b.version != 6) ||
+            blobChecksum(b) != b.checksum)
             return false;
+        if (b.version == 6) worldRedrawn = true;
     } else if (size == (int)sizeof(SaveBlobV5Full)) {
         SaveBlobV5Full o;
         memcpy(&o, data, sizeof(o));
@@ -1235,6 +1242,7 @@ bool loadGame() {
         if (o.magic != SAVE_MAGIC || o.version != 5 || blobChecksumOf(o) != o.checksum)
             return false;
         fromLegacy = true;
+        worldRedrawn = true;
         memcpy(&b, &o, offsetof(SaveBlobV5Full, checksum));
         b.version = SAVE_VERSION;
         b.savedMode = (int32_t)MODE_TOWN;
@@ -1250,6 +1258,7 @@ bool loadGame() {
         if (o.magic != SAVE_MAGIC || o.version != 5 || blobChecksumOf(o) != o.checksum)
             return false;
         fromLegacy = true;
+        worldRedrawn = true;
         memcpy(&b, &o, offsetof(SaveBlob, questState));          // magic .. heroes
         memcpy(b.inventory, o.inventory, sizeof(b.inventory) < sizeof(o.inventory) ? sizeof(b.inventory) : sizeof(o.inventory));
         for (int q = 0; q < 4; q++) {
@@ -1277,6 +1286,7 @@ bool loadGame() {
         if (o.magic != SAVE_MAGIC || o.version != 4 || blobChecksumOf(o) != o.checksum)
             return false;
         fromLegacy = true;
+        worldRedrawn = true;
         b.magic = SAVE_MAGIC;
         b.version = SAVE_VERSION;
         b.worldSeed = o.worldSeed;
@@ -1421,7 +1431,24 @@ bool loadGame() {
     g.onShip = (b.onShip != 0) && g.hasBoat;
     g.owSiteDebounce = 0.85f;
 
-    if (fromLegacy || b.savedMode == (int32_t)MODE_TOWN) {
+    if (worldRedrawn) {
+        // The old coordinates belonged to a world that no longer exists. Wake
+        // at Elmswick's south doorstep, on the new world map.
+        b.savedMode = (int32_t)MODE_OVERWORLD;
+        g.px = 0.5f;
+        g.py = 1.5f;
+        g.owReturnX = 0.5f;
+        g.owReturnY = 0.5f;
+        g.currentTownOwTx = 0;
+        g.currentTownOwTy = 0;
+        g.onShip = false;
+        g.owLastSiteTx = INT_MIN;
+        g.owLastSiteTy = INT_MIN;
+        g.owSiteDebounce = 0.85f;
+        pushToast("The world has been redrawn. You wake by Elmswick.");
+    }
+
+    if (!worldRedrawn && (fromLegacy || b.savedMode == (int32_t)MODE_TOWN)) {
         townRebuildRuntime(g.currentTownOwTx, g.currentTownOwTy);
         const apfa::TownDef* td = townCurrent();
         if (fromLegacy || !td || !apfa::townCellWalkable(*td, (int)floorf(g.px), (int)floorf(g.py))) {

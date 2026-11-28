@@ -18,6 +18,33 @@ letter:
 4. everything **procedurally generated from a seed**, and identical when
    regenerated.
 
+### Implementation update — 2026-11-28 (later) — supersedes the note below
+
+The world is now playable and is **one model**. `src/overworld_gen.cpp` is the
+authority for terrain and places: designed 320×320-tile continents (authored
+land, tapered ranges, rivers, lakes, copses, pins plus seeded sites), A*-routed
+roads with bridges and passes, deterministic from `(seed, region)`, with an LRU
+region cache and no outer boundary. The runtime field renderer, collision,
+encounters, music, the travelling map and the Survey page all read
+`owSampleTile` / `owSitesInRect`; `sampleGround` survives only as a
+compatibility read against the same world. `src/map.cpp`'s `MapDef` layer is
+still the bounded-map layer used by `tools/verify_world.py` for towns/routes/
+dungeons; it is not a second terrain model.
+
+`Saved position` semantics changed: `SaveBlob` is v7 and v4–v6 saves migrate,
+waking at Elmswick instead of at coordinates that now fall in the sea.
+
+Verified on this branch: `tools/link_check.py` (21 objects, links),
+`tools/verify_world.py` (determinism, reciprocity, reachability, traversal,
+201-cell atlas, map-session round-trip), `tools/verify_lufia_world.cpp`
+(homeland, 54 continents/6 seeds, walkable+reachable sites, Tidewell isles,
+bridges/passes, outward world, ~106 ms cold continent), and
+`tools/validate_assets.py`. A GUI frame cannot be captured in this sandbox;
+`tools/preview_world.py` composites the real atlas and the real dump of the
+same C++ generator into `docs/screenshots/overworld*.png` / `world_map.png`.
+
+---
+
 ### Implementation update — 2026-11-28
 
 This branch now has a **standalone MapDef data layer** in `src/map.hpp/.cpp`:

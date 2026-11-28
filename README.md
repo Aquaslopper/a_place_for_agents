@@ -9,15 +9,34 @@ AGENTS START HERE: https://github.com/Aquaslopper/a_place_for_agents/blob/main/d
 Elmswick is the last field office on a charted road. When the maps end, its
 agents begin: Aldric keeps the way open, Iris reads what the old maps leave
 out, and Pip makes sure everyone gets home. Follow their assignment through a
-hand-built village and into a world that grows as you explore it: quiet meadows,
-old forests, river crossings, remote settlements, forgotten landmarks, and a
-king who has made off with the village crown.
+hand-built village and into a world that grows as you explore it: a designed
+Lufia II-shaped continent of quiet meadows, old forests, mountain walls, rivers
+and lakes, joined by real roads and dotted with settlement, castle, cave, tower
+and ruin icons. Beyond its coast the atlas keeps going: sail far enough and the
+next country generates. A king has made off with the village crown.
 
 ![Elmswick, the village the game opens in](docs/screenshots/village.png)
 
 Built in C++17 with [raylib 5.5](https://github.com/raysan5/raylib), adapted
 OpenRTP pixel art and a streamed 13-cue score. See [credits and licenses](CREDITS.md)
 and the [soundtrack cue sheet](assets/audio/SCORE.txt).
+
+### The world
+
+The overworld is a miniature SNES world, not an endless noise field. A
+320×320-tile continent is built from authored land shapes, then given tapered
+mountain ranges, meandering rivers, lakes, forests in copses, a beach fringe,
+hand-placed story sites, generated hamlets/dungeons, and A*-routed roads that
+cross water as bridges and ranges as passes. Each continent is deterministic
+from `(worldSeed, region)`; the atlas never runs out of cells.
+
+| | |
+|---|---|
+| ![The world map of the Elmlands](docs/screenshots/world_map.png) | ![Elmswick and its roads from the field camera](docs/screenshots/overworld.png) |
+| ![The north wall and the Castle of Elm](docs/screenshots/overworld_castle.png) | ![The southern coast and a river mouth](docs/screenshots/overworld_coast.png) |
+
+These previews are rendered from the same tile atlas and the same C++ world
+data the game uses (`tools/preview_world.py`), not from a separate mock-up.
 
 **Working on this game?** Start at [the Next-Agent Prompt](docs/NEXT_AGENT_PROMPT.md),
 then read [the world-structure handoff](docs/HANDOFF_WORLD_STRUCTURE.md) before
@@ -118,22 +137,20 @@ crossings are composed from tiles rather than one stretched map image.
 butterflies cross meadows, fireflies drift through the fen, snow falls in the
 Frozenreach and leaves move through Amberwood. A slow day/night wash, warm
 village windows and footstep dust give places a changing mood.
-- **A coast you can see and a horizon that ends.** The land stops. Past a
-meandering shoreline (about 253 tiles from the well) the sea is deep water that
-refuses a hull and refuses a step: there is no trickle of beach and no stray
-islet out there, and `inOpenSea()` is the one test everything obeys. The old
-complaint — walking thirty minutes in one direction and never arriving — is
-answered by geometry rather than by a wall of fog: the continent is finite, the
-water is the road, and every route that leaves the village arrives somewhere.
-- **Places worth finding, and a road to each of them.** The world's places are
-not left to luck. **The Survey** (`src/atlas.cpp`) owes every lattice cell one
-place: a village every 112 tiles, a ruin, tower, castle, stone circle or camp
-every 96, a cavern mouth every 88 — placed from the seed alone, so the same
-seed always puts the same place on the same tile. The lattice is then joined by
-**roads**: two tiles of packed dirt (planks where they meet water) routed around
-crags and towns, so a road out of Elmswick's gates leads to another village
-rather than into the wilds. Every one of those places also **names itself** as
-you come near it. Interiors have their own small scenes. Stone mouths in
+- **A coast you can see, and a sea that goes somewhere.** The land stops at a
+sand fringe, then shallow water, then deep sea. Hire a boat and the sea is a
+real road: three Tidewell isles wait offshore, and beyond them the next
+continent generates from the same seed — the atlas has no outer wall, only
+more countries. Walking is bounded by coast and mountain; sailing is bounded
+only by how far you care to go.
+- **Places worth finding, and a road to each of them.** The homelands are
+authored pins (Elmswick, the Castle of Elm, Hollow Hill, the Standing Stones,
+the Old Watchtower and their neighbours), snapped to legal ground and given a
+clearing. Further out, the seeds scatter hamlets, caves, towers, temples and
+ruins across each continent. **Roads** join them: A*-routed country roads that
+cross water as bridges and ranges as passes, so a road out of Elmswick's gate
+leads to another village rather than into the wilds. Every one of those places
+**names itself** as you come near it. Interiors have their own small scenes. Stone mouths in
 the hills open into **procedurally generated cavern dungeons**: a connected BSP backbone weathered into irregular chambers, alcoves and
 passages, natural rock and mineral formations, roaming inhabitants, treasure,
 multiple floors and a deep vault — always the same layout for the same seed.
@@ -251,6 +268,24 @@ playing does not require Python, a MIDI synthesizer or an instrument bank.
 The Windows executable uses the GUI subsystem. CI builds and packages Windows
 and Linux binaries. **Project policy: no tests.**
 
+## World checks and previews
+
+The world is verified headlessly, without a GPU or a window:
+
+```bash
+python3 tools/link_check.py                 # every TU compiles, the binary links
+python3 tools/verify_world.py               # determinism, ports, reachability, traversal, 201 atlas cells
+c++ -std=c++17 -O2 -Isrc src/overworld_gen.cpp src/town_gen.cpp \
+    tools/verify_lufia_world.cpp -o /tmp/vlw && /tmp/vlw   # designed-world suite
+/tmp/venv/bin/python tools/preview_world.py  # rebuild docs/screenshots from the real atlas
+```
+
+`tools/dump_world.cpp` is a headless text dump of one continent (kinds, roads,
+sites) used by the preview tool:
+`c++ -std=c++17 -O2 -Isrc src/overworld_gen.cpp tools/dump_world.cpp -o dump_world`
+then `./dump_world <seed> <rx> <ry>`. These are design/verification tools, not
+a test suite, and they never run in the game.
+
 ## Art system, manifest and validation
 
 The one art dialect is **EasyRPG/OpenRTP** (vendored at
@@ -298,8 +333,9 @@ references used while designing the terrain and walking-scale world.
 
 ```text
 src/game.hpp      shared types and game state
-src/world.cpp     seeded terrain, props, NPCs, chests, pathfinding, ground/road stamping
-src/atlas.cpp     the Survey: guaranteed villages/landmarks/caverns, roads, region names
+src/overworld_gen.cpp  the world: designed continents, ranges, rivers, sites, roads, names
+src/world.cpp     overworld rendering, props, NPCs, chests, compatibility helpers
+src/atlas.cpp     the Survey page (draws overworld_gen), legacy atlas helpers
 src/sail.cpp      the boat: sailing, mooring, landings, the millpond sea encounters
 src/overworld.cpp field movement, camera, interactions and encounters
 src/render.cpp    field renderer, HUD, title, intro and game-over screens
@@ -351,20 +387,24 @@ only builds and packages the Windows exe and Linux binary.
   fullscreen (`F11` / `Alt+Enter`), optional restrained CRT shading, mode loop
   and fade transitions. `getVirtualMouse()` maps window coordinates cleanly to
   the active virtual canvas.
-- `src/world.cpp` / `src/world.hpp` — deterministic noise, biomes, the
-  Millbrook river and story trails, props, NPCs, chests, field monsters, A*
-  pathfinding, and the stamping of surveyed roads into the ground. Rendering,
-  collision and pathfinding all read `propAt()` / `sampleGround()` so they
-  cannot disagree.
-- `src/regions.cpp` / `src/regions.hpp` — seeded mountain ranges and passes,
-  country access, the northern frontier spur and the travelling map.
-- `src/atlas.cpp` / `src/atlas.hpp` — **the Survey**, the one authority on where
-  a place is: three lattices (villages 112 tiles, ruin-kinds 96, caverns 88),
-  A*-routed roads joining them, stable region names, and the Journal's survey
-  page. It answers only from `worldSurveyTerrain()` — the same noise the ground
-  generator starts from, one layer below every cache — so it can never recurse
-  into `sampleGround()` or depend on visit order. **Adding a kind of place means
-  adding it here, not rolling another die in `world.cpp`.**
+- `src/overworld_gen.cpp` / `src/overworld_gen.hpp` — **the world.** One pure
+  function of `(worldSeed, regionX, regionY)`: a 320×320-tile continent built
+  from authored land blobs, tapered mountain ranges, stylised river splines,
+  lakes, biome fields and 2×2 forest copses; then story pins, generated
+  hamlet/dungeon plans, tide islands, and roads routed with A* (bridges over
+  water, passes over ranges). It exposes tiles (`owSampleTile`), sites
+  (`owSitesInRect`, `owSiteAtTile`), names and danger tiers, and an LRU region
+  cache, so the atlas is unbounded without any generation at runtime.
+- `src/world.cpp` / `src/world.hpp` — overworld presentation (tiles, props,
+  icons, hero, HUD), the travelling map, Elmswick's authored props/NPCs, chests,
+  field monsters, and compatibility reads (`sampleGround`) for older systems.
+  Movement, collision and the field renderer read the same `owSampleTile` world.
+- `src/regions.cpp` / `src/regions.hpp` — the retired noise-field region layer,
+  kept for save/UI compatibility. It is not the terrain source.
+- `src/atlas.cpp` / `src/atlas.hpp` — the Journal's **Survey** page, drawn from
+  `overworld_gen` and the party's real position. The old atlas lattices remain
+  only as helpers; **adding a kind of place means adding it to
+  `overworld_gen.cpp`**, not to a second lattice.
 - `src/overworld.cpp` — field movement (cardinal-only keyboard, click-to-move
   with A*), camera, encounters, interactions, prompts.
 - `src/render.cpp` — Y-sorted field renderer, HUD, title/intro/game-over,
@@ -377,15 +417,16 @@ only builds and packages the Windows exe and Linux binary.
   ACTIVE never pauses).
 - `src/music.cpp` — one music director: scene → cue, crossfades, resume.
 - `src/core.cpp` — item/hero/spell/enemy tables, asset loading, UI
-  primitives, save/load (checksummed `SaveBlob`, version 4).
+  primitives, save/load (checksummed `SaveBlob`, version 7; v4–v6 saves
+  migrate, and pre-v7 world positions wake at Elmswick on the new atlas).
 
 ## Conventions to keep
 
-- **Determinism:** world gen is a pure function of `(tx, ty, worldSeed)`.
+- **Determinism:** world gen is a pure function of `(worldSeed, region)`.
   Never depend on visit order or camera position for what exists.
-- **One authority per question.** *Where is a place?* → `src/atlas.cpp`. *What
-  is on this tile?* → `propAt()`/`sampleGround()`. If two systems must agree,
-  they read the same function; never re-roll the dice in a second place.
+- **One authority per question.** *Where is a place?* → `src/overworld_gen.cpp`.
+  *What is on this tile?* → `owSampleTile()`. If two systems must agree, they
+  read the same function; never re-roll the dice in a second place.
 - **SNES feel:** 16px tiles, corner-mask autotiling, warm pastel palette with
   cool/purple shadows (see `tools/snes.py`), navy+gold UI, Press Start 2P at
   multiples of 8px. No modern rounded-glass UI.

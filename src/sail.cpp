@@ -401,64 +401,16 @@ bool sailPrompt(const char** text) {
 }
 
 // ================================================================ drawing
-// The water is drawn as four animated bands of the same water tiles the
-// overworld uses, plus a surf line on every shore — no new tile art, no new
-// renderer pass, and it matches the pond the party just stepped off.
+// The sea is the overworld's own ground pass, so the deck and the shore see
+// the same atlas: one world, not a separate sailing tileset.
 static void drawSailWater(int x0, int y0, int x1, int y1) {
-    const int anim = (int)(g.surfT * 2.5f) % 3;
-    for (int y = y0; y <= y1; y++) {
-        for (int x = x0; x <= x1; x++) {
-            GroundTile t = sampleGround(x, y);
-            int sx = x * TILE - (int)g.camX;
-            int sy = y * TILE - (int)g.camY;
-            bool wet = (t.kind == G_WATER || t.kind == G_DEEP);
-            if (wet) {
-                // Row order shared with Surface in render.cpp: deep, water,
-                // beach, meadow... Three animation phases per surface, and the
-                // shallow row's phases are the same autotile the pond uses on
-                // foot, so stepping into the boat changes nothing about colour.
-                stampTile(g.assets.landscape, 15, (t.kind == G_DEEP ? 0 : 1) * 3 + anim, sx, sy);
-            } else {
-                stampTile(g.assets.landscape, 15, (t.kind == G_BEACH ? 2 : 3) * 3 + (t.variant % 3), sx, sy);
-            }
-        }
-    }
-    // the far sea: a darker band past the coast so a sailor can read "wall"
-    // from a boat without a line of text. It is drawn, not a tile.
-    {
-        float sr = shoreRadius();
-        for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
-            float d = sqrtf((float)x * x + (float)y * y);
-            if (d < sr + 2.0f) continue;
-            if (sampleGround(x, y).kind != G_DEEP) continue;
-            int sx = x * TILE - (int)g.camX, sy = y * TILE - (int)g.camY;
-            DrawRectangle(sx, sy, TILE, TILE, Fade(Color{ 10, 24, 52, 255 }, 0.30f));
-        }
-    }
-    // the surf: foam on every wet/land seam, animated so a shore breathes
-    static const int DX4[4] = { 1, -1, 0, 0 }, DY4[4] = { 0, 0, 1, -1 };
-    for (int y = y0; y <= y1; y++) {
-        for (int x = x0; x <= x1; x++) {
-            GroundTile t = sampleGround(x, y);
-            if (t.kind != G_WATER && t.kind != G_DEEP) continue;
-            int sx = x * TILE - (int)g.camX;
-            int sy = y * TILE - (int)g.camY;
-            for (int k = 0; k < 4; k++) {
-                GroundKind nb = sampleGround(x + DX4[k], y + DY4[k]).kind;
-                if (nb == G_WATER || nb == G_DEEP) continue;
-                float ph = g.surfT * 1.9f + (float)(x * 3 + y * 5) * 0.7f;
-                float pulse = 0.40f + 0.30f * sinf(ph);
-                Color foam = Fade(Color{ 236, 250, 252, 255 }, pulse);
-                int fx = sx + 8 + DX4[k] * 7;
-                int fy = sy + 8 + DY4[k] * 7;
-                DrawRectangle(fx - 7, fy - 2, 14, 4, foam);
-                if (k < 2) DrawRectangle(fx - 4, fy + 2, 8, 2, Fade(foam, 0.5f));
-            }
-        }
-    }
+    // One world, one atlas: the deck uses the same ground/sea pass as the
+    // overworld, so a coastline does not change tileset when you board.
+    worldDrawGroundTiles(x0, y0, x1, y1);
 }
 
 void sailDraw() {
+    ClearBackground(Color{ 30, 74, 114, 255 });
     int x0 = (int)floorf(g.camX / TILE) - 1;
     int y0 = (int)floorf(g.camY / TILE) - 1;
     int x1 = x0 + g.vw / TILE + 3;

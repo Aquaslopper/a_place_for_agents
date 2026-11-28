@@ -102,6 +102,8 @@ bool owNearestSite(std::uint32_t seed, int tx, int ty, int maxDist, OwSiteInfo& 
 // Region & site metadata
 std::string owSettlementName(std::uint32_t seed, int tx, int ty, OwSiteType type, OwClimate climate);
 std::string owRegionTitle(std::uint32_t seed, int tx, int ty);
+// The name of the continent (region cell) a world tile belongs to.
+std::string owContinentName(std::uint32_t seed, int tx, int ty);
 int owDangerTier(int tx, int ty); // 1..8 scaling smoothly with distance from Elmswick
 
 // Key homeland story sites (always exist near (0,0) for every seed)
