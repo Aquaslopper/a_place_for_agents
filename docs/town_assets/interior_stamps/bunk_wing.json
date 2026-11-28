@@ -1,0 +1,474 @@
+{
+  "schema_version": 1,
+  "name": "bunk_wing",
+  "kind": "interior_stamp",
+  "width": 7,
+  "height": 7,
+  "tile_px": 16,
+  "pixel_size": [
+    112,
+    112
+  ],
+  "wall_material": "plaster",
+  "layers": {
+    "ground": [
+      [
+        "IN_WALL_CAP",
+        "IN_WALL_CAP",
+        "IN_WALL_CAP",
+        "IN_WALL_CAP",
+        "IN_WALL_CAP",
+        "IN_WALL_CAP",
+        "IN_WALL_CAP"
+      ],
+      [
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE"
+      ],
+      [
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE",
+        "IN_WALL_FACE"
+      ],
+      [
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD"
+      ],
+      [
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD"
+      ],
+      [
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD"
+      ],
+      [
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD",
+        "IN_FLOOR_WOOD"
+      ]
+    ],
+    "wall_cap_mask": [
+      [
+        2,
+        10,
+        10,
+        10,
+        10,
+        10,
+        8
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    ],
+    "wall_upper_face": [
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    ],
+    "wall_base_face": [
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    ],
+    "walkable": [
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true
+      ],
+      [
+        true,
+        false,
+        true,
+        true,
+        true,
+        false,
+        true
+      ],
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    ]
+  },
+  "solid": [
+    [
+      1,
+      3
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      5,
+      4
+    ]
+  ],
+  "objects": [
+    {
+      "asset": "bed",
+      "anchor_tile": [
+        1,
+        4
+      ],
+      "anchor_kind": "foot",
+      "role": "bed_left",
+      "solid_cells": [
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "asset": "bed",
+      "anchor_tile": [
+        5,
+        4
+      ],
+      "anchor_kind": "foot",
+      "role": "bed_right",
+      "solid_cells": [
+        [
+          5,
+          3
+        ],
+        [
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "asset": "table",
+      "anchor_tile": [
+        3,
+        3
+      ],
+      "anchor_kind": "foot",
+      "role": "bedside_table",
+      "solid_cells": [
+        [
+          3,
+          3
+        ]
+      ]
+    },
+    {
+      "asset": "lantern",
+      "anchor_tile": [
+        0,
+        2
+      ],
+      "anchor_kind": "foot",
+      "role": "wall_lantern",
+      "solid_cells": []
+    }
+  ],
+  "portals": [],
+  "sockets": {
+    "S": [
+      [
+        3,
+        6
+      ],
+      [
+        4,
+        6
+      ]
+    ]
+  },
+  "entry_landing": [
+    [
+      3,
+      4
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      4,
+      5
+    ]
+  ],
+  "approach_targets": {
+    "left_bed_approach": [
+      2,
+      4
+    ],
+    "right_bed_approach": [
+      4,
+      4
+    ]
+  },
+  "wall_profile": {
+    "cap_row": 0,
+    "upper_face_row": 1,
+    "base_face_row": 2,
+    "floor_starts_row": 3
+  }
+}

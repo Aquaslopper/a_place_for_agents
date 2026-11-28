@@ -556,6 +556,15 @@ IN_TABLE, IN_ALTAR, IN_THRONE, IN_CHEST`
 
 `TN_LOT_DOOR` and `IN_DOOR_EXIT` are portal cells, not decorative door pixels.
 Their stable IDs and target map/portal bindings belong in generated layout
-metadata; art placement must not change collision or connectivity. These
-registries do not yet define layouts, sockets, runtime loading, or map
-transitions; those follow in the plate/generator and integration steps.
+metadata; art placement must not change collision or connectivity.
+
+`tools/build_town_layout.py` writes town `layers.ground` as `TN_*` tags,
+per-placement object semantics, explicit gate openings, solid/perimeter cells,
+building footprints and door aprons, and bidirectional portal bindings. The
+seeded town builder reuses the 8×8 plate catalog; park trees, shrubs, garden
+beds and rocks use existing runtime sprites and remain collision-marked at
+their anchor cells. `tools/build_interior_layout.py` writes `IN_*` ground tags,
+wall-cap masks/face rows, furniture semantic tags and solid cells, plus the
+clear two-by-two exit landing and bidirectional door portal. These JSON/PNG
+outputs are design-time maps; runtime loading, rendering, movement and
+transitions remain part of the later MapSystem integration step.

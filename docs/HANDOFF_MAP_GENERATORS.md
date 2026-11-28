@@ -1,6 +1,6 @@
 # Handoff: Procedural Map Pipeline (Towns, Interiors, Caves, Dungeons, Quest Maps)
 
-**Status:** Track 1 Steps 1.1 and 1.2 complete. Next: Step 1.3 (town/interior plates and stamps), then Step 1.4 (seeded layout generators).
+**Status:** Track 1 Steps 1.1–1.4 complete. Town/interior plates, stamps and seeded layout generators pass their documented checks; next: Track 2 Step 2.1 (dungeon art audit). C++ MapSystem integration remains deferred until the Python generators for all planned domains are complete.
 **Follows:** `docs/HANDOFF_PROCEDURAL_JRPG_WORLD.md` and `docs/HANDOFF_PLATE_LAYOUT_GENERATOR.md` (Overworld plate builder + `tools/build_overworld_layout.py` completed).
 
 ---
@@ -75,7 +75,8 @@ Document:
 
 **Complete.** `docs/ART_BIBLE.md` §10.1 now records measured building sprite sizes, canonical non-overlapping ground footprints, the two-tile doorstep apron, the interior three-row wall profile, and the locked `TN_*` / `IN_*` vocabularies. The existing §10 source-crop anchor remains unchanged. No runtime assets were added or modified.
 
-### Step 1.3 — Build Town & Interior Plate/Stamp Libraries
+### Step 1.3 — Build Town & Interior Plate/Stamp Libraries — Complete
+- The town builder currently verifies 45 8×8 plates; the interior catalog verifies eight room stamps and 96 16-mask wall caps. Both generated contact sheets and JSON indexes remain under `docs/town_assets/`.
 - **Critical scale lesson (do NOT copy overworld `3×3` blindly for towns):**
   A `house_0` sprite (`62×54` px) is ~`4×3.4` tiles, and `temple` (`76×78`) / `castle` (`98×84`) are `5×5` to `6×5.5` tiles. A `3×3`-tile plate cannot contain a single house!
   Instead, use **8×8-tile district plates** (`128×128` px) for towns:
@@ -85,18 +86,23 @@ Document:
   - `tools/build_town_plates.py` → `docs/town_assets/plates/<name>.png`, `index.json`, `plates_streets.png`, `plates_lots.png`.
   - `tools/build_interior_plates.py` → modular room chunks/stamps (`entry_mat`, `counter_bay`, `hearth_bay`, `bunk_wing`, `shop_display`, `temple_nave`, `study_library`, `cellar_stair`) + 16-mask wall caps in `docs/town_assets/`.
 
-### Step 1.4 — Seeded Generators & `--check` Verifiers
+### Step 1.4 — Seeded Generators & `--check` Verifiers — Complete (2026-11-28)
+
+The two standalone layout tools emit deterministic PNG previews and semantic JSON under `docs/town_assets/layouts/`. Each `--check` regenerates its result and compares byte-identical JSON and PNG outputs. Town validation passed 50 distinct seeds per tier, all 15 non-empty gate subsets across all three tiers/biomes, and portal round-trips for hamlet/town/city civic buildings. Interior validation passed 50 distinct seeds for each of the six building kinds. No C++ runtime integration or runtime art changes were made.
+
 - **`tools/build_town_layout.py --seed S --tier {hamlet,town,city} --biome {temperate,snow,sand} --gates N,E,S,W --check`:**
   - Grid sizes: `hamlet` (`3×3` district plates = `24×24` tiles), `town` (`5×4` = `40×32` tiles), `city` (`6×5` = `48×40` tiles).
-  - Placement algorithm: Carcassonne/AC-3 edge-matching on `8×8` plates (reusing the exact backtracking + terrain-normalization lessons from `tools/build_overworld_layout.py`), seeded hard constraints for required civic lots (`inn` + `shop` always present; `smithy` + `temple` on `town`/`city`; `castle`/`manor` on `city`), and perimeter wall/treeline with gates locked to the overworld road ports.
+  - JSON includes `TN_*` ground semantics, global object placements, collision/perimeter/gate-opening layers, required building footprints and aprons, deterministic interior seeds/site IDs, plaza targets and portals; generated open-ground commons use only existing biome-appropriate runtime sprites.
+  - Placement algorithm: AC-3/backtracking edge matching over the 45-plate `8×8` catalog, deterministic required civic lots (`inn` + `shop` always; `smithy` + `temple` on `town`/`city`; `manor` on `city`), biome-specific seeded lots/commons dressing, and a perimeter wall with requested two-tile gate sockets aligned to the road ports.
   - **`--check` invariants:**
     1. Every side-port matches (`side_match_violations == 0`).
     2. Building footprints + roof/alley buffers never overlap (`overlap_count == 0`).
     3. Every required civic building is placed (`missing_required_lots == 0`).
-    4. BFS on walkable ground from **every active gate** reaches **100% of building door aprons, plaza well/noticeboard, and every other active gate**.
+    4. BFS on walkable ground from **every active gate** reaches **100% of building doors/aprons, plaza well/noticeboard approaches, and every other active gate**.
+    5. Every requested gate has a matching edge plate and two-cell boundary opening; every inactive boundary socket remains sealed.
 - **`tools/build_interior_layout.py --seed S --kind {shop,inn,smithy,temple,house,manor} --check`:**
-  - Composes multi-wing rooms (`15×11` to `24×16`) deterministically by snapping interior wall bays + furniture zones around a walkable circulation spine.
-  - **`--check` invariants:** unobstructed BFS from `door_exit` to keeper NPC counter, any stairs/beds/chests, and zero solid props placed inside the 2-tile entry landing.
+  - Composes deterministic multi-wing rooms (`15×11` to `24×16`) from reusable furniture stamps, a three-row north-wall profile and material-specific cap masks; seed selects dimensions, floor and wall themes. JSON carries `IN_*` ground/object tags, solid prop cells, NPCs, chests, stairs and the reciprocal `door_exit` portal.
+  - **`--check` invariants:** unobstructed BFS from `door_exit` to every generated furniture/NPC approach target, stairs, beds and chests; no solid prop in the two-by-two entry landing, no furniture/wall collisions or overlapping solid props, and byte-identical regeneration.
 
 ---
 
