@@ -1,6 +1,13 @@
 # Handoff: replace the blob with a procedural JRPG map world! 
 Current status: the repo is a lie, this is not an snes jrpg.
 
+> **STILL TRUE, AND NOW THE MAIN BRIEF.** This mission was never completed: the
+> noise field is still the world the game runs on, and towns were never built.
+> It is superseded only in *specifics* by [`HANDOFF_WORLD_STRUCTURE.md`](HANDOFF_WORLD_STRUCTURE.md)
+> (which adds the MapId/MapDef/ports architecture and a phase plan) and
+> [`NEXT_AGENT_PROMPT.md`](NEXT_AGENT_PROMPT.md) (the mission statement). The
+> "do not repeat the failed approach" section below remains binding.
+
 **Mission:** Build the actual world structure an actual SNES JRPG world: many distinct, connected, procedurally generated SNES-style JRPG maps. This is a structural replacement task, not another pass over the existing continuous terrain field.
 
 ## Required outcome

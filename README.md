@@ -17,8 +17,11 @@ king who has made off with the village crown.
 
 Built in C++17 with [raylib 5.5](https://github.com/raysan5/raylib), adapted
 OpenRTP pixel art and a streamed 13-cue score. See [credits and licenses](CREDITS.md)
-and the [soundtrack cue sheet](assets/audio/SCORE.txt). If you are working on
-the game as an agent, the repository guide is [the Next-Agent Prompt](docs/NEXT_AGENT_PROMPT.md).
+and the [soundtrack cue sheet](assets/audio/SCORE.txt).
+
+**Working on this game?** Start at [the Next-Agent Prompt](docs/NEXT_AGENT_PROMPT.md),
+then read [the world-structure handoff](docs/HANDOFF_WORLD_STRUCTURE.md) before
+touching `src/`.
 
 ## Play
 
