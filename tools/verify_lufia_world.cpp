@@ -183,6 +183,47 @@ int main() {
                     settlements, dungeons);
     }
 
+    // ---------------------------------------------------------------- 2b
+    // Story anchors must exist on every seed, not just the one that was looked
+    // at. The finders fall back to baked coordinates when a site is missing;
+    // require the returned spot to be a real site with that name.
+    {
+        for (std::uint32_t seed : kSeeds) {
+            auto check = [&](const apfa::OwSiteInfo& s, bool flagged, const char* what) {
+                apfa::OwSiteInfo at;
+                bool real = apfa::owSiteAtTile(seed, s.tx, s.ty, at) && at.name == s.name;
+                if (!flagged || !real) {
+                    std::fprintf(stderr, "FAIL story anchor %s missing on seed %u at (%d,%d)\n",
+                                 what, seed, s.tx, s.ty);
+                    return false;
+                }
+                if (std::abs(s.tx) > 90 || std::abs(s.ty) > 90) {
+                    std::fprintf(stderr, "FAIL story anchor %s escaped the homeland on seed %u (%d,%d)\n",
+                                 what, seed, s.tx, s.ty);
+                    return false;
+                }
+                return true;
+            };
+            apfa::OwSiteInfo cavern = apfa::owStartCavern(seed);
+            apfa::OwSiteInfo castle = apfa::owBossCastle(seed);
+            apfa::OwSiteInfo locket = apfa::owLocketSite(seed);
+            apfa::OwSiteInfo tower = apfa::owTowerSite(seed);
+            if (!check(cavern, cavern.isStartCavern, "Hollow Hill") ||
+                !check(castle, castle.isBossCastle, "Castle of Elm") ||
+                !check(locket, locket.isLocketSite, "Standing Stones") ||
+                !check(tower, tower.isTowerSite, "Old Watchtower")) return 1;
+            BfsResult fl = flood(seed, 0, 0, 0, 0);
+            for (const apfa::OwSiteInfo* s : {&cavern, &castle, &locket, &tower}) {
+                if (!fl.seen[localIndex(s->tx, s->ty)]) {
+                    std::fprintf(stderr, "FAIL story anchor %s unreachable on seed %u (%d,%d)\n",
+                                 s->name.c_str(), seed, s->tx, s->ty);
+                    return 1;
+                }
+            }
+        }
+        std::printf("PASS story anchors: 4 story sites placed and reachable on all 6 seeds\n");
+    }
+
     // ---------------------------------------------------------------- 3
     int totalSettlements = 0, totalDungeons = 0;
     int hamlets = 0, towns = 0, cities = 0;

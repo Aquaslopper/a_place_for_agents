@@ -9,10 +9,10 @@ AGENTS START HERE: https://github.com/Aquaslopper/a_place_for_agents/blob/main/d
 Elmswick is the last field office on a charted road. When the maps end, its
 agents begin: Aldric keeps the way open, Iris reads what the old maps leave
 out, and Pip makes sure everyone gets home. Follow their assignment through a
-hand-built village and into a world that grows as you explore it: a designed
-Lufia II-shaped continent of quiet meadows, old forests, mountain walls, rivers
-and lakes, joined by real roads and dotted with settlement, castle, cave, tower
-and ruin icons. Beyond its coast the atlas keeps going: sail far enough and the
+hand-built village and into a world that grows as you explore it: a procedurally
+generated Lufia II-shaped continent of quiet meadows, old forests, mountain
+walls, rivers and lakes, joined by real roads and dotted with settlement,
+castle, cave, tower and ruin icons. Beyond its coast the atlas keeps going: sail far enough and the
 next country generates. A king has made off with the village crown.
 
 ![Elmswick, the village the game opens in](docs/screenshots/village.png)
@@ -23,17 +23,24 @@ and the [soundtrack cue sheet](assets/audio/SCORE.txt).
 
 ### The world
 
-The overworld is a miniature SNES world, not an endless noise field. A
-320×320-tile continent is built from authored land shapes, then given tapered
-mountain ranges, meandering rivers, lakes, forests in copses, a beach fringe,
-hand-placed story sites, generated hamlets/dungeons, and A*-routed roads that
-cross water as bridges and ranges as passes. Each continent is deterministic
-from `(worldSeed, region)`; the atlas never runs out of cells.
+The overworld is a miniature SNES world, not an endless noise field. Every
+320×320-tile continent is procedurally generated: seeded land lobes with bays
+and capes, tapered wavy mountain ranges, meandering rivers, lakes, forests in
+copses, a beach fringe, story sites placed by rules, generated
+hamlets/dungeons, and A*-routed roads that cross water as bridges and ranges as
+passes. Each continent is deterministic from `(worldSeed, region)`; the atlas
+never runs out of cells.
 
 | | |
 |---|---|
 | ![The world map of the Elmlands](docs/screenshots/world_map.png) | ![Elmswick and its roads from the field camera](docs/screenshots/overworld.png) |
 | ![The north wall and the Castle of Elm](docs/screenshots/overworld_castle.png) | ![The southern coast and a river mouth](docs/screenshots/overworld_coast.png) |
+
+![Two seeds of the same homeland](docs/screenshots/world_seeds.png)
+
+*Same story, two seeds: Elmswick is always the origin and the story places keep
+their roles, but the land, the ranges, the rivers, the lakes and every site
+position come from the seed.*
 
 These previews are rendered from the same tile atlas and the same C++ world
 data the game uses (`tools/preview_world.py`), not from a separate mock-up.
@@ -143,11 +150,13 @@ real road: three Tidewell isles wait offshore, and beyond them the next
 continent generates from the same seed — the atlas has no outer wall, only
 more countries. Walking is bounded by coast and mountain; sailing is bounded
 only by how far you care to go.
-- **Places worth finding, and a road to each of them.** The homelands are
-authored pins (Elmswick, the Castle of Elm, Hollow Hill, the Standing Stones,
-the Old Watchtower and their neighbours), snapped to legal ground and given a
-clearing. Further out, the seeds scatter hamlets, caves, towers, temples and
-ruins across each continent. **Roads** join them: A*-routed country roads that
+- **Places worth finding, and a road to each of them.** The homeland's story
+places are **rules, not coordinates**: Elmswick is the fixed origin; the Castle
+of Elm seeks the northern crags, the Old Watchtower the north-west shoulder,
+the Standing Stones the west, Hollow Hill the woods near home. The seed chooses
+the actual site, so two seeds with the same story have different maps. Further
+out, the seeds scatter hamlets, caves, towers, temples and ruins across each
+continent. **Roads** join them: A*-routed country roads that
 cross water as bridges and ranges as passes, so a road out of Elmswick's gate
 leads to another village rather than into the wilds. Every one of those places
 **names itself** as you come near it. Interiors have their own small scenes. Stone mouths in
@@ -276,8 +285,8 @@ The world is verified headlessly, without a GPU or a window:
 python3 tools/link_check.py                 # every TU compiles, the binary links
 python3 tools/verify_world.py               # determinism, ports, reachability, traversal, 201 atlas cells
 c++ -std=c++17 -O2 -Isrc src/overworld_gen.cpp src/town_gen.cpp \
-    tools/verify_lufia_world.cpp -o /tmp/vlw && /tmp/vlw   # designed-world suite
-/tmp/venv/bin/python tools/preview_world.py  # rebuild docs/screenshots from the real atlas
+    tools/verify_lufia_world.cpp -o /tmp/vlw && /tmp/vlw   # world-structure suite
+/tmp/venv/bin/python tools/preview_world.py --montage  # rebuild screenshots + two-seed montage
 ```
 
 `tools/dump_world.cpp` is a headless text dump of one continent (kinds, roads,
@@ -333,7 +342,7 @@ references used while designing the terrain and walking-scale world.
 
 ```text
 src/game.hpp      shared types and game state
-src/overworld_gen.cpp  the world: designed continents, ranges, rivers, sites, roads, names
+src/overworld_gen.cpp  the world: procedural continents, ranges, rivers, sites, roads, names
 src/world.cpp     overworld rendering, props, NPCs, chests, compatibility helpers
 src/atlas.cpp     the Survey page (draws overworld_gen), legacy atlas helpers
 src/sail.cpp      the boat: sailing, mooring, landings, the millpond sea encounters
@@ -389,10 +398,10 @@ only builds and packages the Windows exe and Linux binary.
   the active virtual canvas.
 - `src/overworld_gen.cpp` / `src/overworld_gen.hpp` — **the world.** One pure
   function of `(worldSeed, regionX, regionY)`: a 320×320-tile continent built
-  from authored land blobs, tapered mountain ranges, stylised river splines,
-  lakes, biome fields and 2×2 forest copses; then story pins, generated
-  hamlet/dungeon plans, tide islands, and roads routed with A* (bridges over
-  water, passes over ranges). It exposes tiles (`owSampleTile`), sites
+  from seeded land lobes, tapered mountain ranges, stylised river splines,
+  lakes, biome fields and 2×2 forest copses; then story sites placed by rule
+  (Elmswick is the fixed origin), generated hamlet/dungeon plans, tide
+  islands, and roads routed with A* (bridges over water, passes over ranges). It exposes tiles (`owSampleTile`), sites
   (`owSitesInRect`, `owSiteAtTile`), names and danger tiers, and an LRU region
   cache, so the atlas is unbounded without any generation at runtime.
 - `src/world.cpp` / `src/world.hpp` — overworld presentation (tiles, props,

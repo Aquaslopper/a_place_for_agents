@@ -181,6 +181,9 @@ inline bool isLandKind(OwTileKind k) {
 struct Blob {
     float cx, cy, rx, ry;
 };
+void carveBay(Region& R, float cx, float cy, float rx, float ry);
+
+
 
 void buildLand(Region& R, Rng& rng, bool start) {
     const int baseX = R.rx * REGION;
@@ -188,17 +191,24 @@ void buildLand(Region& R, Rng& rng, bool start) {
     std::vector<Blob> blobs;
 
     if (start) {
-        // The homeland: a broad temperate continent with a vale in the south,
-        // a mountain wall in the north, a western forest and a long southern
-        // coast that the Tidewell isles sit off.
-        blobs = {
-            {  0.0f,   6.0f, 94.0f, 82.0f},
-            {-48.0f, -42.0f, 54.0f, 46.0f},
-            { 46.0f, -38.0f, 48.0f, 44.0f},
-            {-62.0f,  28.0f, 42.0f, 36.0f},
-            { 64.0f,  30.0f, 40.0f, 32.0f},
-            { 18.0f,  56.0f, 34.0f, 26.0f},
-        };
+        // The homeland is generated like every other continent: a seeded ring
+        // of lobes around one central mass. Only the *shape grammar* is
+        // authored (a broad temperate heartland), never the map.
+        int lobes = 4 + rng.range(3);
+        float phase = rng.frange(0.0f, 6.2831853f);
+        Blob heart{0.0f, 0.0f, rng.frange(62.0f, 78.0f), rng.frange(54.0f, 70.0f)};
+        blobs.push_back(heart);
+        for (int i = 0; i < lobes; ++i) {
+            float ang = phase + 6.2831853f * static_cast<float>(i) / static_cast<float>(lobes)
+                      + rng.frange(-0.28f, 0.28f);
+            float dist = rng.frange(36.0f, 62.0f);
+            Blob b;
+            b.cx = std::cos(ang) * dist;
+            b.cy = std::sin(ang) * dist;
+            b.rx = rng.frange(34.0f, 58.0f);
+            b.ry = b.rx * rng.frange(0.70f, 1.15f);
+            blobs.push_back(b);
+        }
     } else {
         const int count = 2 + rng.range(3);
         const float maxCentre = static_cast<float>(HALF - RIM - 84);
@@ -297,6 +307,17 @@ void buildLand(Region& R, Rng& rng, bool start) {
             }
     }
 
+    // One to three seeded bays: inlets, capes and a coast worth sailing.
+    if (start) {
+        int bays = 1 + rng.range(3);
+        for (int i = 0; i < bays; ++i) {
+            float ang = rng.frange(0.0f, 6.2831853f);
+            float dist = rng.frange(88.0f, 118.0f);
+            carveBay(R, std::cos(ang) * dist, std::sin(ang) * dist,
+                     rng.frange(9.0f, 17.0f), rng.frange(7.0f, 13.0f));
+        }
+    }
+
     // The world edge is water. Continents never bleed into a neighbour's cell.
     for (int ly = -HALF; ly < HALF; ++ly) {
         for (int lx = -HALF; lx < HALF; ++lx) {
@@ -310,6 +331,34 @@ void buildLand(Region& R, Rng& rng, bool start) {
 
     (void)baseX;
     (void)baseY;
+}
+
+// A bay is a bite taken out of the coast: it only counts if it reaches the
+// water, and it keeps coastlines from reading as one smooth ellipse.
+void carveBay(Region& R, float cx, float cy, float rx, float ry) {
+    int ix0 = static_cast<int>(cx), iy0 = static_cast<int>(cy);
+    int r = static_cast<int>(std::ceil(std::max(rx, ry))) + 2;
+    bool touchesWater = false;
+    for (int dy = -r; dy <= r && !touchesWater; ++dy)
+        for (int dx = -r; dx <= r; ++dx) {
+            int x = ix0 + dx, y = iy0 + dy;
+            if (!inRegion(x, y)) continue;
+            float nx = static_cast<float>(dx) / rx, ny = static_cast<float>(dy) / ry;
+            if (nx * nx + ny * ny > 1.0f) continue;
+            if (isWaterKind(static_cast<OwTileKind>(R.kind[ridx(x, y)]))) { touchesWater = true; break; }
+        }
+    if (!touchesWater) return;
+    for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx) {
+            int x = ix0 + dx, y = iy0 + dy;
+            if (!inRegion(x, y)) continue;
+            float nx = static_cast<float>(dx) / rx, ny = static_cast<float>(dy) / ry;
+            float wobble = (fbm(x * 0.19f + 13.0f, y * 0.19f - 5.0f, 0xB4A17u, 2) - 0.5f) * 0.30f;
+            if (nx * nx + ny * ny + wobble > 1.0f) continue;
+            int id = ridx(x, y);
+            if (!isLandKind(static_cast<OwTileKind>(R.kind[id]))) continue;
+            R.kind[id] = static_cast<std::uint8_t>(OWT_SEA);
+        }
 }
 
 // The largest connected landmass (4-neighbour, ignoring mountains/rivers since
@@ -409,11 +458,26 @@ void buildMountains(Region& R, Rng& rng, bool start, bool snowy) {
     };
 
     if (start) {
-        // The north wall the Castle of Elm sits behind; a western spur that
-        // Hollow Hill's caverns run under; and a low eastern ridge.
-        ranges.push_back(wavy(-124.0f, 124.0f, -30.0f, -34.0f, 9.0f, 10));
-        ranges.push_back(wavy(-92.0f, -66.0f, 22.0f, -30.0f, 7.0f, 5));
-        ranges.push_back(wavy(40.0f, 106.0f, 2.0f, 50.0f, 6.0f, 4));
+        // One northern range is guaranteed — the Lufia silhouette, the wall a
+        // young party cannot cross — but its latitude, tilt, length and wave
+        // come from the seed, as do the one or two interior ranges. No two
+        // homelands have the same mountains.
+        float ny = rng.frange(-48.0f, -24.0f);
+        float tilt = rng.frange(-16.0f, 16.0f);
+        float x0 = -126.0f + rng.frange(-8.0f, 8.0f);
+        float x1 =  126.0f + rng.frange(-8.0f, 8.0f);
+        ranges.push_back(wavy(x0, x1, ny, ny + tilt, 8.5f, 9 + rng.range(3)));
+
+        int extra = 1 + rng.range(2);
+        for (int r = 0; r < extra; ++r) {
+            float cx = rng.frange(-46.0f, 46.0f);
+            float cy = rng.frange(-6.0f, 52.0f);
+            float ang = rng.frange(0.0f, 3.1415926f);
+            float len = rng.frange(44.0f, 86.0f);
+            float hx = std::cos(ang) * len * 0.5f;
+            float hy = std::sin(ang) * len * 0.5f;
+            ranges.push_back(wavy(cx - hx, cx + hx, cy - hy, cy + hy, 6.5f, 4 + rng.range(3)));
+        }
     } else {
         // One or two ranges, each crossing most of the continent so it is a
         // real barrier with real passes rather than scattered noise ridges.
@@ -560,11 +624,32 @@ void carveLake(Region& R, float cx, float cy, float rx, float ry) {
 
 void buildRivers(Region& R, Rng& rng, bool start, const std::vector<Blob>& blobs, OwClimate climate) {
     if (start) {
-        // The Millbrook: from the north wall down through the vale, past
-        // Elmswick's east bank, out into the southern sea.
-        carveRiver(R, rng, 6.0f, -34.0f, 4.0f, 78.0f);
-        carveRiver(R, rng, -30.0f, -20.0f, -60.0f, 62.0f);
-        carveLake(R, -28.0f, 22.0f, 9.0f, 6.0f);     // Millpond, west of the vale
+        // Rivers are seeded too: two or three run from the vale to the sea,
+        // and one or two lakes sit in the hollows between the ranges. Only the
+        // rule is authored — every river reaches salt water, every lake is
+        // inland — never the course.
+        int rivers = 2 + rng.range(2);
+        for (int i = 0; i < rivers; ++i) {
+            float sx = rng.frange(-58.0f, 58.0f);
+            float sy = rng.frange(-26.0f, 12.0f);
+            float mx = sx + rng.frange(-34.0f, 34.0f);
+            float my = rng.frange(86.0f, 116.0f);
+            carveRiver(R, rng, sx, sy, mx, my);
+        }
+        int lakes = 1 + rng.range(2);
+        for (int i = 0; i < lakes; ++i) {
+            for (int attempt = 0; attempt < 40; ++attempt) {
+                float ang = rng.frange(0.0f, 6.2831853f);
+                float dist = rng.frange(26.0f, 62.0f);
+                int cx = static_cast<int>(std::cos(ang) * dist);
+                int cy = static_cast<int>(std::sin(ang) * dist);
+                if (std::abs(cx) < 14 && std::abs(cy) < 14) continue;
+                if (!isLandKind(static_cast<OwTileKind>(R.kind[ridx(cx, cy)]))) continue;
+                carveLake(R, static_cast<float>(cx), static_cast<float>(cy),
+                          rng.frange(6.0f, 11.0f), rng.frange(4.0f, 8.0f));
+                break;
+            }
+        }
     } else {
         if (rng.chance(0.55f))
             carveLake(R, rng.frange(-60.0f, 60.0f), rng.frange(-60.0f, 60.0f),
@@ -898,96 +983,204 @@ void planGenericSites(Region& R, Rng& rng, OwClimate climate,
     }
 }
 
-void planStartSites(Region& R, std::uint32_t seed, std::vector<SitePlan>& out) {
-    // The authored heart of the world. Coordinates are desires, not promises:
-    // each snaps to the nearest legal tile for its kind.
-    struct Pinned {
-        OwSiteType type;
-        int x, y;
-        const char* name;
+void planStartSites(Region& R, std::uint32_t seed, Rng& rng, std::vector<SitePlan>& out) {
+    // The story places are anchors, not coordinates. Each pin is a rule about
+    // where it belongs (the castle in the northern crags, the watchtower on the
+    // north-west shoulder, the stones in the west), and the seed chooses the
+    // actual site. Two seeds with the same story still have different maps.
+    auto nearSea = [&](int x, int y, int r) {
+        for (int dy = -r; dy <= r; ++dy)
+            for (int dx = -r; dx <= r; ++dx) {
+                int nx = x + dx, ny = y + dy;
+                if (!inRegion(nx, ny)) continue;
+                if (isWaterKind(static_cast<OwTileKind>(R.kind[ridx(nx, ny)]))) return true;
+            }
+        return false;
     };
-    const Pinned pins[] = {
-        {OWS_TOWN,    0,   0, "Elmswick"},
-        {OWS_CAVE,  -18, -16, "Hollow Hill"},
-        {OWS_CASTLE, 18, -54, "Castle of Elm"},
-        {OWS_RUINS, -44,  16, "Standing Stones"},
-        {OWS_TOWER, -36, -30, "Old Watchtower"},
-        {OWS_HAMLET, 24,  10, "Oakford"},
-        {OWS_HAMLET, 16,  58, "Saltmere"},
-        {OWS_TEMPLE, -20, 46, "Shrine of the Vale"},
-        {OWS_CAVE,   56,  46, "Gull Rock Cave"},
-        {OWS_TOWER,  66, -14, "Eastwatch Spire"},
-        {OWS_HAMLET, -52,  -4, "Briarwick"},
-        {OWS_HAMLET, -10,  34, "Millbrook"},
-        {OWS_HAMLET,  40,  26, "Thornbury"},
-        {OWS_HAMLET, -46,  34, "Fenwick"},
+    auto fits = [&](int x, int y, int spacing) {
+        for (const SitePlan& p : out)
+            if (std::max(std::abs(p.x - x), std::abs(p.y - y)) < spacing) return false;
+        return true;
     };
 
-    int salt = 0;
-    for (const Pinned& pin : pins) {
-        SiteSnap snap = snapToSiteGround(R, pin.x, pin.y, pin.type, 52);
-        if (!snap.found) continue;
+    const int townX = 0, townY = 0;
+    // The one fixed point in the world: the party's home gate. If a river or
+    // lake wandered over it, make an island of dry ground and reconnect it.
+    for (int dy = -2; dy <= 2; ++dy)
+        for (int dx = -2; dx <= 2; ++dx) {
+            int id = ridx(townX + dx, townY + dy);
+            if (owIsWater(static_cast<OwTileKind>(R.kind[id]))) {
+                R.kind[id] = static_cast<std::uint8_t>(OWT_GRASS);
+                R.river[id] = 0;
+            }
+        }
+
+    auto place = [&](OwSiteType type, const char* name, int minR, int maxR,
+                     float a0, float a1, int spacing, bool wantCrag, bool wantSea,
+                     int boxX0, int boxY0, int boxX1, int boxY1) -> bool {
+        // Try the authored conditions first (angle/radius band, a crag for a
+        // castle, a shore for a cave). Then relax them one at a time so a
+        // story site is never silently missing from a continent.
+        for (int strict = 0; strict < 3; ++strict) {
+            for (int attempt = 0; attempt < 420; ++attempt) {
+                float ang = rng.frange(a0, a1);
+                float dist = rng.frange(static_cast<float>(minR), static_cast<float>(maxR));
+                int x = static_cast<int>(std::round(std::cos(ang) * dist));
+                int y = static_cast<int>(std::round(std::sin(ang) * dist));
+                if (!inRegion(x, y) || !inRegion(x + 2, y + 2)) continue;
+                if (x < boxX0 || x > boxX1 || y < boxY0 || y > boxY1) continue;
+                if (!isLandKind(static_cast<OwTileKind>(R.kind[ridx(x, y)]))) continue;
+                if (strict == 0 && wantCrag && !sitePredicateOk(R, x, y, type)) continue;
+                if (strict <= 1 && wantSea && !nearSea(x, y, 6)) continue;
+                if (!fits(x, y, spacing)) continue;
+                SitePlan p;
+                p.type = type;
+                p.climate = OWC_TEMPERATE;
+                p.x = x;
+                p.y = y;
+                p.seed = owHash2(x, y, seed ^ 0xE135u);
+                p.story = true;
+                p.fixedName = name;
+                out.push_back(p);
+                return true;
+            }
+        }
+        // Absolute fallback: any dry tile in the allowed box.
+        for (int r = 0; r <= 90; ++r) {
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx) {
+                    if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
+                    int x = townX + dx, y = townY + dy;
+                    if (x < boxX0 || x > boxX1 || y < boxY0 || y > boxY1) continue;
+                    if (!isLandKind(static_cast<OwTileKind>(R.kind[ridx(x, y)]))) continue;
+                    if (!fits(x, y, spacing)) continue;
+                    SitePlan p;
+                    p.type = type;
+                    p.climate = OWC_TEMPERATE;
+                    p.x = x;
+                    p.y = y;
+                    p.seed = owHash2(x, y, seed ^ 0xE135u);
+                    p.story = true;
+                    p.fixedName = name;
+                    out.push_back(p);
+                    return true;
+                }
+        }
+        return false;
+    };
+
+    // Elmswick: the origin anchor (the runtime starts here), on the vale floor.
+    {
         SitePlan p;
-        p.type = pin.type;
+        p.type = OWS_TOWN;
         p.climate = OWC_TEMPERATE;
-        p.x = snap.x;
-        p.y = snap.y;
-        p.seed = owHash2(p.x, p.y, seed ^ 0xE135u);
+        p.x = townX;
+        p.y = townY;
+        p.seed = owHash2(townX, townY, seed ^ 0xE135u);
         p.story = true;
-        p.fixedName = pin.name;
-        p.island = false;
+        p.fixedName = "Elmswick";
         out.push_back(p);
-        ++salt;
     }
 
-    // Generic places are planned by the caller, after the Tidewell isles have
-    // taken their bite out of the southern sea.
+    // North: the castle among the crags, the tower on the north-west shoulder.
+    place(OWS_CASTLE, "Castle of Elm", 34, 74, -2.55f, -0.60f, 12, true, false,
+          -76, -76, 76, -20);
+    place(OWS_TOWER, "Old Watchtower", 22, 58, -2.60f, -1.20f, 10, false, false,
+          -72, -58, -8, -8);
+
+    // West and south-west: the standing stones on open ground.
+    place(OWS_RUINS, "Standing Stones", 18, 56, 1.90f, 3.60f, 10, false, false,
+          -72, -28, -8, 54);
+
+    // The cave in the home woods, a short walk from the gate.
+    place(OWS_CAVE, "Hollow Hill", 13, 40, -3.14f, 3.14f, 9, true, false,
+          -56, -56, 56, 56);
+
+    // The hamlets, one per seeded sector so they scatter around the vale.
+    struct HamletPin { const char* name; };
+    static const HamletPin kHamlets[] = {
+        {"Oakford"}, {"Saltmere"}, {"Millbrook"}, {"Briarwick"}, {"Thornbury"}, {"Fenwick"},
+    };
+    float phase = rng.frange(0.0f, 6.2831853f);
+    for (int i = 0; i < 6; ++i) {
+        float a0 = phase + 6.2831853f * static_cast<float>(i) / 6.0f - 0.55f;
+        float a1 = a0 + 1.10f;
+        place(OWS_HAMLET, kHamlets[i].name, 18, 68, a0, a1, 11, false, false,
+              -100, -100, 100, 100);
+    }
+
+    // Two outlying story errands: the shrine in the south, the gull cave on a
+    // southern shore, a spire watching the east.
+    place(OWS_TEMPLE, "Shrine of the Vale", 26, 62, 0.55f, 2.45f, 10, false, false,
+          -60, 0, 70, 80);
+    place(OWS_CAVE, "Gull Rock Cave", 34, 74, 0.85f, 2.60f, 10, false, true,
+          -50, 16, 80, 92);
+    place(OWS_TOWER, "Eastwatch Spire", 38, 74, -0.85f, 0.55f, 10, false, false,
+          18, -50, 92, 30);
 }
 
 // Tidewell islands: three small, deliberately placed isles in the southern sea,
 // each with a camp and a landing beach. They are the reason to buy a boat.
-void carveTideIslands(Region& R, std::uint32_t seed, std::vector<SitePlan>& out) {
-    static const int kX[3] = {-58, 6, 66};
-    static const int kY[3] = {96, 108, 88};
+void carveTideIslands(Region& R, std::uint32_t seed, Rng& rng, std::vector<SitePlan>& out) {
     static const char* kNames[3] = {"Tidewell Cay", "Lantern Shoal", "Saltspire Isle"};
+    int made = 0;
     for (int i = 0; i < 3; ++i) {
-        int cx = kX[i], cy = kY[i];
-        if (!inRegion(cx, cy)) continue;
-        // The isles own their water: clear any random islet near the shoal so
-        // "offshore" means offshore and a boat can actually land.
-        for (int dy = -10; dy <= 10; ++dy)
-            for (int dx = -10; dx <= 10; ++dx) {
-                int x = cx + dx, y = cy + dy;
-                if (!inRegion(x, y)) continue;
-                int id = ridx(x, y);
-                if (isLandKind(static_cast<OwTileKind>(R.kind[id])))
-                    R.kind[id] = static_cast<std::uint8_t>(OWT_DEEP_SEA);
-                R.river[id] = 0;
-            }
-        // Raise a small sandy island out of the deep water; the ring of surf
-        // around it is shallow sea so the coast reads at a glance.
-        float rad = 3.1f + static_cast<float>(owHash2(cx, cy, seed ^ 0x71DEu) % 5u) * 0.22f;
-        for (int dy = -5; dy <= 5; ++dy)
-            for (int dx = -5; dx <= 5; ++dx) {
-                int x = cx + dx, y = cy + dy;
-                if (!inRegion(x, y)) continue;
-                float d = std::sqrt(static_cast<float>(dx * dx + dy * dy));
-                if (d <= rad)
-                    R.kind[ridx(x, y)] = static_cast<std::uint8_t>(OWT_SAND);
-                else if (d <= rad + 1.0f)
-                    R.kind[ridx(x, y)] = static_cast<std::uint8_t>(OWT_SEA);
-            }
-        SitePlan p;
-        p.type = OWS_CAMP;
-        p.climate = OWC_TEMPERATE;
-        p.x = cx;
-        p.y = cy;
-        p.seed = owHash2(cx, cy, seed ^ 0x71DEu);
-        p.island = true;
-        p.islandIdx = i;
-        p.fixedName = kNames[i];
-        out.push_back(p);
+        bool found = false;
+        for (int attempt = 0; attempt < 400 && !found; ++attempt) {
+            // The isles live in the southern sea the runtime searches for them
+            // (x -100..100, y 60..130), well clear of any coast.
+            int cx = -94 + rng.range(189);
+            int cy = 74 + rng.range(51);
+            bool allWater = true;
+            for (int dy = -7; dy <= 7 && allWater; ++dy)
+                for (int dx = -7; dx <= 7; ++dx) {
+                    int x = cx + dx, y = cy + dy;
+                    if (!inRegion(x, y)) { allWater = false; break; }
+                    if (isLandKind(static_cast<OwTileKind>(R.kind[ridx(x, y)]))) { allWater = false; break; }
+                }
+            if (!allWater) continue;
+            bool tooNear = false;
+            for (const SitePlan& p : out)
+                if (p.island && std::max(std::abs(p.x - cx), std::abs(p.y - cy)) < 30) { tooNear = true; break; }
+            if (tooNear) continue;
+
+            // Own the surrounding water so the isle really is offshore: clear
+            // any random islet the continent's islet pass dropped nearby.
+            for (int dy = -10; dy <= 10; ++dy)
+                for (int dx = -10; dx <= 10; ++dx) {
+                    int x = cx + dx, y = cy + dy;
+                    if (!inRegion(x, y)) continue;
+                    int id = ridx(x, y);
+                    if (isLandKind(static_cast<OwTileKind>(R.kind[id])))
+                        R.kind[id] = static_cast<std::uint8_t>(OWT_DEEP_SEA);
+                    R.river[id] = 0;
+                }
+            float rad = 3.1f + static_cast<float>(owHash2(cx, cy, seed ^ 0x71DEu) % 5u) * 0.22f;
+            for (int dy = -5; dy <= 5; ++dy)
+                for (int dx = -5; dx <= 5; ++dx) {
+                    int x = cx + dx, y = cy + dy;
+                    if (!inRegion(x, y)) continue;
+                    float d = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+                    if (d <= rad)
+                        R.kind[ridx(x, y)] = static_cast<std::uint8_t>(OWT_SAND);
+                    else if (d <= rad + 1.0f)
+                        R.kind[ridx(x, y)] = static_cast<std::uint8_t>(OWT_SEA);
+                }
+            SitePlan p;
+            p.type = OWS_CAMP;
+            p.climate = OWC_TEMPERATE;
+            p.x = cx;
+            p.y = cy;
+            p.seed = owHash2(cx, cy, seed ^ 0x71DEu);
+            p.island = true;
+            p.islandIdx = i;
+            p.fixedName = kNames[i];
+            out.push_back(p);
+            ++made;
+            found = true;
+        }
     }
+    (void)made;
 }
 
 // ---------------------------------------------------------------- pads
@@ -1425,8 +1618,8 @@ void buildRegion(Region& R, std::uint32_t seed, int rx, int ry) {
     // ---- sites
     std::vector<SitePlan> plans;
     if (start) {
-        planStartSites(R, seed, plans);
-        carveTideIslands(R, seed, plans);
+        planStartSites(R, seed, rng, plans);
+        carveTideIslands(R, seed, rng, plans);
         // The isles just cleared a hole in the sea; re-read the land so a
         // generic site cannot be planned onto what is now open water.
         mainLand = largestLandComponent(R);

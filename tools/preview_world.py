@@ -264,7 +264,7 @@ def draw_scene(w: World, cx: int, cy: int, out: pathlib.Path, hero: bool = True,
     print("wrote", out.relative_to(ROOT), f"({VW}x{VH})")
 
 
-def draw_world_map(w: World, out: pathlib.Path, scale: int = 3) -> None:
+def render_world_map(w: World, scale: int = 3, caption: bool = True) -> Image.Image:
     size = REGION * scale
     img = Image.new("RGB", (size, size), (18, 52, 98))
     d = ImageDraw.Draw(img)
@@ -291,20 +291,43 @@ def draw_world_map(w: World, out: pathlib.Path, scale: int = 3) -> None:
             d.rectangle([px - 1, py - 9, px + tw + 1, py - 1], fill=(16, 20, 28))
             d.text((px, py - 8), label, fill=(255, 238, 190))
 
-    # Compass rose and caption
-    d.rectangle([8, 8, 232, 28], fill=(16, 20, 28))
-    d.text((13, 12), f"{w.name.upper()}  seed {w.seed}", fill=(255, 232, 150))
+    if caption:
+        d.rectangle([8, 8, 232, 28], fill=(16, 20, 28))
+        d.text((13, 12), f"{w.name.upper()}  seed {w.seed}", fill=(255, 232, 150))
     cx = size // 2
     d.polygon([(size - 26, 20), (size - 18, 44), (size - 26, 38), (size - 34, 44)], fill=(230, 226, 210))
     d.text((size - 32, 48), "N", fill=(230, 226, 210))
+    return img
+
+
+def draw_world_map(w: World, out: pathlib.Path, scale: int = 3) -> None:
+    img = render_world_map(w, scale)
     img.save(out)
-    print("wrote", out.relative_to(ROOT), f"({size}x{size})")
+    print("wrote", out.relative_to(ROOT), f"({img.width}x{img.height})")
+
+
+def draw_world_seeds(seeds: list[int], out: pathlib.Path, scale: int = 2) -> None:
+    """Two homelands side by side: same story, different procedure."""
+    tiles = [render_world_map(dump_world(s, 0, 0), scale, caption=False) for s in seeds]
+    w, h = tiles[0].size
+    gutter, header = 12, 34
+    img = Image.new("RGB", (w * len(tiles) + gutter * (len(tiles) + 1),
+                            h + header + gutter), (12, 17, 26))
+    d = ImageDraw.Draw(img)
+    for i, (seed, tile) in enumerate(zip(seeds, tiles)):
+        x = gutter + i * (w + gutter)
+        img.paste(tile, (x, header))
+        d.text((x + 4, 12), f"SEED {seed}  -  {tile.width}x{tile.height}", fill=(255, 232, 150))
+    img.save(out)
+    print("wrote", out.relative_to(ROOT), f"({img.width}x{img.height})")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--region", type=int, nargs=2, default=[0, 0])
+    ap.add_argument("--montage", action="store_true",
+                    help="also write world_seeds.png: two seeds of the same homeland")
     args = ap.parse_args()
 
     OUT.mkdir(parents=True, exist_ok=True)
@@ -327,6 +350,8 @@ def main() -> int:
     draw_scene(w, 6, 66, OUT / "overworld_coast.png", hero_dy=0)
 
     draw_world_map(w, OUT / "world_map.png")
+    if args.montage:
+        draw_world_seeds([args.seed, args.seed ^ 0x9E3779B9], OUT / "world_seeds.png")
     return 0
 
 

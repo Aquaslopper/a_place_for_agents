@@ -127,7 +127,7 @@ prints PASS/FAIL for all of:
 reachability and the scripted cross-map traversal PASS in
 `tools/verify_world.py`; the 201-cell outward atlas PASSES; the map-session
 save round-trips. The runtime `SaveBlob` is v7, and v4–v6 saves migrate to
-Elmswick. `tools/verify_lufia_world.cpp` adds a designed-world suite: the
+Elmswick. `tools/verify_lufia_world.cpp` adds a world-structure suite: the
 homeland's story sites and 8+ settlements, 54 seeded continents whose sites
 are all walkable and reachable on foot, boat-only Tidewell isles, roads with
 real bridges and passes, outward continents, and a cold continent in ~106 ms.
