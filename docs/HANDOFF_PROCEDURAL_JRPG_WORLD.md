@@ -107,12 +107,10 @@ Composition lessons taken from Lufia (apply when authoring more plates):
 - transitions (grass↔water/sand/forest) happen INSIDE a plate via autotile edges so the border itself is a clean single terrain;
 - rare site icons sit as a single entry point.
 
-**KNOWN DEFECT — WATER PLATES ARE WRONG (fix this first):**
-- `water_*` render as dark bands + white specks, not blue sea + foam coast.
-- Cause: the water region (cols 0–5, rows 0–7) is the RM2k *boundary* autotile, not a standard island autotile, so `island(0,0)` grabs the wrong pieces.
-- The mask / `render_mask` machinery is correct; only the water tile SOURCE is wrong.
-- Fix: decode the RM2k water boundary (8×8 corner-animation pieces, H/V sides, "+" centre across the first blocks; open-water centre in the deep-sea block cols 0–2 rows 3–7; animated water cols 3–5 rows 3–7), build a correct water edge/corner set, re-run. Candidates for a full-water cell: `(1,5)` deep sea, `(4,5)` animated.
-- forest/sand/snow/dirt/mountain (60 plates) + all 25 site/special plates are correct and usable now.
+**FIXED — WATER PLATES (was: "water plates are wrong")**
+- The old `water_*` plates rendered as dark bands + white specks: the retro sheet's water region (cols 0–5, rows 0–7) is the RM2k *boundary* autotile, and its open-sea tile is a flat `(28,41,46)` black that does not read as sea.
+- Fix, shipped: the water plates no longer crop water from the sheet. They use the water the game already ships — `assets/tiles/water_0.png` (the OpenRTP-derived field water from `landscape_art.py`, ramp `#377e91 #3c8497 #438a9a #4d909e #5698a5`), with a 3px `beach.png` lip on every land-facing side. `deep_water.png` is there for open-sea plates.
+- `render_mask` is unchanged and `water_*` keep their names and edge labels, so `tools/build_overworld_layout.py` needs no change.
 
 ### Step 4+ — what the next agent builds (the generator)
 

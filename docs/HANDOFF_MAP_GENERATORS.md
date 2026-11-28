@@ -202,7 +202,7 @@ Once all four standalone Python generators (`build_overworld_layout.py`, `build_
    ```
 2. **Transporter Wiring (`Overworld ↔ Submap`):** Every special plate on the overworld grid (`town_*`, `castle_*`, `cave`, `cave_in_mountain`, `tower`, `temple`, `ruins`, `camp`, `gate_pass`, `bridge_over_water`, `volcano`, `colosseum`) stores a deterministic `site_id = "<kind>:<px>,<py>"` and portal bindings so stepping onto the plate (or entering from a mountain side) transitions to that map and exits back onto the exact overworld plate coordinates.
 3. **Recommended Execution Order:**
-   1. Fix the known `water_*` source-crop bug in `tools/build_overworld_plates.py` (noted in `docs/HANDOFF_PROCEDURAL_JRPG_WORLD.md`).
+   1. ~~Fix the known `water_*` source-crop bug~~ — **DONE**: `water_*` now compose the shipped `assets/tiles/water_0.png` with a `beach.png` lip instead of the retro sheet's black boundary block.
    2. Track 1: Towns + Interiors (Steps 1.1 → 1.4).
    3. Track 2: Caves + Multi-Floor Dungeons (Steps 2.1 → 2.4).
    4. Track 3: Quest Maps & Pass Transporters (Steps 3.1 → 3.4).
