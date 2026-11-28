@@ -44,7 +44,8 @@ The audit (what is *actually* in use, not what we wish were in use):
 
 | Layer | Source in use | How it reaches runtime | License |
 |---|---|---|---|
-| Terrain, props, buildings | OpenRTP `ChipSet/{Exterior,Interior,Dungeon,World}.png` | `tools/import_openrtp.py` + `landscape_art.py` + `village_art.py` crops, palette ramps, corner-mask composition | CC0 (Jason Perry / finalbossblues) |
+| Terrain, props | OpenRTP `ChipSet/{Exterior,Interior,Dungeon,World}.png` | `tools/import_openrtp.py` + `landscape_art.py` crops, palette ramps, corner-mask composition | CC0 (Jason Perry / finalbossblues) |
+| Walking-scale buildings | OpenRTP `ChipSet/retro_Exterior.png` (SNES-retro) | `village_art.py` composes dithered-shingle roofs, half-timber walls, stone foundations; muted palette ramps (§10.2) | CC BY / CC0 mix (MrBeast, Redshrike, surt, Ogrebane, Gwes, jikmok, Tom Lemmens, marianognu) |
 | Heroes, NPCs, animals | OpenRTP `CharSet/{Actor,People,Animal}*.png` | colour-keyed crops, RM2k frame re-ordering in `import_openrtp.py` | CC BY 4.0 / CC0 per sheet (VictorSena, Marina Navarro Travesset, Garakuta…) |
 | Monsters | OpenRTP `CharSet/Monster*.png`, `Monster/Hornet.png` | keyed crops + exact 2× battle versions | CC BY 4.0 / CC0 per sheet |
 | Portraits | OpenRTP `FaceSet/*.png` | 48×48 crops | CC0 (Garakuta) |
@@ -568,3 +569,45 @@ wall-cap masks/face rows, furniture semantic tags and solid cells, plus the
 clear two-by-two exit landing and bidirectional door portal. These JSON/PNG
 outputs are design-time maps; runtime loading, rendering, movement and
 transitions remain part of the later MapSystem integration step.
+
+### 10.2 Walking-scale building dialect (SNES / Lufia II)
+
+**Status: authoritative for `house_0..4`, `shop`, `inn`, `temple`, `manor`,
+`smithy`, `castle`, `tower`.** The walking-scale buildings are composed by
+[`tools/village_art.py`](../tools/village_art.py) from the **SNES-retro**
+Exterior chipset `ChipSet/retro_Exterior.png` (key `(254,103,138)`), *not*
+the modern `Exterior.png`. The earlier facades were built from the modern
+sheet with smooth gradient roofs, shuttered windows and a striped shop
+canopy — a modern RPG-Maker look, not a 16-bit console look. They were
+rebuilt in the Lufia II dialect after studying the Elcid / Sundletan town
+maps (SNESMaps) and the PureZC "Lufia 2 Houses" rip (composition only;
+those rips are copyrighted and gitignored, never shipped).
+
+What a house looks like in a SNES JRPG, and how each rule is implemented:
+
+| Rule | Implementation in `village_art.py` |
+|---|---|
+| Steep pitched roof of **dithered/checker shingles**, never a smooth gradient | `_shingle(style)` palette-ramps the retro checker-shingle cell `(15,12)`; the roof is a trapezoid filled with that texture (`pattern`), 1px timber outline, a 2px ridge cap (upper-left light) and a 2px eave shadow, plus a shaded far hip on the right |
+| Muted roof families (≤ 8 colours, hue-shifted) | `ROOFS = {clay, slate, ochre, moss, wine}` — dusty, desaturated ramps; no bright saturated modern hues |
+| **Half-timber** walls: cream plaster panels in a dark timber frame | `_plaster()` crops the cream speckle cell `(16,1)`; posts, a top beam, a mid rail and corner braces are drawn in `TIMBER` with a `WOOD_LIGHT` upper-left highlight |
+| Coursed **stone foundation** | `_stone()` ramps the retro stone cell `(7,10)` to the muted `STONE` ramp; a 3px strip under every wall |
+| Tall **two-pane pale-blue windows**, no shutters/reflections | `window()` draws a brown frame, pale glass, a mullion + transom and a single upper-left highlight pixel |
+| Recessed timber door | OpenRTP `CharSet/Object1.png` door crop, integer-resized into a `TIMBER` recess, centred on the lot anchor |
+| **Dormer gable** on the larger houses | `kind in (6,8)` (inn, manor) gets a plaster gable with a small arched light |
+| Hanging **gold-pictogram trade sign** (no baked INN/PUB text) | `hanging_sign()` for shop (coin), inn (bed), smithy (anvil) |
+| Chapel / castle / tower | `temple` = stone nave + bell `tower(steeple=True)` with an arched belfry and in-dialect stained-glass lights; `castle` = crenellated stone keep + conical turrets + the town gate; `tower` = round stone body, cylindrical shading, conical slate roof |
+
+The sprite **sizes and footprints in §10.1 are unchanged** — only the pixel
+content moved to the retro dialect — so lot packing, collision and door
+aprons keep working. The `smithy` overlay lives in `tools/art_extra.py`
+(forge bay + banked coals + anvil sign + broad chimney) and uses the same
+`TIMBER`/`STONE` dialect. The `meadow` and `fen` battle backdrops embed a
+miniature `house_0` / `tower`, so they regenerate with the new buildings.
+
+Provenance: `retro_Exterior.png` is a multi-author **CC BY / CC0** mix
+(MrBeast, Redshrike, surt, Ogrebane, Gwes, jikmok, Tom Lemmens, marianognu);
+the per-file table is in `assets/source/openrtp/AUTHORS.md` and the use is
+credited in [CREDITS.md](../CREDITS.md). The manifest tags these twelve
+sprites with that retro provenance (`tools/generate_manifest.py`). Regenerate
+with `python3 tools/import_openrtp.py`, then `generate_manifest.py` and
+`validate_assets.py`.

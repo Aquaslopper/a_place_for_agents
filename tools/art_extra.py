@@ -132,36 +132,37 @@ def smithy():
     Keep the centre door readable and put the fire in a recessed forge bay,
     not across the entrance. No baked smoke blobs: the chimney is architecture.
     """
-    from village_art import cottage, TIMBER, WOOD_LIGHT
+    from village_art import cottage, TIMBER
     img = cottage('slate', 76, 64, kind=10, gable=False, stone=True)
     d = ImageDraw.Draw(img)
-    # Broad stone stack with individually coursed blocks and soot-dark throat.
-    d.rectangle((53, 5, 62, 26), fill='#81898a', outline=TIMBER)
-    for y in (10, 15, 20):
-        d.line((54, y, 61, y), fill='#49545d')
-        d.line((58 if y != 15 else 56, y-4, 58 if y != 15 else 56, y-1), fill='#616a70')
-    d.rectangle((51, 3, 64, 7), fill='#b8b6a4', outline=TIMBER)
-    d.line((54, 4, 61, 4), fill='#39434d')
-    # Replace the left cottage window with an open brick forge bay.
-    d.rectangle((7, 40, 25, 58), fill=TIMBER)
-    d.rectangle((8, 41, 24, 56), fill='#39434d')
-    d.rectangle((10, 44, 22, 55), fill='#583e41')
-    d.rectangle((11, 48, 21, 54), fill='#b9694f')
-    d.line((12, 53, 20, 53), fill='#efa974', width=2)
-    d.line((15, 51, 16, 49), fill='#ebc88c', width=2)
-    # Iron anvil silhouetted against the banked coals, stone workbench sill.
+    # Broad coursed stone stack with a soot-dark throat (retro stone palette).
+    d.rectangle((53, 4, 62, 26), fill='#707a7e', outline=TIMBER)
+    for y in (9, 14, 19):
+        d.line((54, y, 61, y), fill='#4a5258')
+        d.line((57, y-3, 57, y-1), fill='#5c666c')
+    d.rectangle((51, 2, 64, 6), fill='#9ca49c', outline=TIMBER)
+    d.line((54, 3, 61, 3), fill='#3a4248')
+    # Replace the left window with a recessed brick forge bay + banked coals.
+    d.rectangle((7, 40, 26, 58), fill=TIMBER)
+    d.rectangle((8, 41, 25, 57), fill='#3a4248')
+    d.rectangle((10, 44, 23, 56), fill='#7c4a48')
+    d.rectangle((11, 49, 22, 55), fill='#b87264')
+    d.line((12, 54, 21, 54), fill='#e0a488', width=2)
+    d.line((15, 52, 16, 50), fill='#e8d8b8', width=2)
+    # Iron anvil silhouetted against the coals; stone workbench sill.
     d.polygon([(10, 47), (23, 47), (20, 50), (18, 50), (18, 53), (13, 53),
-               (13, 51), (15, 50), (12, 50)], fill='#354253')
-    d.line((10, 46, 23, 46), fill='#819aa7')
-    d.rectangle((6, 57, 26, 59), fill='#616a70')
-    d.line((7, 57, 25, 57), fill='#b8b6a4')
-    # Small hanging trade sign beside, rather than over, the door.
-    d.line((52, 35, 68, 35), fill=TIMBER, width=2)
-    d.line((64, 35, 64, 39), fill='#a79b7a')
-    d.rectangle((57, 39, 71, 50), fill=TIMBER)
-    d.rectangle((58, 40, 70, 49), fill=WOOD_LIGHT)
-    d.polygon([(59, 42), (69, 42), (67, 44), (65, 44), (65, 46),
-               (67, 47), (61, 47), (62, 45), (62, 44), (60, 44)], fill='#354253')
+               (13, 51), (15, 50), (12, 50)], fill='#3a4454')
+    d.line((10, 46, 23, 46), fill='#8696a8')
+    d.rectangle((6, 57, 27, 59), fill='#5c666c')
+    d.line((7, 57, 26, 57), fill='#9ca49c')
+    # A larger hanging anvil trade sign on the right (covers the cottage window).
+    d.line((52, 36, 72, 36), fill=TIMBER, width=2)
+    d.line((68, 36, 68, 40), fill='#8a6c44')
+    d.rectangle((53, 40, 72, 56), fill=TIMBER)
+    d.rectangle((54, 41, 71, 55), fill='#2e2418')
+    d.polygon([(57, 45), (68, 45), (66, 48), (64, 48), (64, 52),
+               (62, 52), (62, 48), (59, 48)], fill='#e8c860')
+    d.line((57, 44, 68, 44), fill='#f4e0a0')
     return img
 
 
