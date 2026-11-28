@@ -184,6 +184,15 @@ struct Assets {
     Texture2D cloud{};
     // buildings
     Texture2D house[5]{}, shop{}, inn{}, temple{}, manor{}, castle{}, tower{}, gate{}, smithy{};
+    // Lufia II overworld tileset & miniature site icons
+    Texture2D owAtlas{};
+    Texture2D owHamlet{}, owTown{}, owTownRed{}, owTownSnow{}, owCastleGrey{}, owCastleBlue{};
+    Texture2D owCaveGrass{}, owCaveSand{}, owCaveSnow{}, owTower{}, owTemple{}, owRuins{}, owCamp{}, owGatePass{};
+    // town fortification & signage tiles/sprites + 3-row interior wall atlas
+    Texture2D grassTile[4]{}, grassDarkTile{}, soilTile{}, waterTile{};
+    Texture2D townBattlementAtlas{}, townMasonryAtlas{}, interiorWallFaceAtlas{};
+    Texture2D townSignGoods{}, townSignInn{}, townSignWeapon{}, townBannerVert{}, townBannerShort{};
+    Texture2D townMarketRed{}, townMarketOrange{}, townMarketSacks{}, townRoundTurret{}, townGateDouble{}, townWallIvy{};
     // dungeon entrance & stairs
     Texture2D caveMouth{}, stairDown{}, stairUp{};
     // the ferry's boat (src/sail.cpp) — native 72x96 character sheet, blue hull
@@ -377,7 +386,7 @@ bool roomBlocked(const Room& room, float x, float y, float r);
 
 // ============================================================== modes
 enum Mode {
-    MODE_TITLE = 0, MODE_OVERWORLD, MODE_BATTLE, MODE_MENU, MODE_DIALOG,
+    MODE_TITLE = 0, MODE_OVERWORLD, MODE_TOWN, MODE_BATTLE, MODE_MENU, MODE_DIALOG,
     MODE_ROOM, MODE_GAMEOVER, MODE_INTRO, MODE_DUNGEON, MODE_SAIL
 };
 
@@ -442,6 +451,13 @@ struct Game {
     float clickFlashT = 0, clickFlashX = 0, clickFlashY = 0;
     float blockedFx = 0;
     float interactT = 0;           // brief hop when interacting
+
+    // Lufia II overworld <-> bounded town <-> dungeon return coordinates
+    float owReturnX = 0.5f, owReturnY = 0.5f;   // overworld tile pos to restore upon leaving town/dungeon
+    int currentTownOwTx = 0, currentTownOwTy = 0;
+    bool onShip = false;                        // true while sailing on overworld water
+    float owSiteDebounce = 0.0f;                // seconds before stepping on same site auto-re-enters
+    int owLastSiteTx = INT_MIN, owLastSiteTy = INT_MIN;
 
     // village cache
     Village village;
@@ -683,8 +699,20 @@ void exitRoom();
 void roomUpdate(float dt);
 void roomDraw();
 
+// town.cpp — real bounded, walled Lufia II-style procedural towns (MODE_TOWN)
+void townEnterAtCoords(int owTx, int owTy, int enterDir = 2);
+void townExitToOverworld(int exitDir = 2);
+void townUpdate(float dt);
+void townDraw();
+const char* townPrompt();
+const char* townCurrentName();
+bool townActive();
+int  townDangerTier();
+void townRebuildRuntime(int owTx, int owTy); // restore town geometry after loadGame()
+
 // dungeon.cpp — procedurally generated cavern dungeons
 void enterDungeon(int siteTx, int siteTy, bool startCavern);
+void enterDungeonNamed(int siteTx, int siteTy, bool startCavern, const char* customName, int forcedTheme = -1);
 void exitDungeon();
 void dungeonUpdate(float dt);
 void dungeonDraw();

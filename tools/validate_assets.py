@@ -93,6 +93,8 @@ TILE_EXCEPTIONS = {  # trimmed overlays / atlases — see ART_BIBLE A4
     "town_shingles_red_atlas.png": (32, 32),
     "town_shingles_blue_atlas.png": (32, 32),
     "interior_wall_face_atlas.png": (64, 192),
+    # Runtime SNES overworld autotile sheet (MrBeast + retro_World, ART_BIBLE §9).
+    "ow_atlas.png": (256, 256),
 }
 FX_SIZES = {
     "arrow.png": (20, 20), "fireball.png": (18, 18), "impact.png": (22, 22),

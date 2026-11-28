@@ -139,6 +139,9 @@ OwSiteKind worldSiteAt(int tx, int ty);
 // Transporter / map transition helpers
 bool worldEnterSiteAt(int tx, int ty);
 void worldReturnToOverworld();
+void worldDrawOverworld();
+void worldDrawOverviewMap();
+const char* worldSitePrompt(int tx, int ty);
 
 // Compatibility helpers expected by existing modules
 SurveyTerrain worldSurveyTerrain(int tx, int ty);

@@ -2,6 +2,7 @@
 #include "game.hpp"
 #include "battle.hpp"
 #include "world.hpp"
+#include "overworld_gen.hpp"
 #include <cstdio>
 
 enum BattlePhase : uint8_t {
@@ -224,6 +225,9 @@ static void damageFoe(int idx, int dmg, bool crit, bool weak, FxKind fx = FX_SLA
             g.slimesSlain++;
             if (g.quests[QUEST_SLIMES].state == QS_ACTIVE)
                 g.quests[QUEST_SLIMES].progress = std::min(6, g.slimesSlain);
+        }
+        if (g.quests[QUEST_COMMONS].state == QS_ACTIVE && g.quests[QUEST_COMMONS].progress < 2) {
+            g.quests[QUEST_COMMONS].progress++;
         }
         if (f.kind == EN_SLIME_KING) {
             // The guards can still defeat the party. Do not open a region or
@@ -887,8 +891,13 @@ static void drawBattleBackdrop(float sx, float sy) {
     Texture2D tex;
     if (B.isBoss) tex = g.assets.castleBattlefield;
     else {
-        GroundTile gt = sampleGround((int)floorf(g.px), (int)floorf(g.py));
-        tex = g.assets.battlefield[gt.biome];
+        auto cell = apfa::owSampleTile(g.worldSeed ? g.worldSeed : 1337u, (int)floorf(g.px), (int)floorf(g.py));
+        Biome bi = BI_MEADOW;
+        if (cell.kind == apfa::OWT_SAND) bi = BI_DUNES;
+        else if (cell.kind == apfa::OWT_SNOW || cell.kind == apfa::OWT_FOREST_SNOW || cell.kind == apfa::OWT_MOUNTAIN_SNOW) bi = BI_FROST;
+        else if (cell.kind == apfa::OWT_SWAMP) bi = BI_FEN;
+        else if (cell.kind == apfa::OWT_FOREST_LEAF || cell.kind == apfa::OWT_FOREST_PINE) bi = BI_FOREST;
+        tex = g.assets.battlefield[bi];
     }
     if (!tex.id) { ClearBackground(Color{ 30, 40, 70, 255 }); return; }
     float stageH = btTrayY() + 6.0f;

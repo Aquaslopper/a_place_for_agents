@@ -5,6 +5,7 @@
 // retain their masonry. Both layers are deterministic for (seed, site, floor).
 #include "game.hpp"
 #include "world.hpp"
+#include "overworld_gen.hpp"
 #include "regions.hpp"
 #include "battle.hpp"
 #include <cstdio>
@@ -1023,6 +1024,10 @@ void generateAndEnterFloor(bool fromBelow = false) {
 bool dungeonActive() { return D.active; }
 
 void enterDungeon(int siteTx, int siteTy, bool startCavern) {
+    enterDungeonNamed(siteTx, siteTy, startCavern, nullptr, -1);
+}
+
+void enterDungeonNamed(int siteTx, int siteTy, bool startCavern, const char* customName, int forcedTheme) {
     D = Dungeon{};
     D.active = true;
     D.siteTx = siteTx; D.siteTy = siteTy;
@@ -1030,35 +1035,32 @@ void enterDungeon(int siteTx, int siteTy, bool startCavern) {
     int fx, fy; frontierCavernSite(fx, fy);
     D.frontierCavern = siteTx == fx && siteTy == fy;
     D.seed = g.worldSeed ^ hash2i(siteTx, siteTy, 0xD0A6Eu) ^ (startCavern ? 0x57ACu : 0u);
-    // A separate seed roll chooses an appropriate guardian for each cavern;
-    // revisiting or reloading it cannot turn one boss into another.
     static const EnemyKind nearGuardians[] = {EN_WOLF, EN_GOBLIN, EN_BANDIT, EN_PORCUPINE};
     static const EnemyKind midGuardians[] = {EN_ORC, EN_GHOST, EN_REAPER, EN_SERPENT};
     static const EnemyKind farGuardians[] = {EN_GOLEM, EN_DREAD_KNIGHT, EN_DRAKE, EN_NAGA};
-    const EnemyKind* pool = startCavern || regionAt((float)siteTx, (float)siteTy) == 0
-                          ? nearGuardians : (regionAt((float)siteTx, (float)siteTy) == 1
-                                             ? midGuardians : farGuardians);
+    int tier = apfa::owDangerTier(siteTx, siteTy);
+    const EnemyKind* pool = (startCavern || tier <= 1) ? nearGuardians
+                          : (tier <= 3 ? midGuardians : farGuardians);
     D.guardian = pool[hash2i(siteTx, siteTy, D.seed ^ 0x609d1u) % 4u];
-    // theme is derived from surface biome + seed so every mouth has a stable identity
-    if (startCavern) D.theme = TH_MOSSY;
+    if (forcedTheme >= 0 && forcedTheme < TH_COUNT) D.theme = forcedTheme;
+    else if (startCavern) D.theme = TH_MOSSY;
     else D.theme = themeForSite(siteTx, siteTy, D.seed);
     D.themeName = dunThemeName(D.theme);
-    // theme can nudge depth: heath/crypt feel deeper, frost/sunscorch a touch shallower
-    int baseFloors = startCavern ? 4 : (2 + (int)((D.seed >> 9) & 1u));
+    int baseFloors = startCavern ? 3 : (2 + (int)((D.seed >> 9) & 1u));
     if (!startCavern) {
         if (D.theme == TH_HEATH || D.theme == TH_CRYPT) baseFloors = std::min(4, baseFloors + (D.seed & 1u ? 1 : 0));
         else if (D.theme == TH_FROST) baseFloors = std::max(2, baseFloors - (int)(D.seed & 1u));
     }
     D.floors = baseFloors;
     D.floor = 0;
-    // keep Hollow Hill's historic name; other caverns get a theme-tinted title
-    {
-        const char* base = startCavern ? "Hollow Hill" : cavernNameFor(D.seed);
-        D.name = base;
-        // fullName for HUD includes theme; keep D.name as short base for logs/saves
-    }
-    D.zoneBase = std::max(1, zoneLevelAt((float)siteTx + 0.5f, (float)siteTy + 1.5f));
+    if (customName && customName[0]) D.name = customName;
+    else D.name = startCavern ? "Hollow Hill" : cavernNameFor(D.seed);
+    D.zoneBase = std::max(1, tier * 2 - 1);
     generateAndEnterFloor();
+    g.owReturnX = (float)siteTx + 0.5f;
+    g.owReturnY = (float)siteTy + 0.5f;
+    g.owLastSiteTx = siteTx;
+    g.owLastSiteTy = siteTy;
     g.mode = MODE_DUNGEON;
     g.travelMap = false;
     g.travelContext = 0;
@@ -1069,8 +1071,14 @@ void enterDungeon(int siteTx, int siteTy, bool startCavern) {
 
 void exitDungeon() {
     if (!D.active) return;
+    int sx = D.siteTx, sy = D.siteTy;
     D.active = false;
     D.path.clear();
+    g.px = g.owReturnX;
+    g.py = g.owReturnY;
+    g.owSiteDebounce = 0.85f;
+    g.owLastSiteTx = sx;
+    g.owLastSiteTy = sy;
     g.mode = MODE_OVERWORLD;
     g.fade = 1.0f; g.fadeDir = -1;
     g.encounterGrace = 3.5f;

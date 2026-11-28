@@ -1,6 +1,7 @@
 // One director owns every stream. Menus are overlays, not new music scenes.
 #include "game.hpp"
 #include "world.hpp"
+#include "overworld_gen.hpp"
 #include "battle.hpp"
 #include "commons.hpp"
 
@@ -19,19 +20,20 @@ MusicCue sceneCue(Mode scene) {
     if (scene == MODE_TITLE || scene == MODE_INTRO) return MUS_TITLE;
     if (scene == MODE_GAMEOVER) return MUS_GAMEOVER;
     if (scene == MODE_BATTLE) return battleMusicCue();
+    if (scene == MODE_TOWN) return MUS_VILLAGE;
     if (scene == MODE_ROOM) return g.room.kind == ROOM_TEMPLE ? MUS_CHAPEL : MUS_HEARTH;
     if (scene == MODE_DUNGEON) return dungeonMusicCue();
-    // Out on the water the score has no sea cue, so the Open Road carries it:
-    // silence over a lake is worse than a borrowed tune.
-    if (scene == MODE_SAIL) return MUS_FIELD;
-    if (inCommons(g.px,g.py) || inVillage(g.px,g.py) || (!g.villageLoaded && g.px*g.px+g.py*g.py < 18*18)) return MUS_VILLAGE;
-    if (inBossArena(g.px,g.py)) return MUS_PASS;
-    switch (sampleGround((int)floorf(g.px),(int)floorf(g.py)).biome) {
-        case BI_AMBER: case BI_FOREST: return MUS_WOOD;
-        case BI_FEN: return MUS_FEN;
-        case BI_HEATH: case BI_FROST: return MUS_PASS;
-        case BI_DUNES: return MUS_DUNES;
-        default: return MUS_FIELD;
+    if (scene == MODE_SAIL || g.onShip) return MUS_FIELD;
+    auto cell = apfa::owSampleTile(g.worldSeed ? g.worldSeed : 1337u, (int)floorf(g.px), (int)floorf(g.py));
+    switch (cell.kind) {
+        case apfa::OWT_SAND:          return MUS_DUNES;
+        case apfa::OWT_SNOW:
+        case apfa::OWT_FOREST_SNOW:
+        case apfa::OWT_MOUNTAIN_SNOW: return MUS_PASS;
+        case apfa::OWT_SWAMP:         return MUS_FEN;
+        case apfa::OWT_FOREST_LEAF:
+        case apfa::OWT_FOREST_PINE:   return MUS_WOOD;
+        default:                      return MUS_FIELD;
     }
 }
 }
