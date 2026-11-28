@@ -13,11 +13,27 @@ constexpr int OW_REGION_ROWS = 12;   // plates per overworld region (height)
 constexpr int OW_REGION_TILES_W = OW_REGION_COLS * PLATE_TILES; // 48
 constexpr int OW_REGION_TILES_H = OW_REGION_ROWS * PLATE_TILES; // 36
 
-// Key story / landmark coordinates (in tile space)
+// Key story / landmark coordinates (in tile space). The fixed locket site
+// sits beside its pickup, while the watchtower keeps the coordinates used by
+// the earlier authored world. The field boss stands at the castle's south gate.
 constexpr int BOSS_CASTLE_TX = 120;
 constexpr int BOSS_CASTLE_TY = -84;
+constexpr float BOSS_KING_X = BOSS_CASTLE_TX + 0.5f;
+constexpr float BOSS_KING_Y = BOSS_CASTLE_TY + 3.5f;
+constexpr int LOCKET_SITE_TX = -37;
+constexpr int LOCKET_SITE_TY = 28;
 constexpr float LOCKET_PICKUP_X = -36.5f;
 constexpr float LOCKET_PICKUP_Y = 28.5f;
+constexpr int TOWER_SITE_TX = -64;
+constexpr int TOWER_SITE_TY = -20;
+constexpr int TOWER_CHEST_TX = -64;
+constexpr int TOWER_CHEST_TY = -18;
+
+inline int buildingX0(const Building& b) { return b.tx - b.w / 2; }
+inline int buildingY0(const Building& b) { return b.ty - b.h + 1; }
+inline float buildingCenterX(const Building& b) {
+    return (buildingX0(b) + b.w * 0.5f) * static_cast<float>(TILE);
+}
 
 enum OwTerrain {
     OW_GRASS = 0,
@@ -61,26 +77,54 @@ struct OwRegion {
     std::vector<OwPlate> plates; // OW_REGION_COLS * OW_REGION_ROWS
 };
 
-// Compatibility structs for render.cpp / regions.cpp / atlas.cpp
+// Cheap terrain summary shared by site placement, regions and the Survey.
+// These readings are derived from the same seeded atlas cell as the renderer;
+// no second random/noise field is introduced here.
 struct SurveyTerrain {
+    float elevation = 0.0f;
+    float brookDistance = 99.0f;
+    Biome biome = BI_MEADOW;
     bool water = false;
     bool deep = false;
     bool crag = false;
     bool ice = false;
+    bool swamp = false;
     bool forest = false;
     bool sand = false;
     bool road = false;
     OwTerrain terrain = OW_GRASS;
 };
 
+// Village decoration kinds shared by generation, collision and rendering.
+enum VillageDeco {
+    VD_WELL = 0, VD_SIGN, VD_BENCH, VD_TORCH, VD_CAMPFIRE, VD_BARREL, VD_PLANT,
+    VD_FLOWERBED, VD_LADDER, VD_STATUE, VD_CAULDRON, VD_URN, VD_FENCE_H, VD_FENCE_V,
+    VD_GATE, VD_TEMPLE_PILLAR, VD_HOUSE, VD_CRATE, VD_TABLE, VD_BUCKET, VD_SHADE_TREE,
+    VD_MAILBOX, VD_NOTICEBOARD, VD_LONGTABLE, VD_FENCE_GATE,
+    VD_BUSH, VD_FLOWER_BUSH, VD_ROCK, VD_STUMP, VD_PINE,
+    VD_STATUS_STONE, VD_EMPTY_PLOT, VD_KIND_COUNT
+};
+void villageDecoTexture(int kind, int variant, Texture2D*& tex, int& w, int& h);
+float villageDecoCenterX(const Village::Deco& d);
+bool villageDecoSolid(int kind);
+
+// Individual landmark sub-pieces are Y-sorted independently.
+enum LandmarkPartKind {
+    LP_CASTLE = 0, LP_TOWER, LP_STATUE, LP_PILLAR, LP_TORCH,
+    LP_RUIN_ARCH, LP_MONUMENT, LP_TENT, LP_CAMPFIRE, LP_CAULDRON, LP_BARREL,
+    LP_CAVE, LP_TIDEWELL
+};
 struct LandmarkPart {
+    LandmarkPartKind part = LP_CASTLE;
     int tx = 0;
     int ty = 0;
     int spanW = 1;
     int spanH = 1;
-    int kind = 0;
     int spriteId = 0;
 };
+void expandLandmarkParts(const Landmark& lm, std::vector<LandmarkPart>& out);
+void landmarksInView(int x0, int y0, int x1, int y1, std::vector<Landmark>& out);
+std::string villageNameFor(int sx, int sy, uint32_t seed);
 
 // World lifecycle & queries
 void worldInit(uint32_t seed);
@@ -98,6 +142,8 @@ void worldReturnToOverworld();
 
 // Compatibility helpers expected by existing modules
 SurveyTerrain worldSurveyTerrain(int tx, int ty);
+PropKind propAt(int tx, int ty);
+Texture2D* propTexture(PropKind kind, int* outW = nullptr, int* outH = nullptr);
 bool worldNearSpecialSite(int tx, int ty);
 int worldTrailAt(int tx, int ty);
 Landmark northRoadCavern();

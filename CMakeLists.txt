@@ -23,6 +23,7 @@ FetchContent_MakeAvailable(raylib)
 add_executable(aplaceforagents WIN32
     src/main.cpp
     src/music.cpp
+    src/map.cpp
     src/core.cpp
     src/world.cpp
     src/regions.cpp
