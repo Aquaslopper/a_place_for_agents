@@ -7,6 +7,10 @@
 #include <cmath>
 
 std::vector<FieldMonster> gFieldMonsters;
+// Chests whose tiles are on screen. Declared in game.hpp and read by the field
+// renderer; it had no definition anywhere, which is one of the reasons the
+// tree could not link.
+std::vector<Chest> gChestsInView;
 
 namespace {
 float gBlockedPulse = 0.0f;

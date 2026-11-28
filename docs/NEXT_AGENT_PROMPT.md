@@ -104,6 +104,12 @@ not as an isolated compiler-error chase.
 
 ## 4. Definition of done
 
+**Before anything else: `python3 tools/link_check.py`.** It compiles every
+translation unit, stubs raylib, links a throwaway binary and fails if this
+repository declares a symbol it never defines. That is the check that was
+missing for ten PRs: `main` did not link at all, so no art pass could ever be
+seen. It needs raylib's headers, not its library, so it runs without a GPU.
+
 Ship a `--verify` mode (or `tools/verify_world.py`) that runs headlessly and
 prints PASS/FAIL for all of:
 
