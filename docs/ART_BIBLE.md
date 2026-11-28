@@ -441,3 +441,41 @@ Rules: terrain families transition only through the autotile corner masks
 overworld draws the party at miniature scale and compressed distance, the way
 a 16-bit world map does. No runtime tile is generated yet — this section is the
 registry the import step will crop against.
+
+## 10. Town & interior source crops
+
+**Track 1, step 1.1.** The [crop review sheet](town_assets/town_interior_crops.png)
+shows only the new inputs, not generated towns or rooms. Coordinates below
+are zero-based `(column, row; width × height)` in 16×16 cells unless noted.
+[`tools/town_art.py`](../tools/town_art.py) is the exact crop register, including
+all prop coordinates. It strips only the source sheet's exact colour key.
+
+| Source | Verified selection | Output and intended use |
+|---|---|---|
+| `ChipSet/Exterior.png`, `(255, 103, 139)` | `(12,0; 6×6)` timber/stone/plaster, `(14,9; 4×3)` stone/masonry, `(18,0; 6×5)` fortifications | `town_facade_atlas` (96×96), `town_masonry_atlas` (64×48), `town_battlement_atlas` (96×80); sample per 16px cell, not whole-atlas terrain stamps. |
+| Same | Red shingles `(14,12; 2×2)`, blue shingles `(16,14; 2×2)` | Two `town_shingles_*_atlas` textures (32×32 each); matching transparent `town_gable_*` roof ends are sprites. |
+| Same | Turrets `(24,0)` and `(26,0)`, both 2×2; gate `(28,8; 2×2)`; ivy `(25,8; 1×3)` | Town perimeter, signs, banners, and market props use the `town_*` sprites. Signs are pictograms, not baked INN/PUB lettering. |
+| `ChipSet/Interior.png`, `(255, 103, 139)` | `(14,0; 4×12)` | `interior_wall_face_atlas` (64×192). Two 16px rows per face, from top: purple brick, plaster, pale stone, dark stone, rubble, blue brick. These are **faces**, not top caps. Cap corners and wall adjacency belong to the stamp step. |
+| Same | Doorway `(26,3; 1×2)`; stone stair strip `(21,3; 1×3)`; stained glass `(24,4; 1×1)` | `interior_*` doorway, windows, paintings, curtains, and stairs. Dark doorway pixels are kept opaque. |
+| Same | Corner counter `(293,211)–(331,255)` px; ritual circle `(339,194)–(381,237)` px (exclusive endpoints) | Pixel bounds avoid clipping shapes that straddle cells. The counter also masks stray bones at its lower right. Other detail includes a narrow bookcase, side-view bed, shop displays, piano, crystal ball, and throne. |
+| `CharSet/Object1.png`, `(254, 103, 138)` | 24×32 charset cells; columns 0, 3, 6, rows 0–2 | `interior_door_wood_panel`, `interior_door_wood_plank`, `interior_door_iron_trim`. Each is 24×96 with open, half-open, closed top-to-bottom. |
+
+**Reuse before composing stamps.** Keep the shipped `house_0..4`, `shop`,
+`inn`, `temple`, `manor`, `smithy`, and `castle` as building art; the new facade
+parts supplement them, rather than replacing them. Use existing ground
+textures, `well`, `noticeboard`, `crate`, `shelf`, `bed`, `counter`, and
+`forge_hearth` rather than recropping those objects. The standalone source
+beds are different orientations of a single bed, not a double-bed module.
+
+Regenerate and verify from the repo root (Pillow is required for the crop tool):
+
+```sh
+python3 tools/town_art.py
+python3 tools/town_art.py --check
+python3 tools/generate_manifest.py
+python3 tools/validate_assets.py
+```
+
+The standard OpenRTP importer also regenerates the runtime-ready crops.
+Building footprints, clearance rules, and the `TN_*` / `IN_*` schema are the
+next step; no layouts, sockets, collision, or runtime loading are defined here.

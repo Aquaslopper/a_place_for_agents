@@ -85,6 +85,13 @@ def check_duplicates(files):
 TILE_EXCEPTIONS = {  # trimmed overlays / atlases — see ART_BIBLE A4
     "flower_0.png": (14, 13), "flower_1.png": (14, 13),
     "landscape.png": (256, 1008), "relief.png": (256, 80),
+    # Grid-aligned procedural town/interior materials — ART_BIBLE §10.
+    "town_facade_atlas.png": (96, 96),
+    "town_masonry_atlas.png": (64, 48),
+    "town_battlement_atlas.png": (96, 80),
+    "town_shingles_red_atlas.png": (32, 32),
+    "town_shingles_blue_atlas.png": (32, 32),
+    "interior_wall_face_atlas.png": (64, 192),
 }
 FX_SIZES = {
     "arrow.png": (20, 20), "fireball.png": (18, 18), "impact.png": (22, 22),
@@ -130,7 +137,9 @@ def check_dimensions(files):
             fail(f"{rel}: root plate must be 512x288, got {w}x{h}")
         elif top == "sprites":
             name = p.name
-            if name.startswith(("hero_", "npc_")) and wh != (72, 96):
+            if name.startswith("interior_door_") and wh != (24, 96):
+                fail(f"{rel}: door pose strip must be 24x96 (3 stacked 24x32 poses), got {w}x{h}")
+            elif name.startswith(("hero_", "npc_")) and wh != (72, 96):
                 fail(f"{rel}: character sheet must be 72x96 (3x 24x32 frames, "
                      f"3 rows), got {w}x{h}")
             elif name.startswith("face_") and name != "face_knight_big.png" and wh != (48, 48):
