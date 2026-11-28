@@ -1,0 +1,327 @@
+{
+  "seed": 4444,
+  "cols": 16,
+  "rows": 12,
+  "tiles_wide": 48,
+  "tiles_tall": 36,
+  "attempts": 1,
+  "backtracks": 0,
+  "violations": 0,
+  "terrain_counts": {
+    "dirt": 16,
+    "forest": 12,
+    "grass": 91,
+    "mountain": 49,
+    "site": 15,
+    "water": 9
+  },
+  "sites": [
+    {
+      "plate": "town_wood",
+      "row": 10,
+      "col": 5
+    },
+    {
+      "plate": "town_red",
+      "row": 2,
+      "col": 14
+    },
+    {
+      "plate": "town_red",
+      "row": 6,
+      "col": 14
+    },
+    {
+      "plate": "town_wood",
+      "row": 10,
+      "col": 9
+    },
+    {
+      "plate": "cave",
+      "row": 6,
+      "col": 11
+    },
+    {
+      "plate": "tower",
+      "row": 6,
+      "col": 5
+    },
+    {
+      "plate": "monument",
+      "row": 10,
+      "col": 12
+    },
+    {
+      "plate": "castle_blue",
+      "row": 10,
+      "col": 2
+    },
+    {
+      "plate": "temple",
+      "row": 8,
+      "col": 10
+    },
+    {
+      "plate": "ruins",
+      "row": 2,
+      "col": 7
+    },
+    {
+      "plate": "bush_flower",
+      "row": 8,
+      "col": 6
+    },
+    {
+      "plate": "tree_dead",
+      "row": 11,
+      "col": 10
+    },
+    {
+      "plate": "tree_dead",
+      "row": 0,
+      "col": 10
+    },
+    {
+      "plate": "tree_large",
+      "row": 0,
+      "col": 5
+    },
+    {
+      "plate": "tree_large",
+      "row": 11,
+      "col": 6
+    }
+  ],
+  "transporters": [
+    {
+      "plate": "cave_in_mountain",
+      "row": 4,
+      "col": 8,
+      "replaced": "mountain_full"
+    },
+    {
+      "plate": "cave_in_mountain",
+      "row": 4,
+      "col": 1,
+      "replaced": "mountain_full"
+    }
+  ],
+  "grid": [
+    [
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "tree_large",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "tree_dead",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain"
+    ],
+    [
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel",
+      "dirt_hchannel"
+    ],
+    [
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "ruins",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "town_red",
+      "grass_plain"
+    ],
+    [
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom",
+      "mountain_bottom"
+    ],
+    [
+      "mountain_full",
+      "cave_in_mountain",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "cave_in_mountain",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full",
+      "mountain_full"
+    ],
+    [
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top",
+      "mountain_top"
+    ],
+    [
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "tower",
+      "grass_plain",
+      "forest_se",
+      "forest_bottom2",
+      "forest_bottom2",
+      "forest_sw",
+      "cave",
+      "grass_plain",
+      "grass_plain",
+      "town_red",
+      "grass_plain"
+    ],
+    [
+      "grass_plain",
+      "water_se",
+      "water_bottom2",
+      "water_sw",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "forest_ne",
+      "forest_top2",
+      "forest_top2",
+      "forest_nw",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain"
+    ],
+    [
+      "grass_plain",
+      "water_right2",
+      "water_full",
+      "water_left2",
+      "grass_plain",
+      "grass_plain",
+      "bush_flower",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "temple",
+      "grass_plain",
+      "grass_plain",
+      "forest_se",
+      "forest_sw",
+      "grass_plain"
+    ],
+    [
+      "grass_plain",
+      "water_ne",
+      "water_top2",
+      "water_nw",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "forest_ne",
+      "forest_nw",
+      "grass_plain"
+    ],
+    [
+      "grass_plain",
+      "grass_plain",
+      "castle_blue",
+      "grass_plain",
+      "grass_plain",
+      "town_wood",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "town_wood",
+      "grass_plain",
+      "mountain_pond",
+      "monument",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain"
+    ],
+    [
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "tree_large",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "tree_dead",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain",
+      "grass_plain"
+    ]
+  ]
+}
