@@ -54,11 +54,11 @@ def ramp(spec: str):
 # lean yellow. The mid three carry the texture; 0 and 4 are the contour and the
 # sparkle, used sparingly (a 16-bit tile does not use all colours equally).
 RAMPS = {
-    "meadow":   ramp("1a3310 2c5218 3f7422 599a2e 85c247"),
-    "forest":   ramp("121f0c 20351a 33511f 4a7028 6b9435"),
-    "amber":    ramp("3a2a10 5a4218 7a5c24 99752e b8943f"),
-    "heath":    ramp("252b18 3b4226 545b34 737a48 9a9f62"),
-    "mire":     ramp("15251e 253a30 37503f 4e6b52 6a8a68"),
+    "meadow":   ramp("132608 1e3f15 2b4f13 3d691b 57862c"),
+    "forest":   ramp("0c1b05 172e0e 224014 33581d 477327"),
+    "amber":    ramp("291b07 453114 62461c 7f5c26 9d7730"),
+    "heath":    ramp("1c2210 303a1c 47502c 616a3c 828c51"),
+    "mire":     ramp("0f1c14 1a2e21 28402f 385741 4e7159"),
     "dune":     ramp("63451f 84602c a37c38 c2984c dab266"),
     "beach":    ramp("6b5630 8c7442 ae9456 c9b074 e2cf9c"),
     "snow":     ramp("66798c 8aa0b2 a9c6d4 c8e4ec e9f6f9"),
@@ -90,6 +90,24 @@ SURFACES = [
     ("court", 3), ("leaves", 3), ("ripples", 3), ("mesa", 3), ("frost", 3),
     ("snowcrag", 3),
 ]
+
+
+def _mute(c, lum=0.93, sat=0.92):
+    """Pull one value toward the reference's exposure: the shipped outdoor
+    palette measured 35% brighter and 20% more saturated than a Lufia II frame
+    once the foliage was finally on target."""
+    r, g, b = c[0] / 255.0, c[1] / 255.0, c[2] / 255.0
+    l = 0.299 * r + 0.587 * g + 0.114 * b
+    r, g, b = (l + (v - l) * sat for v in (r, g, b))
+    r, g, b = (min(1.0, max(0.0, v * lum)) for v in (r, g, b))
+    return (int(r * 255), int(g * 255), int(b * 255), 255)
+
+
+MUTE_KEYS = ("dune", "beach", "snow", "ice", "rock", "dirt", "soil", "cobble",
+             "court", "leaves", "ripples", "mesa", "frost", "snowcrag", "water",
+             "deep", "stone")
+for _k in MUTE_KEYS:
+    RAMPS[_k] = [_mute(c) for c in RAMPS[_k]]
 
 
 # ------------------------------------------------------------------ helpers
@@ -160,19 +178,41 @@ def paint(name: str, phase: int):
     cv = Canvas(base)
 
     if name in ("meadow", "forest", "amber", "heath", "mire"):
-        # 1. the base stays readable: a few big soft patches, not a speckle.
-        # A 16-bit meadow is mostly one mid tone with clumps sitting on it.
+        # A 16-bit meadow is a woven surface, not a flat fill with lumps on it:
+        # two 45-degree threads (a dark one falling, a light one rising) run
+        # across the whole tile, and clumps sit on top of that weave. Measured
+        # off a Lufia II frame, the reference ground is 26% "flat" (a pixel
+        # equal to its neighbour) with local contrast ~22; a blob-on-fill tile
+        # is 62% flat, which is why it reads as camouflage rather than grass.
+        for y in range(T):
+            for x in range(T):
+                # Two threads at different periods, so the weave never lines up
+                # into corduroy, and the strong value is the exception rather
+                # than the rule: the reference's contrast is carried by clumps
+                # and tufts, not by a loud every-pixel pattern.
+                if (x + y) % 5 == 0 and (y % 3 != 2):
+                    c = C[0] if (x * 7 + y * 3) % 4 == 0 else C[1]
+                elif (x - y) % 3 == 0 and (x % 5 != 1):
+                    c = C[4] if (x * 5 + y * 7) % 4 == 0 else C[3]
+                else:
+                    c = C[2]
+                cv.put(x, y, c)
+        # clumps of real grass sitting on the weave: these carry the contrast
         for _ in range(9):
-            cv.blob(r.randrange(T), r.randrange(T), r.randint(2, 3), r.randint(1, 2), C[1], r)
+            x, y = r.randrange(T), r.randrange(T)
+            for dx in range(r.randint(2, 3)):
+                cv.put(x + dx, y, C[1])
+            cv.put(x, y - 1, C[0] if r.random() < 0.4 else C[2])
         for _ in range(8):
-            cv.blob(r.randrange(T), r.randrange(T), r.randint(2, 3), r.randint(1, 2), C[3], r)
-        cv.dither_edge(C[3], base, r, 0.16)
-        # 2. blades: short lit strokes, sparse — the grass reads as grass
-        for _ in range(5):
+            x, y = r.randrange(T), r.randrange(T)
+            for dx in range(r.randint(2, 3)):
+                cv.put(x + dx, y, C[3])
+            cv.put(x + 1, y - 1, C[4] if r.random() < 0.5 else C[2])
+        for _ in range(4):
             x, y = r.randrange(T), r.randrange(T)
             cv.put(x, y, C[4])
             cv.put(x, y - 1, C[3])
-        for _ in range(5):
+        for _ in range(4):
             x, y = r.randrange(T), r.randrange(T)
             cv.put(x, y, C[0])
         if name == "forest":
