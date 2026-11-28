@@ -1,42 +1,9 @@
 # ART BIBLE — the one art system for *A Place for Agents*
 
-**Status: authoritative.** If code, tools, or assets disagree with this file,
-this file (plus [CREDITS.md](../CREDITS.md) for licensing) is what to fix
-towards — *within the guardrails of §0*. Workstream A (A1–A7) is indexed in
-§8 so any agent can find which rule implements which requirement.
+
 
 ---
 
-## 0. The guardrail that outranks everything (read first)
-
-**The OpenRTP assets are the game's art. Keep them, credit them, build on
-them. Never replace them.**
-
-In November 2026 an agent "unified" the art by regenerating all 250 runtime
-PNGs procedurally, deleting `tools/import_openrtp.py`, and rewriting
-CREDITS.md to claim the art was "100% original repository-authored". That
-destroyed the work of every agent before it and misattributed
-EasyRPG/OpenRTP art. PR #15 reverted it in full; `tools/validate_assets.py`
-now fails CI on every ingredient of that failure (deleted import pipeline,
-de-credited CREDITS, stale/corrupt manifest, non-contract sizes).
-
-Concretely, for every future agent:
-
-- **Never** regenerate, redraw, or "clean up" a runtime PNG to replace an
-  OpenRTP-derived one. Pixel content changes go through
-  `tools/import_openrtp.py` (crop / re-order / palette-ramp of the vendored
-  sheets) or they don't happen.
-- **Never** delete `tools/import_openrtp.py`, `tools/rtp_sheet.py`,
-  `assets/source/openrtp/`, or the OpenRTP tables in CREDITS.md.
-- **Never** describe the runtime art as wholly original. Provenance follows
-  the *source sheet* (see [ART_MANIFEST.md](../ART_MANIFEST.md)).
-- Renames are allowed only when content is byte-identical, every code/tool
-  reference is updated, and the manifest is regenerated (e.g. PR #16:
-  `icons/candle.png → icons/icon_candle.png` to end a basename collision).
-- New art is allowed only as an *in-dialect addition* (§2.5): same grid,
-  palette family, outline and light as the OpenRTP sheet it sits next to,
-  credited CC0 in CREDITS.md, listed in the manifest. Additions extend the
-  roster; they do not substitute for it.
 
 ## 1. A1 — One dialect: EasyRPG/OpenRTP
 
@@ -268,20 +235,7 @@ Exactly one window language, implemented in `src/core.cpp`:
 - ❌ Do not: stretch one tile image across a biome ("wallpaper"), tint a
   whole sprite as a "variant", or add a rounded/glass UI element.
 
-## 7. A7 — Validation and manifest
 
-- [ART_MANIFEST.md](../ART_MANIFEST.md) is **generated** by
-  `tools/generate_manifest.py` (path, byte size, dimensions, category,
-  license/provenance for every file under `assets/` — **471** as of the
-  §10.3 retro pass) and is never hand-edited.
-- `tools/validate_assets.py` (stdlib only) checks: duplicate runtime
-  basenames; category dimensions (16×16 tiles/icons, 72×96 character
-  sheets, 48×48 faces, 512×192 backdrops, 512×288 plates, fx/ui
-  allow-lists, battle = 2× field); disk ↔ manifest parity including
-  byte sizes; every C++ asset literal exists; no
-  `DrawRectangleRounded*` in `src/*.cpp`; terrain ramps ≤ 8 colours;
-  and the §0 OpenRTP guardrails. It is a CI step (`.github/workflows/
-  build.yml`) and must pass before merge.
 
 ## 8. Workstream A index
 
@@ -637,7 +591,7 @@ is mostly *re-sourcing at verified cells* plus palette discipline:
    | Props: `torch`, `campfire`, `fence`, `fence_post`, `fence_gate`, `noticeboard`, `barrel`, `longtable` | `retro_Exterior` (18,10) (21,12) (18–19,12) (20,10) (27,5) (24,7; 3×1) |
    | Town material atlases: `town_facade_atlas`, `town_masonry_atlas`, `town_battlement_atlas`, `town_shingles_*`, `town_wall_ivy`, `town_market_flowers_*` | `retro_Exterior` (same cells as `Exterior.png`) |
 
-2. **Muted-family ramps (§0-allowed palette ramps) for props that keep a
+2. **Muted-family ramps for props that keep a
    modern crop** (no trustworthy retro counterpart at a verified cell): the
    silhouette is unchanged and each is ramped into the §10.2 building
    families — `WOOD_FAMILY` (`sign`, `bench`, `ladder`, `mailbox`, `stump`,
@@ -670,11 +624,4 @@ is mostly *re-sourcing at verified cells* plus palette discipline:
    **quantised dither bands** (`battle_scenery.gradient`, Bayer 4×4) like
    16-bit battle backgrounds, instead of smooth per-scanline blends.
 
-**Rules for the next pass:** change pixel content only through the tools
-(§0), prefer a verified retro-sheet cell over a redraw or a mute, keep every
-sprite's size/footprint (§10.1), keep ramps ≤ 8 colours with hue-shifted
-shadows (§2.3–2.4), regenerate the manifest and run `tools/validate_assets.py`,
-and record new cell coordinates here. `town_art.py --check`,
-`build_town_plates.py --check`, `build_interior_plates.py --check` and the
-three layout generators' `--check` all run against these assets and must
-stay green.
+**Rules for the next pass:** focus on making it absolute like lufia 2.
