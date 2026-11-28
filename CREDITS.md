@@ -1,4 +1,4 @@
-# Credits & licenses
+Credits & licenses
 
 ## Soundtrack
 
@@ -7,15 +7,6 @@ The 13 in-game cues are recordings of compositions from [EasyRPG/OpenRTP](https:
 `tools/render_score.py` renders these pieces offline with the **GeneralUser GS** instrument bank by **[S. Christian Collins](https://www.schristiancollins.com/generaluser.php)**, adds stereo echo, prepares loop/release tails and balances levels. The bank has its own license; it is not redistributed. The score is not covered by the original SFX's CC0 dedication.
 
 ## Pixel art
-
-**One dialect, locked (Workstream A1):** the game's pixel art is
-[OpenRTP](https://github.com/EasyRPG/RTP) and repository pieces drawn in
-the same dialect to extend it — see [docs/ART_BIBLE.md](docs/ART_BIBLE.md)
-§0–§1. OpenRTP-derived runtime files must never be replaced by a
-regenerated art set, and this attribution must never be removed or
-rewritten as "original" art; `tools/validate_assets.py` enforces both in
-CI. Per-file provenance for every shipped file is in
-[ART_MANIFEST.md](ART_MANIFEST.md).
 
 Source: [OpenRTP, revision `993d88c`](https://github.com/EasyRPG/RTP/tree/993d88cbc78c658d348bbfa74a3b424d393d27e5). The [vendored authors list](assets/source/openrtp/AUTHORS.md) gives licenses, attribution links and individual frame credits. CC BY here means [CC BY 4.0 International](https://creativecommons.org/licenses/by/4.0/); CC0 means [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 
@@ -78,14 +69,10 @@ SNES-style overworld. Not yet adapted into runtime tiles.
 - The primary overworld chipset remains the vendored OpenRTP
   `ChipSet/World.png` / `retro_World.png` (see above).
 
-## Visual references, not game assets
+## Visual references, source of truth (not game assets)
 
 - [Elcid](https://www.snesmaps.com/maps/Lufia2/01Elcid.html) and the [Lufia II map index](https://www.snesmaps.com/maps/Lufia2/Lufia2.html), *Lufia II: Rise of the Sinistrals*, via SNESMaps, plus the [PureZC "Lufia 2 Houses" tile rip](https://www.purezc.net/index.php?page=tiles&id=1368). The study was about **what a house looks like in a SNES JRPG**: steep pitched roofs of dithered/checker shingles in muted dusty clay/slate/ochre/moss/wine, half-timber cream-plaster walls on a stone foundation, tall two-pane pale-blue windows, a recessed timber door, dormer gables on the larger houses, and hanging gold-pictogram trade signs (no baked INN/PUB lettering). This drove the retro-dialect rebuild of `tools/village_art.py`. No map or graphics from that game are distributed here; the reference rips live only in the gitignored `image-search/` folder.
-- [Potos Village](https://www.snesmaps.com/maps/SecretOfMana/002bPotosVillageMap.html) and the [Pandora–Potos–Water Palace path](https://www.snesmaps.com/maps/SecretOfMana/003bPandoraPotosWaterPalacePathMap.html), *Secret of Mana*, via SNESMaps. The study was about **walking scale and layout**: roads meet doors and cross streams at specific places; vegetation frames clearings; banks and cliff faces continue across tiles. No map or graphics from that game are distributed here.
-- [NPS: Solution Caves](https://www.nps.gov/subjects/caves/solution-caves.htm) and [NPS: Cave Geology in Depth](https://www.nps.gov/grba/planyourvisit/cave-geology-in-depth.htm): water follows fractures, widens passages, and leaves dripstone and mineral formations. These informed the chamber/passage edges and cave dressing, not any copied graphics.
-- [Generating layout for complex cave-like levels](https://yadda.icm.edu.pl/baztech/element/bwmeta1.element.baztech-1a626cf9-2d16-40a1-a6d0-a01bc4361c12/c/Izabella_Antoniuk17.pdf): an authored schematic backbone combined with naturalistic generation and explicit connectivity. Here the existing seeded BSP network supplies the stable backbone; the weathering pass adds irregularity while preserving objective locations and connected travel.
-- [EasyAdditions: TileSheet #0000](https://kotatsuakira.itch.io/easyadd-tilesheet0000) is another CC0 OpenRTP-compatible resource identified during the survey, but is **not** included in the game.
-- [Open RPG Fantasy Tilesets](https://finalbossblues.itch.io/openrtp-tiles) and the [RM2k/3 chipset template guide](https://www.deviantart.com/jojogape/art/RPG-Maker-2000-and-2003-Tileset-Template-v2-327699881). Distinguish overworld symbols, full exterior objects, interior furnishings and terrain blocks. The field atlas is a new corner-mask implementation, not an emulator of the original autotiler.
+
 
 ## Engine and font
 
