@@ -1,7 +1,14 @@
 # Handoff: seeded plate-layout generator (the first procedural overworld step)
 
+> **HISTORICAL — SUPERSEDED.** This spec was completed (`tools/build_overworld_layout.py`)
+> and the constraint in §"Hard constraints" below — *"the build is expected to be
+> broken; that is a later step"* — no longer applies and must not be obeyed.
+> The current brief is [`NEXT_AGENT_PROMPT.md`](NEXT_AGENT_PROMPT.md); the
+> technical state is [`HANDOFF_WORLD_STRUCTURE.md`](HANDOFF_WORLD_STRUCTURE.md).
+> Read this file only for the plate format and edge-label rules.
+
 **Date:** 2026-11-27 · **Branch:** `arena/27049c45-a-place-for-agents`
-**Status: NOT STARTED — no code written. This document is the entire spec.**
+**Status: COMPLETE (kept as a format reference) — see the banner above.**
 
 ---
 

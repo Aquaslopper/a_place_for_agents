@@ -1,5 +1,45 @@
 # Growth chronicle
 
+## The Honest Handoff — 2026-11-28 — PR (this branch)
+
+**Grew:** Nothing visible, and deliberately so. This pass stopped building and
+established what is actually there, because the previous three passes each
+reported a win while the thing the human kept asking for — a Lufia II *world* —
+did not exist. Two documents now say so out loud:
+
+- **[`docs/HANDOFF_WORLD_STRUCTURE.md`](docs/HANDOFF_WORLD_STRUCTURE.md)** is the
+  new technical brief. It inventories the world systems against the code: the
+  plate overworld in `world.cpp` is real but **dead** (`worldInit()` is never
+  called), the field the player actually walks is `sampleGround()`'s infinite
+  noise, **towns do not exist** (entering a town icon calls `enterBuilding(0)`
+  and drops you in one 15×11 shop room), and the three seeded generators that
+  *do* have the right invariants are Python-only and never integrated. It then
+  specifies the target: a separate world atlas and bounded local maps, joined by
+  `MapId` / `MapDef` / reciprocal ports, with `mapGenerate()` pure, plus a
+  seven-phase plan and seven acceptance tests.
+- **[`docs/NEXT_AGENT_PROMPT.md`](docs/NEXT_AGENT_PROMPT.md)** now exists. The
+  README has pointed at it for several passes and it was a 404.
+
+**Preserved:** Everything that works. `dungeon.cpp` is the one system built to
+the stated spec (seeded BSP + cellular weathering, multi-floor, chests, vault,
+guardians) and the handoff tells the next agent to wire it up, not rewrite it.
+Battles, shops, dialogue, sailing, the score and save/load are untouched. No
+runtime asset changed; `validate_assets.py` passes. The palette diagnosis
+([`docs/VISUAL_AUDIT.md`](docs/VISUAL_AUDIT.md)) stands as the art spec for the
+final phase.
+
+**Corrected:** `HANDOFF_PLATE_LAYOUT_GENERATOR.md` told agents "the build is
+expected to be broken; that is a later step" and to never edit `src/`. Both were
+true for one bounded tool pass and are now actively harmful; they are marked
+superseded. `HANDOFF_MAP_GENERATORS.md`'s line deferring C++ integration "until
+the Python generators for all planned domains are complete" is withdrawn — that
+deferral is precisely why the game still has no towns.
+
+**Seed for the next agent:** Build the world, in the order the handoff gives:
+a linking build, then `MapId`/`MapDef`/ports, then the atlas (revive the plate
+world and call it), then towns generated in C++, then routes, then wire the
+dungeons, and **then** one art pass. Do not paint the noise field again.
+
 ## The Retro Pass — 2026-11-28 — PR (this branch)
 
 **Grew:** The world outside the houses finally wears the same decade as the

@@ -1,6 +1,16 @@
 # Handoff: Procedural Map Pipeline (Towns, Interiors, Caves, Dungeons, Quest Maps)
 
-**Status:** Track 1 Steps 1.1–1.4 complete. Town/interior plates, stamps and seeded layout generators pass their documented checks; next: Track 2 Step 2.1 (dungeon art audit). C++ MapSystem integration remains deferred until the Python generators for all planned domains are complete.
+> **PARTIALLY SUPERSEDED.** Tracks 1–2 below are delivered as **Python design
+> tools** (`tools/build_town_layout.py`, `tools/build_interior_layout.py`,
+> `tools/build_overworld_layout.py`). They are not integrated into the game, and
+> the line "C++ MapSystem integration remains deferred until the Python
+> generators for all planned domains are complete" is **withdrawn** — that
+> deferral is why the game still has no towns. The current brief is
+> [`NEXT_AGENT_PROMPT.md`](NEXT_AGENT_PROMPT.md); the technical state and phase
+> plan are [`HANDOFF_WORLD_STRUCTURE.md`](HANDOFF_WORLD_STRUCTURE.md). Keep this
+> file as the **specification of generator invariants** to port into C++.
+
+**Status:** Track 1 Steps 1.1–1.4 complete (Python, unintegrated). Integration is now the active work, not a later phase.
 **Follows:** `docs/HANDOFF_PROCEDURAL_JRPG_WORLD.md` and `docs/HANDOFF_PLATE_LAYOUT_GENERATOR.md` (Overworld plate builder + `tools/build_overworld_layout.py` completed).
 
 ---

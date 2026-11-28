@@ -1,0 +1,163 @@
+{
+  "screens": [
+    {
+      "label": "battle.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 665,
+      "colours_per_tile_mean": 14.4,
+      "colours_per_tile_max": 46,
+      "local_contrast": 6.56
+    },
+    {
+      "label": "buildings_snes_before_after.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 520,
+      "colours_per_tile_mean": 10.6,
+      "colours_per_tile_max": 53,
+      "local_contrast": 17.84
+    },
+    {
+      "label": "dialog.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 2304,
+      "colours_per_tile_mean": 28.6,
+      "colours_per_tile_max": 172,
+      "local_contrast": 14.81
+    },
+    {
+      "label": "millbrook.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 1404,
+      "colours_per_tile_mean": 19.7,
+      "colours_per_tile_max": 128,
+      "local_contrast": 13.49
+    },
+    {
+      "label": "retro_pass_before_after.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 449,
+      "colours_per_tile_mean": 6.8,
+      "colours_per_tile_max": 54,
+      "local_contrast": 10.33
+    },
+    {
+      "label": "shop.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 210,
+      "colours_per_tile_mean": 7.7,
+      "colours_per_tile_max": 17,
+      "local_contrast": 7.9
+    },
+    {
+      "label": "sundries.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 132,
+      "colours_per_tile_mean": 4.7,
+      "colours_per_tile_max": 29,
+      "local_contrast": 5.29
+    },
+    {
+      "label": "title.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 26702,
+      "colours_per_tile_mean": 111.4,
+      "colours_per_tile_max": 236,
+      "local_contrast": 5.96
+    },
+    {
+      "label": "village.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 2228,
+      "colours_per_tile_mean": 25.8,
+      "colours_per_tile_max": 172,
+      "local_contrast": 14.96
+    },
+    {
+      "label": "wilds.png",
+      "size": [
+        512,
+        288
+      ],
+      "colours": 622,
+      "colours_per_tile_mean": 14.7,
+      "colours_per_tile_max": 75,
+      "local_contrast": 12.82
+    }
+  ],
+  "ground_tiles": [
+    {
+      "label": "grass_0",
+      "file": "assets/tiles/grass_0.png",
+      "colours": 3,
+      "luminance_spread": 10
+    },
+    {
+      "label": "cobble",
+      "file": "assets/tiles/cobble.png",
+      "colours": 4,
+      "luminance_spread": 77
+    },
+    {
+      "label": "dirt",
+      "file": "assets/tiles/dirt.png",
+      "colours": 3,
+      "luminance_spread": 19
+    },
+    {
+      "label": "grass_2",
+      "file": "assets/tiles/grass_2.png",
+      "colours": 4,
+      "luminance_spread": 24
+    },
+    {
+      "label": "water_0",
+      "file": "assets/tiles/water_0.png",
+      "colours": 4,
+      "luminance_spread": 21
+    },
+    {
+      "label": "flagstone",
+      "file": "assets/tiles/flagstone.png",
+      "colours": 4,
+      "luminance_spread": 74
+    }
+  ],
+  "reference": {
+    "label": "Lufia II reference (Elcid, SNESMaps) \u2014 study only, not shipped",
+    "size": [
+      240,
+      224
+    ],
+    "colours": 70,
+    "colours_per_tile_mean": 8.0,
+    "colours_per_tile_max": 23,
+    "local_contrast": 26.67
+  }
+}
