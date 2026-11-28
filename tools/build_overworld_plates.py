@@ -29,17 +29,18 @@ METHOD
   a terrain base + an entry icon. These are the plates that drop the player into
   the map beneath (town/cave/tower) or let them cross an otherwise-blocked edge.
 
-KNOWN DEFECT — WATER (must be fixed by the next agent)
-------------------------------------------------------
-The water_* plates are WRONG. The water region (cols 0-5, rows 0-7) is the RM2k
-*boundary* autotile, not a standard 3x4 island autotile, so island(0,0) grabs the
-wrong pieces (dark bands + white specks instead of blue sea + foam coast). The
-mask/render_mask machinery is correct; only the water tile SOURCE is wrong.
-Fix: decode the RM2k water boundary (corner-animation 8x8 pieces, H/V sides,
-"+" centre across the first blocks; open-water centre in the deep-sea block
-cols 0-2 rows 3-7; animated water cols 3-5 rows 3-7), build a correct water
-island/edge set, and re-run. forest/sand/snow/dirt/mountain and all 25 site /
-special plates are correct and usable as-is.
+WATER (was the known defect, now fixed)
+---------------------------------------
+The water_* plates used to be wrong. The retro sheet's water region (cols 0-5,
+rows 0-7) is the RM2k *boundary* autotile and its open-sea tile is a flat
+(28,41,46) black that does not read as sea at 1x. Instead of decoding that
+boundary, the plates now take their water from the water tile the game already
+ships: `assets/tiles/water_0.png` (+ `deep_water.png` / `beach.png` for the
+shoreband). Those are the same OpenRTP-derived crops `landscape_art.py` makes
+for the field, so the overworld and the field share one water ramp (ART_BIBLE
+§2.4: #377e91 #3c8497 #438a9a #4d909e #5698a5). No new art is introduced and no
+source sheet is re-derived: the water "island" is a 3x3 of that one swatch, so
+the coast side is drawn as a beach lip and the interior as open water.
 """
 from PIL import Image, ImageDraw
 import os, json
@@ -66,30 +67,87 @@ def island(c0, r0):
 
 GRASS = cell(1, 10)
 
+# The water the game already ships. `landscape_art.py` ramps these from the
+# OpenRTP Exterior chipset into the field's single water ramp (ART_BIBLE §2.4),
+# so the overworld coast and the field's rivers/sea are the same water.
+# The retro_World water block was a black ocean (28,41,46) with no readable
+# shoreline, which is why the water_* plates used to render as dark bands.
+TILES = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'tiles')
 
-def render_mask(mask, isl, iso):
+
+def swatch(name):
+    return Image.open(os.path.join(TILES, name)).convert('RGBA')
+
+
+WATER = swatch('water_0.png')
+DEEP = swatch('deep_water.png')
+SHORE = swatch('beach.png')
+
+
+def skirt(water, shore):
+    """One open-water cell with a beach lip on whichever sides face land.
+
+    `sides` names the land-facing edges; the lip is a 3px foam/beach band inset
+    from that edge, so a 3x3 of these reads as a coast rather than a rectangle.
+    """
+    def make(sides):
+        t = water.copy()
+        if not sides:
+            return t
+        px = t.load()
+        sp = shore.load()
+        for side in sides:
+            for i in range(16):
+                for d in range(3):
+                    src = sp[i, 15 - d]
+                    if side == 'N':
+                        px[i, d] = (src[0], src[1], src[2], 255)
+                    elif side == 'S':
+                        px[i, 15 - d] = (src[0], src[1], src[2], 255)
+                    elif side == 'W':
+                        px[d, i] = (src[0], src[1], src[2], 255)
+                    else:
+                        px[15 - d, i] = (src[0], src[1], src[2], 255)
+        return t
+    return make
+
+
+shore_cell = skirt(WATER, SHORE)
+
+
+def render_mask(mask, isl, iso, shore=None):
+    """Compose a 3x3 shape. `shore` (water only) draws the beach lip on land sides."""
     out = Image.new('RGBA', (48, 48))
 
     def nb(r, c, dr, dc):
         rr = min(2, max(0, r + dr)); cc = min(2, max(0, c + dc))
         return mask[rr][cc]
 
+    def edge_sides(r, c):
+        sides = set()
+        if nb(r, c, -1, 0) == 0: sides.add('N')
+        if nb(r, c, 1, 0) == 0: sides.add('S')
+        if nb(r, c, 0, -1) == 0: sides.add('W')
+        if nb(r, c, 0, 1) == 0: sides.add('E')
+        return sides
+
     for r in range(3):
         for c in range(3):
             if mask[r][c] == 0:
                 t = GRASS
             else:
-                sides = set()
-                if nb(r, c, -1, 0) == 0: sides.add('N')
-                if nb(r, c, 1, 0) == 0: sides.add('S')
-                if nb(r, c, 0, -1) == 0: sides.add('W')
-                if nb(r, c, 0, 1) == 0: sides.add('E')
-                m = {frozenset(): isl[1][1], frozenset('N'): isl[0][1],
-                     frozenset('S'): isl[2][1], frozenset('E'): isl[1][2],
-                     frozenset('W'): isl[1][0], frozenset('NE'): isl[0][2],
-                     frozenset('NW'): isl[0][0], frozenset('SE'): isl[2][2],
-                     frozenset('SW'): isl[2][0]}
-                t = m.get(frozenset(sides), iso if len(sides) == 4 else isl[1][1])
+                sides = edge_sides(r, c)
+                if shore is not None:
+                    # Water: the shipped swatch, with a beach lip wherever the
+                    # shape meets land. Full-water cells keep an open sea face.
+                    t = shore(frozenset(sides))
+                else:
+                    m = {frozenset(): isl[1][1], frozenset('N'): isl[0][1],
+                         frozenset('S'): isl[2][1], frozenset('E'): isl[1][2],
+                         frozenset('W'): isl[1][0], frozenset('NE'): isl[0][2],
+                         frozenset('NW'): isl[0][0], frozenset('SE'): isl[2][2],
+                         frozenset('SW'): isl[2][0]}
+                    t = m.get(frozenset(sides), iso if len(sides) == 4 else isl[1][1])
             out.paste(t, (c * 16, r * 16))
     return out
 
@@ -104,10 +162,12 @@ def stamp(base, cells, anchor):
     return base
 
 
+# `water` gets its swatch below (see WATER/DEEP/SHORE at the top); the entry
+# here is only a placeholder so the dict stays a single table.
 ISL = {'forest': island(6, 4), 'sand': island(9, 0), 'snow': island(9, 4),
-       'dirt': island(6, 0), 'mountain': island(3, 12), 'water': island(0, 0)}
+       'dirt': island(6, 0), 'mountain': island(3, 12), 'water': None}
 ISO = {'forest': cell(6, 4), 'sand': cell(9, 0), 'snow': cell(9, 4),
-       'dirt': cell(6, 0), 'mountain': cell(3, 12), 'water': cell(0, 0)}
+       'dirt': cell(6, 0), 'mountain': cell(3, 12), 'water': None}
 MASKS = {
     'full': [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
     'pond': [[0, 0, 0], [0, 1, 0], [0, 0, 0]],
@@ -134,7 +194,12 @@ for terr in ['water', 'forest', 'sand', 'snow', 'dirt', 'mountain']:
     use = list(MASKS) if terr in ('water', 'forest') else \
         ['full', 'pond', 'top', 'bottom', 'left', 'right', 'nw', 'se', 'vchannel', 'hchannel']
     for mn in use:
-        P[f'{terr}_{mn}'] = render_mask(MASKS[mn], ISL[terr], ISO[terr])
+        if terr == 'water':
+            # Water comes from the shipped swatches, not the retro sheet's block.
+            P[f'{terr}_{mn}'] = render_mask(MASKS[mn], ISL[terr], ISO[terr],
+                                            shore=shore_cell)
+        else:
+            P[f'{terr}_{mn}'] = render_mask(MASKS[mn], ISL[terr], ISO[terr])
 
 SITES = {
     'tree_round': ([(19, 8)], (1, 1)), 'tree_dead': ([(20, 8)], (1, 1)),
@@ -155,7 +220,8 @@ SITES = {
 for n, (cells, anc) in SITES.items():
     P[n] = stamp(render_mask([[0] * 3 for _ in range(3)], ISL['forest'], ISO['forest']), cells, anc)
 
-P['bridge_over_water'] = stamp(render_mask(MASKS['vchannel'], ISL['water'], ISO['water']), [(23, 14), (23, 15)], (1, 1))
+P['bridge_over_water'] = stamp(render_mask(MASKS['vchannel'], None, None,
+                                           shore=shore_cell), [(23, 14), (23, 15)], (1, 1))
 P['cave_in_mountain'] = stamp(render_mask(MASKS['full'], ISL['mountain'], ISO['mountain']), [(23, 13)], (1, 1))
 P['gate_pass'] = stamp(render_mask(MASKS['hchannel'], ISL['mountain'], ISO['mountain']), [(22, 14), (22, 15)], (1, 1))
 
