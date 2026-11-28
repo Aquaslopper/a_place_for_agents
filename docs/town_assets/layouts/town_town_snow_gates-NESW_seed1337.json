@@ -1,0 +1,6019 @@
+{
+  "schema_version": 1,
+  "kind": "town",
+  "site_id": "town:1337:town",
+  "seed": 1337,
+  "tier": "town",
+  "biome": "snow",
+  "gates": [
+    "N",
+    "E",
+    "S",
+    "W"
+  ],
+  "district_cols": 5,
+  "district_rows": 4,
+  "width": 40,
+  "height": 32,
+  "backtracks": 0,
+  "grid": [
+    [
+      "lot_smithy",
+      "lot_inn",
+      "gate_n",
+      "lot_temple",
+      "lot_shop"
+    ],
+    [
+      "street_ns",
+      "street_ns",
+      "street_ns",
+      "street_ns",
+      "street_ns"
+    ],
+    [
+      "gate_w_n",
+      "street_t_n",
+      "plaza_well",
+      "street_t_n",
+      "gate_e_n"
+    ],
+    [
+      "green_open",
+      "green_open",
+      "gate_s",
+      "green_open",
+      "green_open"
+    ]
+  ],
+  "placements": [
+    {
+      "row": 0,
+      "col": 0,
+      "plate": "lot_smithy",
+      "site_id": "town:1337:lot_smithy:0,0",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "smithy",
+          "anchor_tile": [
+            4,
+            4
+          ],
+          "anchor_kind": "foot",
+          "role": "building",
+          "building_key": "smithy",
+          "plate_anchor_tile": [
+            4,
+            4
+          ]
+        },
+        {
+          "asset": "town_sign_weapon",
+          "anchor_tile": [
+            0,
+            5
+          ],
+          "anchor_kind": "foot",
+          "role": "building_sign",
+          "plate_anchor_tile": [
+            0,
+            5
+          ],
+          "solid_cells": [
+            [
+              0,
+              5
+            ]
+          ],
+          "semantic_tag": "TN_SIGN"
+        }
+      ]
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "plate": "lot_inn",
+      "site_id": "town:1337:lot_inn:0,1",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "S": [
+          [
+            11,
+            7
+          ],
+          [
+            12,
+            7
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "inn",
+          "anchor_tile": [
+            12,
+            4
+          ],
+          "anchor_kind": "foot",
+          "role": "building",
+          "building_key": "inn",
+          "plate_anchor_tile": [
+            4,
+            4
+          ]
+        },
+        {
+          "asset": "town_sign_inn",
+          "anchor_tile": [
+            8,
+            5
+          ],
+          "anchor_kind": "foot",
+          "role": "building_sign",
+          "plate_anchor_tile": [
+            0,
+            5
+          ],
+          "solid_cells": [
+            [
+              8,
+              5
+            ]
+          ],
+          "semantic_tag": "TN_SIGN"
+        }
+      ]
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "plate": "gate_n",
+      "site_id": "town:1337:gate_n:0,2",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "wall",
+          "wall",
+          "road",
+          "road",
+          "wall",
+          "wall",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            19,
+            0
+          ],
+          [
+            20,
+            0
+          ]
+        ],
+        "S": [
+          [
+            19,
+            7
+          ],
+          [
+            20,
+            7
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "town_gate_double",
+          "anchor_tile": [
+            19,
+            1
+          ],
+          "anchor_kind": "foot",
+          "rotate": 0,
+          "role": "town_gate",
+          "plate_anchor_tile": [
+            3,
+            1
+          ],
+          "semantic_tag": "TN_GATE"
+        }
+      ]
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "plate": "lot_temple",
+      "site_id": "town:1337:lot_temple:0,3",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "S": [
+          [
+            27,
+            7
+          ],
+          [
+            28,
+            7
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "temple",
+          "anchor_tile": [
+            28,
+            4
+          ],
+          "anchor_kind": "foot",
+          "role": "building",
+          "building_key": "temple",
+          "plate_anchor_tile": [
+            4,
+            4
+          ]
+        }
+      ]
+    },
+    {
+      "row": 0,
+      "col": 4,
+      "plate": "lot_shop",
+      "site_id": "town:1337:lot_shop:0,4",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "S": [
+          [
+            35,
+            7
+          ],
+          [
+            36,
+            7
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "shop",
+          "anchor_tile": [
+            36,
+            4
+          ],
+          "anchor_kind": "foot",
+          "role": "building",
+          "building_key": "shop",
+          "plate_anchor_tile": [
+            4,
+            4
+          ]
+        },
+        {
+          "asset": "town_sign_goods",
+          "anchor_tile": [
+            32,
+            5
+          ],
+          "anchor_kind": "foot",
+          "role": "building_sign",
+          "plate_anchor_tile": [
+            0,
+            5
+          ],
+          "solid_cells": [
+            [
+              32,
+              5
+            ]
+          ],
+          "semantic_tag": "TN_SIGN"
+        }
+      ]
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "plate": "street_ns",
+      "site_id": "town:1337:street_ns:1,0",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            3,
+            8
+          ],
+          [
+            4,
+            8
+          ]
+        ],
+        "S": [
+          [
+            3,
+            15
+          ],
+          [
+            4,
+            15
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": []
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "plate": "street_ns",
+      "site_id": "town:1337:street_ns:1,1",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            11,
+            8
+          ],
+          [
+            12,
+            8
+          ]
+        ],
+        "S": [
+          [
+            11,
+            15
+          ],
+          [
+            12,
+            15
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": []
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "plate": "street_ns",
+      "site_id": "town:1337:street_ns:1,2",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            19,
+            8
+          ],
+          [
+            20,
+            8
+          ]
+        ],
+        "S": [
+          [
+            19,
+            15
+          ],
+          [
+            20,
+            15
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": []
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "plate": "street_ns",
+      "site_id": "town:1337:street_ns:1,3",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            27,
+            8
+          ],
+          [
+            28,
+            8
+          ]
+        ],
+        "S": [
+          [
+            27,
+            15
+          ],
+          [
+            28,
+            15
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": []
+    },
+    {
+      "row": 1,
+      "col": 4,
+      "plate": "street_ns",
+      "site_id": "town:1337:street_ns:1,4",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            35,
+            8
+          ],
+          [
+            36,
+            8
+          ]
+        ],
+        "S": [
+          [
+            35,
+            15
+          ],
+          [
+            36,
+            15
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": []
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "plate": "gate_w_n",
+      "site_id": "town:1337:gate_w_n:2,0",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "wall",
+          "wall",
+          "road",
+          "road",
+          "wall",
+          "wall",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "E": [
+          [
+            7,
+            19
+          ],
+          [
+            7,
+            20
+          ]
+        ],
+        "N": [
+          [
+            3,
+            16
+          ],
+          [
+            4,
+            16
+          ]
+        ],
+        "W": [
+          [
+            0,
+            19
+          ],
+          [
+            0,
+            20
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "E": [
+          [
+            7,
+            3
+          ],
+          [
+            7,
+            4
+          ]
+        ],
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "W": [
+          [
+            0,
+            3
+          ],
+          [
+            0,
+            4
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "town_gate_double",
+          "anchor_tile": [
+            1,
+            19
+          ],
+          "anchor_kind": "foot",
+          "rotate": 90,
+          "role": "town_gate",
+          "plate_anchor_tile": [
+            1,
+            3
+          ],
+          "semantic_tag": "TN_GATE"
+        }
+      ]
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "plate": "street_t_n",
+      "site_id": "town:1337:street_t_n:2,1",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "E": [
+          [
+            15,
+            19
+          ],
+          [
+            15,
+            20
+          ]
+        ],
+        "N": [
+          [
+            11,
+            16
+          ],
+          [
+            12,
+            16
+          ]
+        ],
+        "W": [
+          [
+            8,
+            19
+          ],
+          [
+            8,
+            20
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "E": [
+          [
+            7,
+            3
+          ],
+          [
+            7,
+            4
+          ]
+        ],
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "W": [
+          [
+            0,
+            3
+          ],
+          [
+            0,
+            4
+          ]
+        ]
+      },
+      "objects": []
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "plate": "plaza_well",
+      "site_id": "town:1337:plaza_well:2,2",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            19,
+            16
+          ],
+          [
+            20,
+            16
+          ]
+        ],
+        "E": [
+          [
+            23,
+            19
+          ],
+          [
+            23,
+            20
+          ]
+        ],
+        "S": [
+          [
+            19,
+            23
+          ],
+          [
+            20,
+            23
+          ]
+        ],
+        "W": [
+          [
+            16,
+            19
+          ],
+          [
+            16,
+            20
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "E": [
+          [
+            7,
+            3
+          ],
+          [
+            7,
+            4
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ],
+        "W": [
+          [
+            0,
+            3
+          ],
+          [
+            0,
+            4
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "well",
+          "anchor_tile": [
+            20,
+            20
+          ],
+          "anchor_kind": "foot",
+          "role": "plaza_feature",
+          "plate_anchor_tile": [
+            4,
+            4
+          ],
+          "semantic_tag": "TN_WELL"
+        },
+        {
+          "asset": "noticeboard",
+          "anchor_tile": [
+            17,
+            18
+          ],
+          "anchor_kind": "foot",
+          "role": "plaza_noticeboard",
+          "plate_anchor_tile": [
+            1,
+            2
+          ],
+          "solid_cells": [
+            [
+              17,
+              18
+            ]
+          ],
+          "semantic_tag": "TN_SIGN"
+        }
+      ]
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "plate": "street_t_n",
+      "site_id": "town:1337:street_t_n:2,3",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "E": [
+          [
+            31,
+            19
+          ],
+          [
+            31,
+            20
+          ]
+        ],
+        "N": [
+          [
+            27,
+            16
+          ],
+          [
+            28,
+            16
+          ]
+        ],
+        "W": [
+          [
+            24,
+            19
+          ],
+          [
+            24,
+            20
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "E": [
+          [
+            7,
+            3
+          ],
+          [
+            7,
+            4
+          ]
+        ],
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "W": [
+          [
+            0,
+            3
+          ],
+          [
+            0,
+            4
+          ]
+        ]
+      },
+      "objects": []
+    },
+    {
+      "row": 2,
+      "col": 4,
+      "plate": "gate_e_n",
+      "site_id": "town:1337:gate_e_n:2,4",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "wall",
+          "wall",
+          "road",
+          "road",
+          "wall",
+          "wall",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "E": [
+          [
+            39,
+            19
+          ],
+          [
+            39,
+            20
+          ]
+        ],
+        "N": [
+          [
+            35,
+            16
+          ],
+          [
+            36,
+            16
+          ]
+        ],
+        "W": [
+          [
+            32,
+            19
+          ],
+          [
+            32,
+            20
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "E": [
+          [
+            7,
+            3
+          ],
+          [
+            7,
+            4
+          ]
+        ],
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "W": [
+          [
+            0,
+            3
+          ],
+          [
+            0,
+            4
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "town_gate_double",
+          "anchor_tile": [
+            38,
+            19
+          ],
+          "anchor_kind": "foot",
+          "rotate": 90,
+          "role": "town_gate",
+          "plate_anchor_tile": [
+            6,
+            3
+          ],
+          "semantic_tag": "TN_GATE"
+        }
+      ]
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "plate": "green_open",
+      "site_id": "town:1337:green_open:3,0",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {},
+      "plate_sockets": {},
+      "objects": []
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "plate": "green_open",
+      "site_id": "town:1337:green_open:3,1",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {},
+      "plate_sockets": {},
+      "objects": []
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "plate": "gate_s",
+      "site_id": "town:1337:gate_s:3,2",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "road",
+          "road",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "wall",
+          "wall",
+          "road",
+          "road",
+          "wall",
+          "wall",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {
+        "N": [
+          [
+            19,
+            24
+          ],
+          [
+            20,
+            24
+          ]
+        ],
+        "S": [
+          [
+            19,
+            31
+          ],
+          [
+            20,
+            31
+          ]
+        ]
+      },
+      "plate_sockets": {
+        "N": [
+          [
+            3,
+            0
+          ],
+          [
+            4,
+            0
+          ]
+        ],
+        "S": [
+          [
+            3,
+            7
+          ],
+          [
+            4,
+            7
+          ]
+        ]
+      },
+      "objects": [
+        {
+          "asset": "town_gate_double",
+          "anchor_tile": [
+            19,
+            30
+          ],
+          "anchor_kind": "foot",
+          "rotate": 0,
+          "role": "town_gate",
+          "plate_anchor_tile": [
+            3,
+            6
+          ],
+          "semantic_tag": "TN_GATE"
+        }
+      ]
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "plate": "green_open",
+      "site_id": "town:1337:green_open:3,3",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {},
+      "plate_sockets": {},
+      "objects": []
+    },
+    {
+      "row": 3,
+      "col": 4,
+      "plate": "green_open",
+      "site_id": "town:1337:green_open:3,4",
+      "edge_labels": {
+        "N": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "E": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "S": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ],
+        "W": [
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass",
+          "grass"
+        ]
+      },
+      "sockets": {},
+      "plate_sockets": {},
+      "objects": []
+    }
+  ],
+  "decorations": [
+    {
+      "asset": "tree_snow",
+      "role": "park_tree_0",
+      "semantic_tag": "TN_TREE",
+      "anchor_tile": [
+        6,
+        25
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          6,
+          25
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 0
+    },
+    {
+      "asset": "tree_snow",
+      "role": "park_tree_1",
+      "semantic_tag": "TN_TREE",
+      "anchor_tile": [
+        6,
+        30
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          6,
+          30
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 0
+    },
+    {
+      "asset": "bush_plain",
+      "role": "park_shrub",
+      "semantic_tag": "TN_TREE",
+      "anchor_tile": [
+        3,
+        29
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          3,
+          29
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 0
+    },
+    {
+      "asset": "pine_2",
+      "role": "commons_tree",
+      "semantic_tag": "TN_TREE",
+      "anchor_tile": [
+        9,
+        25
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          9,
+          25
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 1
+    },
+    {
+      "asset": "bench",
+      "role": "commons_bench",
+      "semantic_tag": "TN_GARDEN",
+      "anchor_tile": [
+        11,
+        30
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          11,
+          30
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 1
+    },
+    {
+      "asset": "pine_2",
+      "role": "commons_tree",
+      "semantic_tag": "TN_TREE",
+      "anchor_tile": [
+        25,
+        30
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          25,
+          30
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 3
+    },
+    {
+      "asset": "bench",
+      "role": "commons_bench",
+      "semantic_tag": "TN_GARDEN",
+      "anchor_tile": [
+        27,
+        30
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          27,
+          30
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 3
+    },
+    {
+      "asset": "bench",
+      "role": "garden_bench",
+      "semantic_tag": "TN_GARDEN",
+      "anchor_tile": [
+        35,
+        30
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          35,
+          30
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 4
+    },
+    {
+      "asset": "rock_0",
+      "role": "snow_rock_west",
+      "semantic_tag": null,
+      "anchor_tile": [
+        33,
+        26
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          33,
+          26
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 4
+    },
+    {
+      "asset": "rock_0",
+      "role": "snow_rock_east",
+      "semantic_tag": null,
+      "anchor_tile": [
+        38,
+        26
+      ],
+      "anchor_kind": "foot",
+      "solid_cells": [
+        [
+          38,
+          26
+        ]
+      ],
+      "plate_row": 3,
+      "plate_col": 4
+    }
+  ],
+  "layers": {
+    "ground": [
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_WALL",
+        "TN_WALL",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_WALL",
+        "TN_WALL",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GATE",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_LOT_DOOR",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_LOT_DOOR",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_LOT_DOOR",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_LOT_DOOR",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_WALL",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_COURT",
+        "TN_COURT",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_COURT",
+        "TN_COURT",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_WALL"
+      ],
+      [
+        "TN_WALL",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_COURT",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_COURT",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_WALL"
+      ],
+      [
+        "TN_PATH",
+        "TN_GATE",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GATE",
+        "TN_PATH"
+      ],
+      [
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_COURT",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH"
+      ],
+      [
+        "TN_WALL",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_COURT",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_COURT",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_WALL"
+      ],
+      [
+        "TN_WALL",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_COURT",
+        "TN_COURT",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_COURT",
+        "TN_COURT",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_WALL"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GATE",
+        "TN_PATH",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ],
+      [
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_WALL",
+        "TN_WALL",
+        "TN_PATH",
+        "TN_PATH",
+        "TN_WALL",
+        "TN_WALL",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS",
+        "TN_GRASS"
+      ]
+    ],
+    "solid": [
+      [
+        25,
+        2
+      ],
+      [
+        26,
+        2
+      ],
+      [
+        27,
+        2
+      ],
+      [
+        28,
+        2
+      ],
+      [
+        29,
+        2
+      ],
+      [
+        1,
+        3
+      ],
+      [
+        2,
+        3
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        5,
+        3
+      ],
+      [
+        9,
+        3
+      ],
+      [
+        10,
+        3
+      ],
+      [
+        11,
+        3
+      ],
+      [
+        12,
+        3
+      ],
+      [
+        13,
+        3
+      ],
+      [
+        25,
+        3
+      ],
+      [
+        26,
+        3
+      ],
+      [
+        27,
+        3
+      ],
+      [
+        28,
+        3
+      ],
+      [
+        29,
+        3
+      ],
+      [
+        33,
+        3
+      ],
+      [
+        34,
+        3
+      ],
+      [
+        35,
+        3
+      ],
+      [
+        36,
+        3
+      ],
+      [
+        37,
+        3
+      ],
+      [
+        1,
+        4
+      ],
+      [
+        2,
+        4
+      ],
+      [
+        3,
+        4
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        5,
+        4
+      ],
+      [
+        9,
+        4
+      ],
+      [
+        10,
+        4
+      ],
+      [
+        11,
+        4
+      ],
+      [
+        12,
+        4
+      ],
+      [
+        13,
+        4
+      ],
+      [
+        25,
+        4
+      ],
+      [
+        26,
+        4
+      ],
+      [
+        27,
+        4
+      ],
+      [
+        28,
+        4
+      ],
+      [
+        29,
+        4
+      ],
+      [
+        33,
+        4
+      ],
+      [
+        34,
+        4
+      ],
+      [
+        35,
+        4
+      ],
+      [
+        36,
+        4
+      ],
+      [
+        37,
+        4
+      ],
+      [
+        0,
+        5
+      ],
+      [
+        8,
+        5
+      ],
+      [
+        32,
+        5
+      ],
+      [
+        17,
+        18
+      ],
+      [
+        19,
+        19
+      ],
+      [
+        20,
+        19
+      ],
+      [
+        19,
+        20
+      ],
+      [
+        20,
+        20
+      ],
+      [
+        6,
+        25
+      ],
+      [
+        9,
+        25
+      ],
+      [
+        33,
+        26
+      ],
+      [
+        38,
+        26
+      ],
+      [
+        3,
+        29
+      ],
+      [
+        6,
+        30
+      ],
+      [
+        11,
+        30
+      ],
+      [
+        25,
+        30
+      ],
+      [
+        27,
+        30
+      ],
+      [
+        35,
+        30
+      ]
+    ],
+    "perimeter_wall": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
+      ],
+      [
+        6,
+        0
+      ],
+      [
+        7,
+        0
+      ],
+      [
+        8,
+        0
+      ],
+      [
+        9,
+        0
+      ],
+      [
+        10,
+        0
+      ],
+      [
+        11,
+        0
+      ],
+      [
+        12,
+        0
+      ],
+      [
+        13,
+        0
+      ],
+      [
+        14,
+        0
+      ],
+      [
+        15,
+        0
+      ],
+      [
+        16,
+        0
+      ],
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        0
+      ],
+      [
+        21,
+        0
+      ],
+      [
+        22,
+        0
+      ],
+      [
+        23,
+        0
+      ],
+      [
+        24,
+        0
+      ],
+      [
+        25,
+        0
+      ],
+      [
+        26,
+        0
+      ],
+      [
+        27,
+        0
+      ],
+      [
+        28,
+        0
+      ],
+      [
+        29,
+        0
+      ],
+      [
+        30,
+        0
+      ],
+      [
+        31,
+        0
+      ],
+      [
+        32,
+        0
+      ],
+      [
+        33,
+        0
+      ],
+      [
+        34,
+        0
+      ],
+      [
+        35,
+        0
+      ],
+      [
+        36,
+        0
+      ],
+      [
+        37,
+        0
+      ],
+      [
+        38,
+        0
+      ],
+      [
+        39,
+        0
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        39,
+        1
+      ],
+      [
+        0,
+        2
+      ],
+      [
+        39,
+        2
+      ],
+      [
+        0,
+        3
+      ],
+      [
+        39,
+        3
+      ],
+      [
+        0,
+        4
+      ],
+      [
+        39,
+        4
+      ],
+      [
+        0,
+        5
+      ],
+      [
+        39,
+        5
+      ],
+      [
+        0,
+        6
+      ],
+      [
+        39,
+        6
+      ],
+      [
+        0,
+        7
+      ],
+      [
+        39,
+        7
+      ],
+      [
+        0,
+        8
+      ],
+      [
+        39,
+        8
+      ],
+      [
+        0,
+        9
+      ],
+      [
+        39,
+        9
+      ],
+      [
+        0,
+        10
+      ],
+      [
+        39,
+        10
+      ],
+      [
+        0,
+        11
+      ],
+      [
+        39,
+        11
+      ],
+      [
+        0,
+        12
+      ],
+      [
+        39,
+        12
+      ],
+      [
+        0,
+        13
+      ],
+      [
+        39,
+        13
+      ],
+      [
+        0,
+        14
+      ],
+      [
+        39,
+        14
+      ],
+      [
+        0,
+        15
+      ],
+      [
+        39,
+        15
+      ],
+      [
+        0,
+        16
+      ],
+      [
+        39,
+        16
+      ],
+      [
+        0,
+        17
+      ],
+      [
+        39,
+        17
+      ],
+      [
+        0,
+        18
+      ],
+      [
+        39,
+        18
+      ],
+      [
+        0,
+        21
+      ],
+      [
+        39,
+        21
+      ],
+      [
+        0,
+        22
+      ],
+      [
+        39,
+        22
+      ],
+      [
+        0,
+        23
+      ],
+      [
+        39,
+        23
+      ],
+      [
+        0,
+        24
+      ],
+      [
+        39,
+        24
+      ],
+      [
+        0,
+        25
+      ],
+      [
+        39,
+        25
+      ],
+      [
+        0,
+        26
+      ],
+      [
+        39,
+        26
+      ],
+      [
+        0,
+        27
+      ],
+      [
+        39,
+        27
+      ],
+      [
+        0,
+        28
+      ],
+      [
+        39,
+        28
+      ],
+      [
+        0,
+        29
+      ],
+      [
+        39,
+        29
+      ],
+      [
+        0,
+        30
+      ],
+      [
+        39,
+        30
+      ],
+      [
+        0,
+        31
+      ],
+      [
+        1,
+        31
+      ],
+      [
+        2,
+        31
+      ],
+      [
+        3,
+        31
+      ],
+      [
+        4,
+        31
+      ],
+      [
+        5,
+        31
+      ],
+      [
+        6,
+        31
+      ],
+      [
+        7,
+        31
+      ],
+      [
+        8,
+        31
+      ],
+      [
+        9,
+        31
+      ],
+      [
+        10,
+        31
+      ],
+      [
+        11,
+        31
+      ],
+      [
+        12,
+        31
+      ],
+      [
+        13,
+        31
+      ],
+      [
+        14,
+        31
+      ],
+      [
+        15,
+        31
+      ],
+      [
+        16,
+        31
+      ],
+      [
+        17,
+        31
+      ],
+      [
+        18,
+        31
+      ],
+      [
+        21,
+        31
+      ],
+      [
+        22,
+        31
+      ],
+      [
+        23,
+        31
+      ],
+      [
+        24,
+        31
+      ],
+      [
+        25,
+        31
+      ],
+      [
+        26,
+        31
+      ],
+      [
+        27,
+        31
+      ],
+      [
+        28,
+        31
+      ],
+      [
+        29,
+        31
+      ],
+      [
+        30,
+        31
+      ],
+      [
+        31,
+        31
+      ],
+      [
+        32,
+        31
+      ],
+      [
+        33,
+        31
+      ],
+      [
+        34,
+        31
+      ],
+      [
+        35,
+        31
+      ],
+      [
+        36,
+        31
+      ],
+      [
+        37,
+        31
+      ],
+      [
+        38,
+        31
+      ],
+      [
+        39,
+        31
+      ]
+    ],
+    "gate_openings": {
+      "N": [
+        [
+          19,
+          0
+        ],
+        [
+          20,
+          0
+        ]
+      ],
+      "S": [
+        [
+          19,
+          31
+        ],
+        [
+          20,
+          31
+        ]
+      ],
+      "W": [
+        [
+          0,
+          19
+        ],
+        [
+          0,
+          20
+        ]
+      ],
+      "E": [
+        [
+          39,
+          19
+        ],
+        [
+          39,
+          20
+        ]
+      ]
+    },
+    "walkable": [
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    ]
+  },
+  "buildings": [
+    {
+      "kind": "smithy",
+      "interior_kind": "smithy",
+      "interior_seed": 16909948798611932376,
+      "plate": "lot_smithy",
+      "site_id": "interior:16909948798611932376",
+      "plate_row": 0,
+      "plate_col": 0,
+      "footprint": {
+        "x": 1,
+        "y": 3,
+        "width": 5,
+        "height": 2
+      },
+      "door": {
+        "tx": 3,
+        "ty": 5,
+        "portal_id": "lot_smithy:door",
+        "semantic_tag": "TN_LOT_DOOR"
+      },
+      "apron": [
+        [
+          3,
+          5
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          6
+        ]
+      ]
+    },
+    {
+      "kind": "inn",
+      "interior_kind": "inn",
+      "interior_seed": 10954180402373617136,
+      "plate": "lot_inn",
+      "site_id": "interior:10954180402373617136",
+      "plate_row": 0,
+      "plate_col": 1,
+      "footprint": {
+        "x": 9,
+        "y": 3,
+        "width": 5,
+        "height": 2
+      },
+      "door": {
+        "tx": 11,
+        "ty": 5,
+        "portal_id": "lot_inn:door",
+        "semantic_tag": "TN_LOT_DOOR"
+      },
+      "apron": [
+        [
+          11,
+          5
+        ],
+        [
+          12,
+          5
+        ],
+        [
+          11,
+          6
+        ],
+        [
+          12,
+          6
+        ]
+      ]
+    },
+    {
+      "kind": "temple",
+      "interior_kind": "temple",
+      "interior_seed": 10016717411491401528,
+      "plate": "lot_temple",
+      "site_id": "interior:10016717411491401528",
+      "plate_row": 0,
+      "plate_col": 3,
+      "footprint": {
+        "x": 25,
+        "y": 2,
+        "width": 5,
+        "height": 3
+      },
+      "door": {
+        "tx": 27,
+        "ty": 5,
+        "portal_id": "lot_temple:door",
+        "semantic_tag": "TN_LOT_DOOR"
+      },
+      "apron": [
+        [
+          27,
+          5
+        ],
+        [
+          28,
+          5
+        ],
+        [
+          27,
+          6
+        ],
+        [
+          28,
+          6
+        ]
+      ]
+    },
+    {
+      "kind": "shop",
+      "interior_kind": "shop",
+      "interior_seed": 12363865153022627475,
+      "plate": "lot_shop",
+      "site_id": "interior:12363865153022627475",
+      "plate_row": 0,
+      "plate_col": 4,
+      "footprint": {
+        "x": 33,
+        "y": 3,
+        "width": 5,
+        "height": 2
+      },
+      "door": {
+        "tx": 35,
+        "ty": 5,
+        "portal_id": "lot_shop:door",
+        "semantic_tag": "TN_LOT_DOOR"
+      },
+      "apron": [
+        [
+          35,
+          5
+        ],
+        [
+          36,
+          5
+        ],
+        [
+          35,
+          6
+        ],
+        [
+          36,
+          6
+        ]
+      ]
+    }
+  ],
+  "plaza_targets": [
+    {
+      "label": "well_or_noticeboard",
+      "tx": 18,
+      "ty": 19
+    },
+    {
+      "label": "well_or_noticeboard",
+      "tx": 21,
+      "ty": 19
+    },
+    {
+      "label": "well_or_noticeboard",
+      "tx": 19,
+      "ty": 18
+    },
+    {
+      "label": "well_or_noticeboard",
+      "tx": 20,
+      "ty": 18
+    },
+    {
+      "label": "well_or_noticeboard",
+      "tx": 18,
+      "ty": 18
+    },
+    {
+      "label": "well_or_noticeboard",
+      "tx": 17,
+      "ty": 19
+    }
+  ],
+  "gate_starts": {
+    "N": [
+      19,
+      1
+    ],
+    "S": [
+      19,
+      30
+    ],
+    "W": [
+      1,
+      19
+    ],
+    "E": [
+      38,
+      19
+    ]
+  },
+  "portals": [
+    {
+      "id": "gate_n",
+      "side": "N",
+      "tx": 19,
+      "ty": 1,
+      "semantic_tag": "TN_GATE",
+      "target_map": "overworld",
+      "target_portal": "n_approach"
+    },
+    {
+      "id": "gate_e",
+      "side": "E",
+      "tx": 38,
+      "ty": 19,
+      "semantic_tag": "TN_GATE",
+      "target_map": "overworld",
+      "target_portal": "e_approach"
+    },
+    {
+      "id": "gate_s",
+      "side": "S",
+      "tx": 19,
+      "ty": 30,
+      "semantic_tag": "TN_GATE",
+      "target_map": "overworld",
+      "target_portal": "s_approach"
+    },
+    {
+      "id": "gate_w",
+      "side": "W",
+      "tx": 1,
+      "ty": 19,
+      "semantic_tag": "TN_GATE",
+      "target_map": "overworld",
+      "target_portal": "w_approach"
+    },
+    {
+      "id": "lot_smithy:door",
+      "tx": 3,
+      "ty": 5,
+      "semantic_tag": "TN_LOT_DOOR",
+      "target_map": "interior:16909948798611932376",
+      "target_portal": "door_exit",
+      "building_kind": "smithy"
+    },
+    {
+      "id": "lot_inn:door",
+      "tx": 11,
+      "ty": 5,
+      "semantic_tag": "TN_LOT_DOOR",
+      "target_map": "interior:10954180402373617136",
+      "target_portal": "door_exit",
+      "building_kind": "inn"
+    },
+    {
+      "id": "lot_temple:door",
+      "tx": 27,
+      "ty": 5,
+      "semantic_tag": "TN_LOT_DOOR",
+      "target_map": "interior:10016717411491401528",
+      "target_portal": "door_exit",
+      "building_kind": "temple"
+    },
+    {
+      "id": "lot_shop:door",
+      "tx": 35,
+      "ty": 5,
+      "semantic_tag": "TN_LOT_DOOR",
+      "target_map": "interior:12363865153022627475",
+      "target_portal": "door_exit",
+      "building_kind": "shop"
+    }
+  ],
+  "validation": {
+    "side_match_violations": 0,
+    "overlap_count": 0,
+    "missing_required_lots": [],
+    "gate_reachability": {
+      "N": {
+        "targets_reached": 26,
+        "targets_total": 26,
+        "unreachable_targets": [],
+        "unreachable_gates": []
+      },
+      "S": {
+        "targets_reached": 26,
+        "targets_total": 26,
+        "unreachable_targets": [],
+        "unreachable_gates": []
+      },
+      "W": {
+        "targets_reached": 26,
+        "targets_total": 26,
+        "unreachable_targets": [],
+        "unreachable_gates": []
+      },
+      "E": {
+        "targets_reached": 26,
+        "targets_total": 26,
+        "unreachable_targets": [],
+        "unreachable_gates": []
+      }
+    },
+    "unreachable_target_count": 0,
+    "errors": []
+  }
+}
