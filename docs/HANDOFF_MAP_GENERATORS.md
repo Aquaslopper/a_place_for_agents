@@ -1,6 +1,6 @@
-# Handoff: Step-by-Step Procedural Map Pipeline (Towns, Interiors, Caves, Dungeons, Quest Maps)
+# Handoff: Procedural Map Pipeline (Towns, Interiors, Caves, Dungeons, Quest Maps)
 
-**Status:** Track 1 Step 1.1 complete. Next: Step 1.2 (finish the town/interior placement registry), then Step 1.3 (plates and stamps).
+**Status:** Track 1 Steps 1.1 and 1.2 complete. Next: Step 1.3 (town/interior plates and stamps), then Step 1.4 (seeded layout generators).
 **Follows:** `docs/HANDOFF_PROCEDURAL_JRPG_WORLD.md` and `docs/HANDOFF_PLATE_LAYOUT_GENERATOR.md` (Overworld plate builder + `tools/build_overworld_layout.py` completed).
 
 ---
@@ -15,7 +15,7 @@ The overworld pipeline established a reliable four-step workflow that avoids was
 4. **Step 4 — Build Deterministic Seeded Randomizers & Verifiers (`tools/build_*_layout.py`):** Self-contained Python tools matching `tools/build_overworld_layout.py` (`--seed`, `--check`, byte-identical JSON + PNG preview, and domain invariants).
 5. **Step 5 — C++ Game Integration (only after Steps 1–4 pass visually and structurally):** Replace `src/room.cpp`, expand `src/dungeon.cpp`, wire towns + quest sites + `tools/build_overworld_layout.py` logic behind one shared `MapInstance` / portal system, and restore `CMakeLists.txt`.
 
-> **Important house discipline:** Run **one dictated track/step at a time**. PR #32 restored `src/world.*` and `src/overworld.cpp` with a first-pass overworld. Do not jump straight into C++ rewrites: the shared map integration below still waits on the procedural map tools. Keep `tools/validate_assets.py` passing at all times, and never create test suites, `AGENTS.md`, or `build.sh`.
+> **Scope discipline:** Stay focused on the requested deliverable. Complete it end-to-end, including necessary validation. Do not expand into adjacent tasks or lengthy speculative planning, but do not split bounded work into micro-steps or pause for approval between them. Follow the dependency order below: C++ integration depends on the procedural map tools and their checks. PR #32 restored `src/world.*` and `src/overworld.cpp` with a first-pass overworld; do not treat that as the completed MapSystem. Keep `tools/validate_assets.py` passing at all times, and never create test suites, `AGENTS.md`, or `build.sh`.
 
 ---
 
@@ -72,6 +72,8 @@ Document:
 3. Semantic vocabularies:
    - `TN_GRASS, TN_WOOD_FLOOR, TN_PATH, TN_COBBLE, TN_COURT, TN_WATER, TN_CANAL, TN_BRIDGE, TN_GARDEN, TN_WALL, TN_GATE, TN_TREE, TN_WELL, TN_SIGN, TN_LAMP, TN_MARKET, TN_LOT_DOOR`
    - `IN_VOID, IN_WALL_CAP, IN_WALL_FACE, IN_FLOOR_WOOD, IN_FLOOR_TILE, IN_FLOOR_STONE, IN_CARPET, IN_DOOR_EXIT, IN_STAIR_UP, IN_STAIR_DOWN, IN_COUNTER, IN_HEARTH, IN_SHELF, IN_RACK_WEAPONS, IN_RACK_ARMOR, IN_BED, IN_TABLE, IN_ALTAR, IN_THRONE, IN_CHEST`
+
+**Complete.** `docs/ART_BIBLE.md` §10.1 now records measured building sprite sizes, canonical non-overlapping ground footprints, the two-tile doorstep apron, the interior three-row wall profile, and the locked `TN_*` / `IN_*` vocabularies. The existing §10 source-crop anchor remains unchanged. No runtime assets were added or modified.
 
 ### Step 1.3 — Build Town & Interior Plate/Stamp Libraries
 - **Critical scale lesson (do NOT copy overworld `3×3` blindly for towns):**

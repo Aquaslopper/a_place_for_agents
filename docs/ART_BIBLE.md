@@ -477,5 +477,85 @@ python3 tools/validate_assets.py
 ```
 
 The standard OpenRTP importer also regenerates the runtime-ready crops.
-Building footprints, clearance rules, and the `TN_*` / `IN_*` schema are the
-next step; no layouts, sockets, collision, or runtime loading are defined here.
+
+### 10.1 Town & interior placement registry
+
+This registry fixes the scale and semantic vocabulary for the next plate and
+layout builders. Dimensions below distinguish the **visible sprite envelope**
+(measured from the shipped PNG) from the **logical ground footprint** used for
+collision and lot packing. Building sprites are transparent, foot-anchored art;
+the roof is not a solid rectangle.
+
+#### Town building sprites and placement footprints
+
+All dimensions are pixels in the runtime sprite, followed by the logical
+footprint in 16-pixel tiles. Place each building centered on its lot, with its
+south/base edge at the footprint anchor. Its entrance is at the bottom-center
+of that edge; the door tile is outside the solid footprint. The footprint sizes
+are the canonical procedural placement contract, not a claim that the entire
+transparent image rectangle is solid.
+
+| Runtime sprite | Image size | Visible envelope (ceil to tiles) | Logical solid footprint | Roof / upper-art allowance |
+|---|---:|---:|---:|---|
+| `house_0` | 62×54 | 4×4 | 4×2 | Up to 2 tiles north of base |
+| `house_1` | 66×57 | 5×4 | 4×2 | Up to 2 tiles north; keep the wider eaves inside its 5-tile visual envelope |
+| `house_2` | 62×60 | 4×4 | 4×2 | Up to 2 tiles north |
+| `house_3` | 66×54 | 5×4 | 4×2 | Up to 2 tiles north; keep the wider eaves inside its 5-tile visual envelope |
+| `house_4` | 62×57 | 4×4 | 4×2 | Up to 2 tiles north |
+| `shop` | 70×61 | 5×4 | 5×2 | Up to 2 tiles north |
+| `inn` | 74×66 | 5×5 | 5×2 | Up to 3 tiles north |
+| `temple` | 76×78 | 5×5 | 5×3 | Up to 2 tiles north |
+| `manor` | 78×68 | 5×5 | 5×2 | Up to 3 tiles north |
+| `smithy` | 76×64 | 5×4 | 5×2 | Up to 2 tiles north |
+| `castle` | 98×84 | 7×6 | 7×3 | Up to 3 tiles north |
+
+At runtime, derive image bounds from the texture itself; do not scale a sprite
+to make its logical footprint fit. The footprint determines blocked ground,
+lot overlap and door placement only. The building's own texture supplies the
+roof, walls and entrance art. Building footprints plus their lot buffer must
+not overlap, even when transparent sprite bounds visually overhang an adjacent
+lot.
+
+**Two-tile doorstep apron.** Reserve a clear 2-tile-wide by 2-tile-deep
+rectangle immediately south of every door. It is walkable, has no solid prop,
+fence, crop, NPC spawn or other building footprint, and joins a street/plaza
+or a continuous walkable lane. Keep at least a 1-tile open service margin on
+other sides of each lot; any wall or town edge must leave gates aligned to the
+street network. This makes each door reachable from every active town gate.
+
+#### Interior wall height and layering
+
+A north-facing interior wall has three visible rows: its **top cap** occupies
+`y-2`, its **upper front face** occupies `y-1`, and its **base front face**
+occupies `y`. These rows are drawn back-to-front in that order; the cap is the
+wall's top surface, not a fourth wall-face row. The two-row `interior_wall_face_atlas`
+provides face art only; cap corners and joins are composed from the verified
+wall/floor masks during the stamp step. Mount wall props (windows, paintings,
+shelves, hearth fixtures) against `y-1`/`y` and draw them before actors in the
+same depth band. The walkable floor begins at `y+1`; furniture footprints and
+collision are on floor cells, not on the decorative wall face. Leave a clear
+two-tile-deep landing inside every `IN_DOOR_EXIT` and keep the circulation
+spine connected to all required NPC, bed, stair and chest approach cells.
+
+#### Locked semantic vocabulary
+
+Town-map generators and renderers use these tags for ground, structures and
+interactables; tags describe meaning, while the chosen art is a separate
+rendering decision:
+
+`TN_GRASS, TN_WOOD_FLOOR, TN_PATH, TN_COBBLE, TN_COURT, TN_WATER, TN_CANAL,
+TN_BRIDGE, TN_GARDEN, TN_WALL, TN_GATE, TN_TREE, TN_WELL, TN_SIGN, TN_LAMP,
+TN_MARKET, TN_LOT_DOOR`
+
+Interior-map generators and renderers use:
+
+`IN_VOID, IN_WALL_CAP, IN_WALL_FACE, IN_FLOOR_WOOD, IN_FLOOR_TILE,
+IN_FLOOR_STONE, IN_CARPET, IN_DOOR_EXIT, IN_STAIR_UP, IN_STAIR_DOWN,
+IN_COUNTER, IN_HEARTH, IN_SHELF, IN_RACK_WEAPONS, IN_RACK_ARMOR, IN_BED,
+IN_TABLE, IN_ALTAR, IN_THRONE, IN_CHEST`
+
+`TN_LOT_DOOR` and `IN_DOOR_EXIT` are portal cells, not decorative door pixels.
+Their stable IDs and target map/portal bindings belong in generated layout
+metadata; art placement must not change collision or connectivity. These
+registries do not yet define layouts, sockets, runtime loading, or map
+transitions; those follow in the plate/generator and integration steps.

@@ -47,7 +47,7 @@ The prior partial source edits were reverted. The map-system replacement (the ge
 
 ## Work completed (steps 1–3) — build on this, do not redo it
 
-The human runs this mission **one dictated step at a time** and gets angry at scope creep or micro-stepping. Steps 1–3 are DONE and persisted in the repo; the procedural generator itself (step 4+) is NOT yet written. Everything here is reproducible from the committed files. Read this whole section before touching anything.
+**Scope discipline:** Stay focused on the requested deliverable. Complete it end-to-end, including necessary validation. Avoid adjacent tasks and lengthy speculative planning, but do not split bounded work into micro-steps or pause for approval between them. Follow necessary technical dependencies rather than an artificial one-step-at-a-time limit. Steps 1–3 are DONE and persisted in the repo; the procedural generator itself (step 4+) is NOT yet written. Everything here is reproducible from the committed files. Read this whole section before touching anything.
 
 ### Step 1 — Overworld assets obtained (source-only, vendored, credited)
 
