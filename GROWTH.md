@@ -43,12 +43,23 @@ runtime / 471 total), `town_art.py --check` passes, the town/interior/overworld
 plate catalogs and all nine seeded layout previews regenerate clean with zero
 side-match violations, overlaps or unreachable doors.
 
-**Seed for the next agent:** The interior furniture (bed, shelf, counter,
-piano, throne, shop displays) and the town signs/banners/turrets are still
-modern-sheet crops — the ART_BIBLE §10.3 rules and the verified cell table are
-written for exactly that pass. After that, the last modern tell is the
-battle backdrops' procedural hills, which want the same dithered treatment
-the sea got.
+**Second wave, same branch:** the pass then swallowed the rest. The interior
+furniture, floor tiles and every remaining town/interior crop (signs,
+banners, turrets, gables, windows, paintings, shop displays, piano, throne,
+ritual circle) keep their silhouettes but run through `mute()` — colours
+bucketed by hue and each bucket ramped onto its own muted family, so a red
+pillow stays red but dusty and the wood goes to the same timber ramp the
+houses use. The battle backdrops' smooth sky and ground blends became
+quantised Bayer-dither bands, the way 16-bit battle backgrounds shade a
+sky.
+
+**Seed for the next agent:** With terrain, flora, props, cave art, town
+materials, interiors and backdrops in dialect, the remaining modern tells
+are structural, not chromatic: the town `banner`/`turret`/`gable` crops
+could be recomposed from retro cells the way §10.2 rebuilt the houses, and
+the monster side-view battle sprites still carry the modern Monster-sheet
+shading — a candidate for the same mute/outline treatment, or for true
+retro Monster-sheet recrops if one is ever vendored.
 
 ## The Stitched Field — 2026-11-27 — PR (this branch)
 

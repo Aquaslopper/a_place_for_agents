@@ -655,11 +655,26 @@ is mostly *re-sourcing at verified cells* plus palette discipline:
    interiors sit beside the retro furniture without recolouring the
    `Interior.png` furniture crops.
 
-**Rules for the next pass (interior furniture, landmarks, banners and signs
-are still modern-sheet art):** change pixel content only through the tools
-(§0), prefer a verified retro-sheet cell over a redraw, keep every sprite's
-size/footprint (§10.1), keep ramps ≤ 8 colours with hue-shifted shadows
-(§2.3–2.4), regenerate the manifest and run `tools/validate_assets.py`, and
-record new cell coordinates here. `town_art.py --check`, `build_town_plates.py
---check`, `build_interior_plates.py --check` and the three layout generators'
-`--check` all run against these assets and must stay green.
+4. **Muted hue-bucket harmonisation (`landscape_art.mute`) — pass 2.**
+   Modern-sheet crops that stay (interior furniture `bed`, `shelf`, `table`,
+   `counter`, `keg`, `stool`, `lantern`, `candle`, `plate`, `cauldron`,
+   `basin`, the interior floor tiles `brick*`, `plank_floor`, `carpet`, and
+   every remaining `town_*`/`interior_*` crop: signs, banners, turrets,
+   gables, windows, paintings, curtains, stairs, shop displays, piano,
+   throne, ritual circle) keep their silhouette but are harmonised by
+   `mute()`: each colour is bucketed by hue (wood/stone/ivory/clay/gold/
+   moss/slate/wine) and each bucket is ramped onto its own muted family —
+   a palette ramp per hue family, never a whole-sprite tint, never a
+   redraw. The `interior_door_*` Object1 pose strips are charset art and
+   stay untouched. The battle backdrops' sky and ground gradients are now
+   **quantised dither bands** (`battle_scenery.gradient`, Bayer 4×4) like
+   16-bit battle backgrounds, instead of smooth per-scanline blends.
+
+**Rules for the next pass:** change pixel content only through the tools
+(§0), prefer a verified retro-sheet cell over a redraw or a mute, keep every
+sprite's size/footprint (§10.1), keep ramps ≤ 8 colours with hue-shifted
+shadows (§2.3–2.4), regenerate the manifest and run `tools/validate_assets.py`,
+and record new cell coordinates here. `town_art.py --check`,
+`build_town_plates.py --check`, `build_interior_plates.py --check` and the
+three layout generators' `--check` all run against these assets and must
+stay green.

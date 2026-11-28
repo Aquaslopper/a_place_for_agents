@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 
 from rtp_sheet import (EXT, INT, KEY_PINK, KEY_PINK2, ROOT, keyed, keyed_any,
                        load, save, REXT)
-from landscape_art import ramp
+from landscape_art import ramp, mute
 
 OBJECTS = "CharSet/Object1.png"
 SHEETS = {
@@ -23,6 +23,22 @@ SHEETS = {
     REXT: ((480, 256), None),   # multi-key retro sheet: keyed_any
     OBJECTS: ((288, 256), KEY_PINK2),
 }
+
+# Modern-sheet town/interior crops harmonised by mute() (no retro cell).
+MODERN_TOWN_KEEP = frozenset({
+    "town_round_turret", "town_broken_turret", "town_gate_double",
+    "town_gable_red", "town_gable_blue",
+    "town_sign_tankard", "town_sign_weapon", "town_sign_inn",
+    "town_sign_armor", "town_sign_goods",
+    "town_banner_vert", "town_banner_short", "town_banner_wide",
+    "interior_open_doorway", "interior_window_arch", "interior_window_shutters",
+    "interior_window_stained", "interior_painting_small", "interior_painting_wide",
+    "interior_curtain_panel", "interior_curtain_pair", "interior_stone_stairs",
+    "interior_corner_counter", "interior_bookcase_narrow", "interior_shop_bottles",
+    "interior_shop_swords", "interior_shop_armor", "interior_shop_herbs",
+    "interior_bed_side", "interior_piano", "interior_crystal_ball",
+    "interior_royal_chair", "interior_throne", "interior_ritual_circle",
+})
 
 # Muted families for the Interior wall faces (ART_BIBLE 10.3): one per face
 # strip, top to bottom, matching the two-row-per-face atlas layout.
@@ -147,6 +163,10 @@ def extract():
                 y0, y1 = band * 32, (band + 1) * 32
                 face = image.crop((0, y0, image.width, y1))
                 image.paste(ramp(face, family), (0, y0))
+        elif crop.sheet == INT or crop.name in MODERN_TOWN_KEEP:
+            # 10.3 pass 2: modern-sheet crops with no retro counterpart are
+            # harmonised into the muted hue-bucket families (keep silhouettes).
+            image = mute(image)
         yield crop, image
 
 

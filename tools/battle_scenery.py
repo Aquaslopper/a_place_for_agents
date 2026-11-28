@@ -4,6 +4,7 @@ from math import sin
 from random import Random
 from PIL import Image, ImageDraw
 from rtp_sheet import ROOT, save
+from snes import BAYER4
 
 # sky, haze, far ridges, ridge shadow, near hills, distant floor, near floor
 PALETTES = {
@@ -22,13 +23,26 @@ def rgb(s): return tuple(bytes.fromhex(s))
 def mix(a,b,t): return tuple(round(x+(y-x)*t) for x,y in zip(a,b))
 
 
+def gradient(d, W, y0, y1, c0, c1, steps=7, gamma=1.0):
+    """SNES-style sky/ground gradient: quantised bands joined by ordered
+    (Bayer 4x4) dither rows — never a smooth per-scanline blend."""
+    for y in range(y0, y1):
+        t = min(1.0, ((y - y0) / max(1, y1 - y0))) ** gamma
+        f = t * (steps - 1)
+        i = min(steps - 2, int(f)); frac = f - i
+        ca = mix(c0, c1, i / (steps - 1)); cb = mix(c0, c1, (i + 1) / (steps - 1))
+        b4 = BAYER4[y % 4]
+        for x in range(W):
+            d.point((x, y), fill=ca if b4[x % 4] / 16.0 >= frac else cb)
+
+
 def build_backdrops():
     W,H,bank=512,192,77
     for idx,(name,pal) in enumerate(PALETTES.items()):
         rng=Random(5821+idx)
         sky,haze,far,shade,near,ground,front=map(rgb,pal.split())
         im=Image.new('RGB',(W,H)); d=ImageDraw.Draw(im)
-        for y in range(bank): d.line((0,y,W,y),fill=mix(sky,haze,round((y/bank)**0.85*20)/20))
+        gradient(d, W, 0, bank, sky, haze, steps=7, gamma=0.85)
         sun=(337,28) if name!='dunes' else (155,26)
         d.ellipse((sun[0]-8,sun[1]-8,sun[0]+8,sun[1]+8),fill=mix(haze,(255,246,203),.75))
         for _ in range(11):
@@ -65,8 +79,9 @@ def build_backdrops():
         if name=='castle':prop('castle',249,bank,0.85,.14)
         elif name=='fen':prop('tower',112,bank-3,.55,.45)
         elif name=='meadow':prop('house_0',351,bank-2,.35,.48)
+        gradient(d, W, bank, H, ground, front, steps=6, gamma=1.28)
         for y in range(bank,H):
-            q=(y-bank)/(H-bank);d.line((0,y,W,y),fill=mix(ground,front,min(1,q*1.5)))
+            q=(y-bank)/(H-bank)
             for _ in range(20):
                 x=rng.randrange(W);length=rng.randrange(1,4+int(q*5))
                 d.line((x,y,x+length,y),fill=mix(mix(ground,front,q),near,rng.uniform(.03,.16)))

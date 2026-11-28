@@ -43,6 +43,57 @@ def sea_frame(phase, colors, deep=False):
     return im
 
 
+# Muted SNES families (10.2/10.3), indexed by hue bucket. Each is <= 6
+# colours, hue-shifted dark->light like every other ramp in the system.
+MUTE_FAMILIES = {
+    'wood':  '4a3a2c 6b5238 8a6c48 a8865c c0a074',
+    'stone': '4a5258 5c666c 707a7e 86908e 9ca49c b0b4a8',
+    'ivory': 'a09478 b4a88c c6baa0 d6cab0 e2d8c0',
+    'clay':  '5c3a3e 7c4a48 9c5c52 b87264 cf8a72',
+    'gold':  '6b5226 8a6c34 a88646 c0a05e d6b878',
+    'moss':  '3e4e42 50624e 64785c 7a8e70 90a484',
+    'slate': '3a4454 4a5668 5c6a7e 708094 8696a8',
+    'wine':  '54405a 6e5270 8a6488 a4789c bc90b0',
+}
+
+
+def mute(im):
+    """Harmonise a multi-hue crop into the muted families without flattening
+    its identity: bucket every colour by hue, ramp each bucket onto its own
+    family (a palette ramp per hue family, never a whole-sprite tint)."""
+    import colorsys
+    im = im.convert('RGBA')
+    px = list(im.getdata())
+    colors = {p for p in px if p[3]}
+    def bucket(p):
+        r, g, b = (c / 255 for c in p[:3])
+        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        if s < 0.14:
+            return 'ivory' if v > 0.66 else 'stone'
+        deg = h * 360
+        if deg < 16 or deg >= 338: return 'clay'
+        if deg < 42: return 'wood'
+        if deg < 70: return 'gold'
+        if deg < 162: return 'moss'
+        if deg < 262: return 'slate'
+        return 'wine'
+    groups = {}
+    for p in colors:
+        groups.setdefault(bucket(p), []).append(p)
+    lut = {}
+    for fam, members in groups.items():
+        members.sort(key=lambda p: (p[0]*3 + p[1]*6 + p[2], p))
+        cols = [tuple(bytes.fromhex(c)) + (255,) for c in MUTE_FAMILIES[fam].split()]
+        if len(members) == 1:
+            lut[members[0]] = cols[len(cols) // 2]
+            continue
+        for i, p in enumerate(members):
+            lut[p] = cols[round(i * (len(cols) - 1) / (len(members) - 1))]
+    out = im.copy()
+    out.putdata([lut.get(p, p) for p in px])
+    return out
+
+
 def make_landscape():
     tile, save = r.tile, r.save
     def fill(sheet, x, y, colors):

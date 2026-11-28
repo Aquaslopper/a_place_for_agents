@@ -22,7 +22,7 @@ import art_misc
 from rtp_sheet import (EXT, WLD, INT, DUN, KEY_CYAN, KEY_PINK, KEY_PINK2, load, keyed,
                        tile, rect, tcell, save, trim, canvas, centered, centered_mid, tint,
                        REXT, RWLD, RDUN, rtile, rcell)
-from landscape_art import make_landscape, ramp
+from landscape_art import make_landscape, ramp, mute
 
 # Muted hue-shifted families (ART_BIBLE 10.3): modern-sheet props that have
 # no retro-sheet counterpart keep their silhouette and are palette-ramped
@@ -39,13 +39,13 @@ def build_tiles():
     """Ground textures, used as seamless 16x16 fills by the world renderer."""
     make_landscape()
     # Keep masonry on walls, boards underfoot and woven fabric on the rug.
-    save(tile(INT, 15, 0), 'tiles', 'brick.png')
-    save(tile(INT, 16, 5), 'tiles', 'brick_dark.png')
+    save(mute(tile(INT, 15, 0)), 'tiles', 'brick.png')
+    save(mute(tile(INT, 16, 5)), 'tiles', 'brick_dark.png')
     save(tile(RDUN, 13, 6), 'tiles', 'dungeon_floor.png')
-    save(tile(INT, 13, 3), 'tiles', 'plank_floor.png')
+    save(mute(tile(INT, 13, 3)), 'tiles', 'plank_floor.png')
     save(ramp(tile(REXT,7,10),'99988c a8a69a b6b4a6 c5c0aa'), 'tiles', 'tile_floor.png')
     save(ramp(tile(REXT,12,11),'8b8d89 a1a49c b0b0a2 c1beac d0cab3'), 'tiles', 'stone_floor.png')
-    save(tile(INT, 16, 13), 'tiles', 'carpet.png')
+    save(mute(tile(INT, 16, 13)), 'tiles', 'carpet.png')
 
     # Small, transparent ground cover, not full shrubs or indoor furniture.
     for v in range(3):
@@ -106,7 +106,7 @@ def build_objects():
     save(centered(trim(rcell(REXT, 19, 9, 1, 1)), (16, 16)), 'sprites', 'bush_plain.png')
     # The dungeon crop was a pile of stones, not a mushroom.
     save(centered(art_objects.mushroom(), (16, 16)), 'sprites', 'mushroom.png')
-    save(trim(tcell(EXT, 21, 11, 1, 1, k)), 'sprites', 'potted_plant.png')
+    save(mute(trim(tcell(EXT, 21, 11, 1, 1, k))), 'sprites', 'potted_plant.png')
     save(ramp(trim(tcell(EXT, 22, 11, 1, 1, k)), CLAY_FAMILY), 'sprites', 'urn.png')
 
     # ---- street furniture ------------------------------------------------
@@ -116,8 +116,8 @@ def build_objects():
     save(ramp(trim(tcell(EXT, 27, 10, 2, 1, k)), WOOD_FAMILY), 'sprites', 'bench.png')
     save(trim(rcell(REXT, 18, 10, 1, 1)), 'sprites', 'torch.png')
     save(trim(rcell(REXT, 21, 12, 1, 1)), 'sprites', 'campfire.png')
-    save(trim(tcell(INT, 23, 10, 1, 1, k)), 'sprites', 'cauldron.png')        # real iron cauldron
-    save(trim(tcell(INT, 25, 8, 1, 1, k)), 'sprites', 'basin.png')            # real wooden bucket
+    save(mute(trim(tcell(INT, 23, 10, 1, 1, k))), 'sprites', 'cauldron.png')  # real iron cauldron
+    save(mute(trim(tcell(INT, 25, 8, 1, 1, k))), 'sprites', 'basin.png')      # real wooden bucket
     bed = canvas(28, 12)
     d = ImageDraw.Draw(bed)
     d.rectangle((1,6,26,11),fill='#986644',outline='#614c36'); d.line((2,7,25,7),fill='#d19d64')
@@ -150,16 +150,16 @@ def build_objects():
     crate = tile(INT,13,3); d=ImageDraw.Draw(crate)
     d.rectangle((0,0,15,15),outline='#513c30',width=2); d.line((2,2,13,13),fill='#ab8058',width=2)
     save(crate,'sprites','crate.png')
-    save(trim(tcell(INT, 26, 7, 1, 1, k)), 'sprites', 'table.png')            # round wooden table
-    save(trim(tcell(INT, 26, 10, 1, 1, k)), 'sprites', 'counter.png')         # real shop counter
-    save(trim(tcell(INT, 26, 6, 1, 1, k)), 'sprites', 'lantern.png')
-    save(trim(tcell(INT, 24, 6, 1, 1, k)), 'sprites', 'candle.png')
-    save(trim(tcell(INT, 27, 6, 1, 1, k)), 'sprites', 'plate.png')
-    save(trim(tcell(INT, 25, 6, 1, 1, k)), 'sprites', 'keg.png')
-    save(trim(tcell(INT, 24, 10, 1, 2, k)), 'sprites', 'bed.png')             # real cosy bed
-    save(trim(tcell(INT, 26, 8, 1, 1, k)), 'sprites', 'stool.png')
+    save(mute(trim(tcell(INT, 26, 7, 1, 1, k))), 'sprites', 'table.png')      # round wooden table
+    save(mute(trim(tcell(INT, 26, 10, 1, 1, k))), 'sprites', 'counter.png')   # real shop counter
+    save(mute(trim(tcell(INT, 26, 6, 1, 1, k))), 'sprites', 'lantern.png')
+    save(mute(trim(tcell(INT, 24, 6, 1, 1, k))), 'sprites', 'candle.png')
+    save(mute(trim(tcell(INT, 27, 6, 1, 1, k))), 'sprites', 'plate.png')
+    save(mute(trim(tcell(INT, 25, 6, 1, 1, k))), 'sprites', 'keg.png')
+    save(mute(trim(tcell(INT, 24, 10, 1, 2, k))), 'sprites', 'bed.png')       # real cosy bed
+    save(mute(trim(tcell(INT, 26, 8, 1, 1, k))), 'sprites', 'stool.png')
     save(trim(rcell(REXT, 20, 10, 1, 1)), 'sprites', 'noticeboard.png')
-    save(trim(tcell(INT, 18, 1, 3, 2, k)), 'sprites', 'shelf.png')            # real bookcase / shop shelf
+    save(mute(trim(tcell(INT, 18, 1, 3, 2, k))), 'sprites', 'shelf.png')      # real bookcase / shop shelf
     save(trim(rcell(REXT, 24, 7, 3, 1)), 'sprites', 'longtable.png')          # retro long wooden table
 
     # ---- chests: closed and open, from the object charset -----------------
