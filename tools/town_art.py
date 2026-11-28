@@ -12,14 +12,28 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw
 
-from rtp_sheet import EXT, INT, KEY_PINK, KEY_PINK2, ROOT, keyed, load, save
+from rtp_sheet import (EXT, INT, KEY_PINK, KEY_PINK2, ROOT, keyed, keyed_any,
+                       load, save, REXT)
+from landscape_art import ramp
 
 OBJECTS = "CharSet/Object1.png"
 SHEETS = {
     EXT: ((480, 256), KEY_PINK),
     INT: ((480, 256), KEY_PINK),
+    REXT: ((480, 256), None),   # multi-key retro sheet: keyed_any
     OBJECTS: ((288, 256), KEY_PINK2),
 }
+
+# Muted families for the Interior wall faces (ART_BIBLE 10.3): one per face
+# strip, top to bottom, matching the two-row-per-face atlas layout.
+WALL_FAMILIES = (
+    '4e4458 62566c 786a80 8e8094 a294a6',   # purple brick -> wine stone
+    '9c8f74 b0a488 c2b69a d2c6aa e0d4b8',   # plaster -> cream
+    '8b8d89 a1a49c b0b0a2 c1beac d0cab3',   # pale stone (stone_floor family)
+    '4a5258 5c666c 707a7e 86908e 9ca49c',   # dark stone -> slate
+    '77685c 8c7c6e a29282 b6a694 c8b8a6',   # rubble -> warm grey
+    '4c5c74 5e6e88 72829c 8696ae 9aaabe',   # blue brick -> blue slate
+)
 PREVIEW = ROOT.parent / "docs/town_assets/town_interior_crops.png"
 
 
@@ -48,28 +62,28 @@ def door(name, column):
 
 CROPS = (
     # Town materials and perimeter. These opaque strips keep the 16px grid.
-    cells("town_facade_atlas", EXT, 12, 0, 6, 6, folder="tiles"),
-    cells("town_masonry_atlas", EXT, 14, 9, 4, 3, folder="tiles"),
-    cells("town_battlement_atlas", EXT, 18, 0, 6, 5, folder="tiles"),
+    cells("town_facade_atlas", REXT, 12, 0, 6, 6, folder="tiles"),
+    cells("town_masonry_atlas", REXT, 14, 9, 4, 3, folder="tiles"),
+    cells("town_battlement_atlas", REXT, 18, 0, 6, 5, folder="tiles"),
     cells("town_round_turret", EXT, 24, 0, 2, 2),
     cells("town_broken_turret", EXT, 26, 0, 2, 2),
     cells("town_gate_double", EXT, 28, 8, 2, 2),
     cells("town_gable_red", EXT, 24, 11, 2, 2),
     cells("town_gable_blue", EXT, 26, 11, 2, 2),
-    cells("town_shingles_red_atlas", EXT, 14, 12, 2, 2, folder="tiles"),
-    cells("town_shingles_blue_atlas", EXT, 16, 14, 2, 2, folder="tiles"),
+    cells("town_shingles_red_atlas", REXT, 14, 12, 2, 2, folder="tiles"),
+    cells("town_shingles_blue_atlas", REXT, 16, 14, 2, 2, folder="tiles"),
     cells("town_sign_tankard", EXT, 22, 13),
     cells("town_sign_weapon", EXT, 22, 14),
     cells("town_sign_inn", EXT, 23, 14),
     cells("town_sign_armor", EXT, 22, 15),
     cells("town_sign_goods", EXT, 23, 15),
-    cells("town_market_flowers_orange", EXT, 22, 6),
-    cells("town_market_flowers_red", EXT, 23, 6),
+    cells("town_market_flowers_orange", REXT, 22, 6),
+    cells("town_market_flowers_red", REXT, 23, 6),
     cells("town_market_sacks", EXT, 28, 2),
     cells("town_banner_vert", EXT, 29, 5, 1, 2),
     cells("town_banner_short", EXT, 28, 6),
     cells("town_banner_wide", EXT, 28, 7, 2, 1),
-    cells("town_wall_ivy", EXT, 25, 8, 1, 3),
+    cells("town_wall_ivy", REXT, 25, 8, 1, 3),
 
     # Interior walls and doorway. Six two-row face strips; not cap autotiles.
     cells("interior_wall_face_atlas", INT, 14, 0, 4, 12, folder="tiles"),
@@ -110,7 +124,10 @@ def extract():
         image = load(source)
         if image.size != size:
             raise ValueError(f"Unexpected source sheet format: {source}")
-        keyed(image, key)
+        if key is None:
+            keyed_any(image)
+        else:
+            keyed(image, key)
         if image.getextrema()[3][0] != 0:
             raise ValueError(f"Transparency key not found: {source}")
         sheets[source] = image
@@ -124,6 +141,12 @@ def extract():
             image.paste((0, 0, 0, 0), crop.clear)
         if not image.getbbox():
             raise ValueError(f"Empty crop: {crop.name}")
+        if crop.name == "interior_wall_face_atlas":
+            # Six faces, two 16px rows each: mute each into its own family.
+            for band, family in enumerate(WALL_FAMILIES):
+                y0, y1 = band * 32, (band + 1) * 32
+                face = image.crop((0, y0, image.width, y1))
+                image.paste(ramp(face, family), (0, y0))
         yield crop, image
 
 
@@ -134,7 +157,8 @@ def build_town_art():
 
 def contact_sheet(crops):
     cols, cell_w, cell_h = 5, 218, 132
-    groups = (("Town exterior", EXT), ("Interior rooms", INT), ("Door poses (open to closed)", OBJECTS))
+    groups = (("Town exterior (SNES-retro materials)", REXT), ("Town exterior", EXT),
+              ("Interior rooms", INT), ("Door poses (open to closed)", OBJECTS))
     pad, header = 18, 30
     height = pad * 2 + header + sum(
         header + ((sum(c.sheet == source for c, _ in crops) + cols - 1) // cols) * cell_h

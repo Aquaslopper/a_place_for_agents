@@ -20,8 +20,16 @@ from PIL import Image, ImageDraw
 import art_objects
 import art_misc
 from rtp_sheet import (EXT, WLD, INT, DUN, KEY_CYAN, KEY_PINK, KEY_PINK2, load, keyed,
-                       tile, rect, tcell, save, trim, canvas, centered, centered_mid, tint)
+                       tile, rect, tcell, save, trim, canvas, centered, centered_mid, tint,
+                       REXT, RWLD, RDUN, rtile, rcell)
 from landscape_art import make_landscape, ramp
+
+# Muted hue-shifted families (ART_BIBLE 10.3): modern-sheet props that have
+# no retro-sheet counterpart keep their silhouette and are palette-ramped
+# into the walking-scale building families so they sit beside the retro art.
+WOOD_FAMILY = '4a3a2c 6b5238 8a6c48 a8865c c0a074'
+STONE_FAMILY = '4a5258 5c666c 707a7e 86908e 9ca49c b0b4a8'
+CLAY_FAMILY = '5c3a3e 7c4a48 9c5c52 b87264 cf8a72'
 from village_art import build_buildings
 from town_art import build_town_art
 from battle_scenery import build_backdrops
@@ -33,10 +41,10 @@ def build_tiles():
     # Keep masonry on walls, boards underfoot and woven fabric on the rug.
     save(tile(INT, 15, 0), 'tiles', 'brick.png')
     save(tile(INT, 16, 5), 'tiles', 'brick_dark.png')
-    save(tile(DUN, 13, 6), 'tiles', 'dungeon_floor.png')
+    save(tile(RDUN, 13, 6), 'tiles', 'dungeon_floor.png')
     save(tile(INT, 13, 3), 'tiles', 'plank_floor.png')
-    save(ramp(tile(EXT,7,10),'99988c a8a69a b6b4a6 c5c0aa'), 'tiles', 'tile_floor.png')
-    save(ramp(tile(EXT,12,11),'8b8d89 a1a49c b0b0a2 c1beac d0cab3'), 'tiles', 'stone_floor.png')
+    save(ramp(tile(REXT,7,10),'99988c a8a69a b6b4a6 c5c0aa'), 'tiles', 'tile_floor.png')
+    save(ramp(tile(REXT,12,11),'8b8d89 a1a49c b0b0a2 c1beac d0cab3'), 'tiles', 'stone_floor.png')
     save(tile(INT, 16, 13), 'tiles', 'carpet.png')
 
     # Small, transparent ground cover, not full shrubs or indoor furniture.
@@ -47,9 +55,9 @@ def build_tiles():
             d.line((x, y, x - 1, y - 3), fill=(49, 103, 43, 255))
             d.line((x, y, x + 1, y - 4), fill=(135, 181, 71, 255))
         save(img, 'tiles', f'tuft_{v}.png')
-    save(trim(tcell(EXT, 18, 11, 1, 1, KEY_PINK)), 'tiles', 'flower_0.png')
+    save(trim(rcell(REXT, 18, 11, 1, 1)), 'tiles', 'flower_0.png')
     # Reuse scattered blossoms, not the large flowering bush, as a ground overlay.
-    save(trim(tcell(EXT, 18, 11, 1, 1, KEY_PINK)).transpose(Image.Transpose.FLIP_LEFT_RIGHT),
+    save(trim(rcell(REXT, 18, 11, 1, 1)).transpose(Image.Transpose.FLIP_LEFT_RIGHT),
          'tiles', 'flower_1.png')
     pebble = canvas(16, 16)
     d = ImageDraw.Draw(pebble)
@@ -57,8 +65,8 @@ def build_tiles():
     d.ellipse((10, 12, 12, 13), fill=(155, 157, 139, 255))
     save(pebble, 'tiles', 'pebble.png')
 
-# A separate, additive cave palette. These are native-resolution crops from
-# Jason Perry's CC0 Dungeon chipset, not replacements for existing tiles.
+# A separate, additive cave palette, cropped at native resolution from the
+# SNES-retro Dungeon chipset (same cells as Dungeon.png, 16-bit texture).
 def build_cave_art():
     for name, x, y in [
         ('cave_floor_0', 0, 12), ('cave_floor_1', 1, 12),
@@ -66,7 +74,7 @@ def build_cave_art():
         ('cave_rock_0', 21, 0), ('cave_rock_1', 22, 0),
         ('cave_rock_2', 23, 1), ('cave_rock_3', 12, 15),
     ]:
-        save(tile(DUN, x, y), 'tiles', name + '.png')
+        save(tile(RDUN, x, y), 'tiles', name + '.png')
     # Complete formations, not individual fragments of neighbouring sprites.
     for name, x, y, w, h in [
         ('cave_stalagmite', 21, 8, 1, 2),
@@ -76,56 +84,60 @@ def build_cave_art():
         ('cave_rock_pile', 18, 10, 2, 2),
         ('cave_boulder', 22, 10, 2, 2),
     ]:
-        save(trim(tcell(DUN, x, y, w, h, KEY_PINK)), 'sprites', name + '.png')
+        save(trim(rcell(RDUN, x, y, w, h)), 'sprites', name + '.png')
 
 # ================================================================= 2. objects
 def build_objects():
     """Trees, rocks, bushes, fences, street furniture and landmarks."""
     k = KEY_PINK
 
-    save(trim(tcell(EXT, 21, 8, 1, 2, k)), 'sprites', 'dead_tree.png')
+    save(ramp(trim(tcell(EXT, 21, 8, 1, 2, k)), WOOD_FAMILY), 'sprites', 'dead_tree.png')
 
     # ---- rocks -----------------------------------------------------------
-    lump = trim(tcell(DUN, 20, 9, 1, 1, k))             # complete rounded stone
+    lump = trim(rcell(RDUN, 20, 9, 1, 1))               # SNES-retro rounded stone
     save(centered(lump, (20, 18)), 'sprites', 'rock_0.png')
     save(centered(lump.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (20, 18)),
          'sprites', 'rock_1.png')
-    save(centered(trim(tcell(WLD, 27, 1, 1, 1, k)), (22, 18)), 'sprites', 'rock_2.png')
+    save(centered(ramp(trim(tcell(WLD, 27, 1, 1, 1, k)), STONE_FAMILY), (22, 18)),
+         'sprites', 'rock_2.png')
     # ---- plants ----------------------------------------------------------
-    save(trim(tcell(EXT, 19, 8, 1, 1, k)), 'sprites', 'stump.png')             # real tree stump
-    save(centered(trim(tcell(EXT, 18, 9, 1, 1, k)), (18, 18)), 'sprites', 'bush.png')
-    save(centered(trim(tcell(EXT, 19, 9, 1, 1, k)), (16, 16)), 'sprites', 'bush_plain.png')
+    save(ramp(trim(tcell(EXT, 19, 8, 1, 1, k)), WOOD_FAMILY), 'sprites', 'stump.png')  # real tree stump
+    save(centered(trim(rcell(REXT, 18, 9, 1, 1)), (18, 18)), 'sprites', 'bush.png')
+    save(centered(trim(rcell(REXT, 19, 9, 1, 1)), (16, 16)), 'sprites', 'bush_plain.png')
     # The dungeon crop was a pile of stones, not a mushroom.
     save(centered(art_objects.mushroom(), (16, 16)), 'sprites', 'mushroom.png')
     save(trim(tcell(EXT, 21, 11, 1, 1, k)), 'sprites', 'potted_plant.png')
-    save(trim(tcell(EXT, 22, 11, 1, 1, k)), 'sprites', 'urn.png')
+    save(ramp(trim(tcell(EXT, 22, 11, 1, 1, k)), CLAY_FAMILY), 'sprites', 'urn.png')
 
     # ---- street furniture ------------------------------------------------
-    save(trim(tcell(EXT, 24, 0, 2, 2, k)), 'sprites', 'well.png')
-    save(centered(trim(tcell(EXT, 20, 14, 1, 1, k)), (20, 18)), 'sprites', 'sign.png')
-    save(trim(tcell(EXT, 27, 10, 2, 1, k)), 'sprites', 'bench.png')
-    save(trim(tcell(EXT, 18, 10, 1, 1, k)), 'sprites', 'torch.png')
-    save(trim(tcell(EXT, 21, 12, 1, 1, k)), 'sprites', 'campfire.png')
+    save(ramp(trim(tcell(EXT, 24, 0, 2, 2, k)), STONE_FAMILY), 'sprites', 'well.png')
+    save(centered(ramp(trim(tcell(EXT, 20, 14, 1, 1, k)), WOOD_FAMILY), (20, 18)),
+         'sprites', 'sign.png')
+    save(ramp(trim(tcell(EXT, 27, 10, 2, 1, k)), WOOD_FAMILY), 'sprites', 'bench.png')
+    save(trim(rcell(REXT, 18, 10, 1, 1)), 'sprites', 'torch.png')
+    save(trim(rcell(REXT, 21, 12, 1, 1)), 'sprites', 'campfire.png')
     save(trim(tcell(INT, 23, 10, 1, 1, k)), 'sprites', 'cauldron.png')        # real iron cauldron
     save(trim(tcell(INT, 25, 8, 1, 1, k)), 'sprites', 'basin.png')            # real wooden bucket
     bed = canvas(28, 12)
     d = ImageDraw.Draw(bed)
     d.rectangle((1,6,26,11),fill='#986644',outline='#614c36'); d.line((2,7,25,7),fill='#d19d64')
-    bush = trim(tcell(EXT,18,9,1,1,k)).resize((13,8),Image.Resampling.NEAREST)
+    bush = trim(rcell(REXT,18,9,1,1)).resize((13,8),Image.Resampling.NEAREST)
     bed.alpha_composite(bush,(1,0)); bed.alpha_composite(bush,(14,0))
     save(bed, 'sprites', 'flowerbed.png')
-    save(trim(tcell(EXT, 20, 11, 1, 1, k)), 'sprites', 'mailbox.png')
+    save(ramp(trim(tcell(EXT, 20, 11, 1, 1, k)), WOOD_FAMILY), 'sprites', 'mailbox.png')
 
-    # ---- fences ----------------------------------------------------------
-    save(trim(rect(EXT, 19 * 16, 12 * 16, 16, 16, k)), 'sprites', 'fence.png')
-    save(trim(rect(EXT, 18 * 16, 12 * 16, 16, 16, k)), 'sprites', 'fence_post.png')
-    save(trim(tcell(EXT, 18, 12, 3, 1, k)), 'sprites', 'fence_gate.png')
-    save(trim(tcell(EXT,22,10,1,1,k)), 'sprites', 'ladder.png')
+    # ---- fences (SNES-retro picket cells) --------------------------------
+    save(trim(rcell(REXT, 19, 12, 1, 1)), 'sprites', 'fence.png')
+    save(trim(rcell(REXT, 18, 12, 1, 1)), 'sprites', 'fence_post.png')
+    save(trim(rcell(REXT, 18, 12, 3, 1)), 'sprites', 'fence_gate.png')
+    save(ramp(trim(tcell(EXT,22,10,1,1,k)), WOOD_FAMILY), 'sprites', 'ladder.png')
 
     # ---- landmarks -------------------------------------------------------
-    save(centered(trim(tcell(EXT, 26, 8, 1, 2, k)), (24, 40)), 'sprites', 'statue.png')
-    save(centered(trim(tcell(EXT, 27, 8, 1, 2, k)), (22, 40)), 'sprites', 'pillar.png')
-    save(trim(tcell(EXT, 24, 13, 3, 3, k)), 'sprites', 'monument.png')
+    save(centered(ramp(trim(tcell(EXT, 26, 8, 1, 2, k)), STONE_FAMILY), (24, 40)),
+         'sprites', 'statue.png')
+    save(centered(ramp(trim(tcell(EXT, 27, 8, 1, 2, k)), STONE_FAMILY), (22, 40)),
+         'sprites', 'pillar.png')
+    save(ramp(trim(tcell(EXT, 24, 13, 3, 3, k)), STONE_FAMILY), 'sprites', 'monument.png')
     save(trim(tcell(EXT, 27, 13, 3, 3, k)), 'sprites', 'pavilion.png')  # canvas tent, for camps
     arch=canvas(36,35); pier=trim(tcell(EXT,27,8,1,2,k)); arch.alpha_composite(pier,(0,4))
     arch.alpha_composite(pier.crop((0,6,pier.width,pier.height)),(25,10))
@@ -134,7 +146,7 @@ def build_objects():
     save(arch,'sprites','ruin_arch.png')
 
     # ---- interior dressing (shops, inns, houses) -------------------------
-    save(trim(tcell(EXT, 27, 5, 1, 1, k)), 'sprites', 'barrel.png')
+    save(trim(rcell(REXT, 27, 5, 1, 1)), 'sprites', 'barrel.png')
     crate = tile(INT,13,3); d=ImageDraw.Draw(crate)
     d.rectangle((0,0,15,15),outline='#513c30',width=2); d.line((2,2,13,13),fill='#ab8058',width=2)
     save(crate,'sprites','crate.png')
@@ -146,9 +158,9 @@ def build_objects():
     save(trim(tcell(INT, 25, 6, 1, 1, k)), 'sprites', 'keg.png')
     save(trim(tcell(INT, 24, 10, 1, 2, k)), 'sprites', 'bed.png')             # real cosy bed
     save(trim(tcell(INT, 26, 8, 1, 1, k)), 'sprites', 'stool.png')
-    save(trim(tcell(EXT, 20, 10, 1, 1, k)), 'sprites', 'noticeboard.png')
+    save(trim(rcell(REXT, 20, 10, 1, 1)), 'sprites', 'noticeboard.png')
     save(trim(tcell(INT, 18, 1, 3, 2, k)), 'sprites', 'shelf.png')            # real bookcase / shop shelf
-    save(trim(tcell(EXT, 24, 7, 3, 1, k)), 'sprites', 'longtable.png')        # real long wooden table
+    save(trim(rcell(REXT, 24, 7, 3, 1)), 'sprites', 'longtable.png')          # retro long wooden table
 
     # ---- chests: closed and open, from the object charset -----------------
     obj = 'CharSet/Object1.png'

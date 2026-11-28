@@ -5,7 +5,9 @@ masks (NW=1, NE=2, SW=4, SE=8). No commercial game pixels are used here.
 """
 from PIL import Image, ImageDraw, ImageChops
 from math import sin, pi
+import random
 import rtp_sheet as r
+from snes import BAYER4
 
 
 def ramp(im, colors, foliage=False):
@@ -21,36 +23,58 @@ def ramp(im, colors, foliage=False):
     out = im.copy(); out.putdata([lut.get(p, p) for p in im.getdata()]); return out
 
 
+def sea_frame(phase, colors, deep=False):
+    """A 16x16 SNES sea tile: dithered two-band body + crest dashes that
+    march with `phase`, the way 16-bit water cycles its wave light."""
+    cols = [tuple(bytes.fromhex(c)) + (255,) for c in colors.split()]
+    im = Image.new('RGBA', (16, 16))
+    px = im.load()
+    for y in range(16):
+        for x in range(16):
+            thr = BAYER4[y % 4][(x + phase * 5) % 4] / 16.0
+            px[x, y] = cols[1 if thr < 0.55 else 2]
+    d = ImageDraw.Draw(im)
+    for band in (0, 1):
+        y = (phase * 5 + band * 8) % 16
+        step = 1 if deep else 0
+        for k in range(2):
+            x = (phase * 3 + band * 7 + k * 9) % 16 - 2
+            d.line((x, y + k, x + 4 - step, y + k), fill=cols[4 if band == 0 else 3])
+    return im
+
+
 def make_landscape():
     tile, save = r.tile, r.save
     def fill(sheet, x, y, colors):
         return ramp(tile(sheet, x, y), colors)
-    # Interior cells of the RM2k terrain blocks, not isolated preview/edge tiles.
-    grass = tile(r.EXT, 1, 10); earth = tile(r.WLD, 7, 2); sand = tile(r.EXT, 4, 14)
+    # Interior cells of the RM2k terrain blocks, not isolated preview/edge
+    # tiles. Sources are the SNES-retro chipsets (ART_BIBLE 10.3): same cells
+    # as the modern sheets, but with the 16-bit dithered texture.
+    grass = tile(r.REXT, 1, 10); earth = tile(r.RWLD, 7, 2); sand = tile(r.REXT, 4, 14)
     meadow = ramp(grass, '70a264 77a766 7eab68')
-    forest = ramp(tile(r.EXT, 4, 10), '477657 4d7c59 54825c 5a865e 609063')
+    forest = ramp(tile(r.REXT, 4, 10), '477657 4d7c59 54825c 5a865e 609063')
     amber = ramp(grass, '8b9055 959858 9c9e5c')
-    heath = ramp(tile(r.WLD, 4, 10), '6e816a 7e8e75 8b987c 95a17f a8ae89')
-    mire = ramp(tile(r.EXT, 4, 10), '4c7570 537c72 598075 628775')
+    heath = ramp(tile(r.RWLD, 4, 10), '6e816a 7e8e75 8b987c 95a17f a8ae89')
+    mire = ramp(tile(r.REXT, 4, 10), '4c7570 537c72 598075 628775')
     dune = ramp(earth, 'd5b27e dab884 dfbe88')
     ripples = ramp(sand, 'c49b68 cda572 d4ac77 dbb47e')
     leaves = ramp(earth, 'b89956 bda35c c9ae62')
     mesa = ramp(earth, 'b78d68 c09973 caa47b')
     beach = ramp(earth, 'd1b886 dfc89b e9d5ac f0deb5')
     dirt = ramp(earth, 'ba9470 c49e78 cca881')
-    rock = fill(r.DUN, 16, 2, '666f70 747f79 889081 9aa088 a8aa92')
-    snow = fill(r.DUN, 7, 2, 'c8dce5 dce9ec e6efee')
+    rock = fill(r.RDUN, 16, 2, '666f70 747f79 889081 9aa088 a8aa92')
+    snow = fill(r.RDUN, 7, 2, 'c8dce5 dce9ec e6efee')
     frostpath = ramp(earth, 'a3b8bf b2c6ca bbcfd2')
     snowcrag = ramp(grass, 'b1c6d1 bbd1d9 c5dbe1')
-    ice = fill(r.DUN, 10, 2, '91bfce 9ac6d4 a4cfd9 adcfdc')
-    cobble = fill(r.EXT, 10, 6, '686e6b 7b827c 8d9285 9b9d8d b1ad98 bfbba2')
-    court = fill(r.EXT, 7, 10, '576277 667485 7e8b98 949eaa a6acb1')
+    ice = fill(r.RDUN, 10, 2, '91bfce 9ac6d4 a4cfd9 adcfdc')
+    cobble = fill(r.REXT, 10, 6, '686e6b 7b827c 8d9285 9b9d8d b1ad98 bfbba2')
+    court = fill(r.REXT, 7, 10, '576277 667485 7e8b98 949eaa a6acb1')
     # Furrows run continuously across plots. Plant tops are separate from soil.
     soil = ramp(earth, '75553e 866047 926c4e a67c56'); d = ImageDraw.Draw(soil)
     for y in (2, 10):
         d.line((0,y,15,y),fill='#664e40'); d.line((0,y+2,15,y+2),fill='#b18c61')
-    water = [fill(r.EXT, i, 5, '377e91 3c8497 438a9a 4d909e 5698a5') for i in range(3)]
-    deep = [fill(r.EXT, i, 5, '325e7d 356580 396c85 3e728b 447a90') for i in range(3)]
+    water = [sea_frame(i, '377e91 3c8497 438a9a 4d909e 5698a5') for i in range(3)]
+    deep = [sea_frame(i, '325e7d 356580 396c85 3e728b 447a90', deep=True) for i in range(3)]
     # Also export single swatches for the art pipeline; the field uses one atlas.
     for name, im in {'grass_0':meadow,'grass_1':ImageChops.offset(meadow,7,3),
                      'grass_2':forest,'grass_3':heath,'grass_dark':forest,'dirt':dirt,'sand':dune,
@@ -86,9 +110,9 @@ def make_landscape():
     # Boundaries get their own relief pass. Use a vertical offset of the same
     # contour for south-facing cut banks and escarpments (not a tiled wall).
     relief = r.canvas(256, 80)
-    crag = fill(r.WLD, 22, 6, '4e5158 5b5961 726a67 897d71 9d8f7c b2a18b')
-    sandstone = fill(r.WLD,22,6,'815f55 926a58 a67a5e b48b6a c49b76 d6ad82')
-    blue_stone = fill(r.WLD,22,6,'506479 637a8a 8297a0 9cabb1 b4c6cd cad6db')
+    crag = fill(r.RWLD, 22, 6, '4e5158 5b5961 726a67 897d71 9d8f7c b2a18b')
+    sandstone = fill(r.RWLD,22,6,'815f55 926a58 a67a5e b48b6a c49b76 d6ad82')
+    blue_stone = fill(r.RWLD,22,6,'506479 637a8a 8297a0 9cabb1 b4c6cd cad6db')
     # Extend masks by clamping to border corner weights outside this cell.
     def at(k,x,y):
         return inside(k,max(-0.5,min(x,15.5)),max(-0.5,min(y,15.5)))
@@ -120,7 +144,7 @@ def make_landscape():
                             break
     save(relief,'tiles','relief.png')
 
-    base = r.trim(r.tcell(r.EXT,22,8,2,2,r.KEY_PINK))
+    base = r.trim(r.rcell(r.REXT,22,8,2,2))   # SNES-retro canopy + trunk
     def oak(colors,old=False):
         tree = ramp(base,colors,True)
         if not old: return tree
@@ -143,14 +167,14 @@ def make_landscape():
         y=16+rng.randrange(4); end=y+rng.randrange(7,15)
         dr.line([(x,y),(x-1,y+5),(x-1,end)],fill='#486d58');dr.line((x,y+2,x,end-3),fill='#81a478')
     save(willow,'sprites','willow.png')
-    conifer = r.trim(r.tcell(r.EXT,20,8,1,2,r.KEY_PINK))
+    conifer = r.trim(r.rcell(r.REXT,20,8,1,2))  # SNES-retro conifer
     for i,pal in enumerate(('315443 416d4f 538756 72a25e 93b672',
                              '2d514b 3a6b5b 4a7c65 5d8b71 77a384',
                              '354d47 446251 577a5b 739466 93aa79')):
         save(ramp(conifer,pal,True),'sprites',f'pine_{i}.png')
     save(ramp(conifer,'496376 658294 97b4bf c4dbe0 edf4ec',True),'sprites','tree_snow.png')
-    save(r.trim(r.tcell(r.DUN,22,10,2,2,r.KEY_PINK)),'sprites','boulder.png')
-    save(r.trim(r.tcell(r.DUN,19,9,1,1,r.KEY_PINK)),'sprites','crystal.png')
+    save(r.trim(r.rcell(r.RDUN,22,10,2,2)),'sprites','boulder.png')
+    save(r.trim(r.rcell(r.RDUN,19,9,1,1)),'sprites','crystal.png')
     # Region-specific low plants, all at walking scale; never indoor furniture.
     reeds = r.canvas(17,19); d=ImageDraw.Draw(reeds)
     for x,y,h,lean in [(4,16,9,-2),(9,17,15,1),(12,15,10,2),(6,17,13,-1),(10,16,7,-3)]:
