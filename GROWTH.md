@@ -1,5 +1,44 @@
 # Growth chronicle
 
+## 2026-11-28 — continents that cross the line
+
+The atlas had a tell: every cell was one self-contained island with a square
+moat of open ocean around it, so a 5×5 look at the world read as twenty-five
+biome islands on a grid. The land was generated per cell from local blob
+coordinates with a `RIM` of forced water inside every edge.
+
+Land is now a **field of world position**. Seeded landmasses live on a 300-tile
+lattice; each cell collects the landmasses whose reach (190 tiles past their
+seed) overlaps it and evaluates the same blob field, so a continent that runs
+over a border is the same land on both sides and neighbouring cells' islands
+merge into one bigger island. The edge-water clamp is gone: `RIM` no longer
+exists, and a cell's coast can sit anywhere, including outside the cell.
+
+Three more things had to become world-space for that to hold together:
+
+- **Climate** was a property of a cell (`ry < 0` snow, `ry > 0` sand), which put a
+  ruler-straight line between green and tan down the middle of a shared
+  continent. It is now a world field: latitude bands from cold north to hot
+  south, warped by low-frequency noise and dithered at the threshold, read per
+  tile by `climateAtWorld()`. The cell's own climate is the field at its heart.
+- **Mountain ranges** were drawn from `x = -128` to `x = 128`, i.e. to the cell
+  border and no further, so a ridge stopped dead in the middle of a continent.
+  Spines are now generated once per 420-tile lattice point and stamped by every
+  cell they touch.
+- **Bays** are only cut when the whole bite fits inside the cell (a half-bay is a
+  square notch), and the beach rim now runs over the outermost row, which used
+  to leave a one-tile seam along every border.
+
+The start cell keeps its authored heartland — Elmswick's vale, the northern
+wall, the southern sea the Tidewell isles sit in — but that heart is bigger, so
+the opening island does not look like a pond next to the neighbours.
+
+Verified: `tools/verify_lufia_world.cpp` 8/8 (54 continents across 6 seeds, 420
+settlements and 358 dungeons all reachable on foot, story anchors on 6 seeds,
+Tidewell isles still boat-only, roads/bridges/passes), `tools/verify_world.py`
+5/5, `tools/link_check.py`, `tools/validate_assets.py`. Regenerated
+`docs/screenshots/world_atlas.png` (5×5 cells) and the field previews.
+
 ## 2026-11-28 — the world, actually
 
 The overworld was an infinite noise field with a lattice of guaranteed places

@@ -21,9 +21,11 @@ letter:
 ### Implementation update — 2026-11-28 (later) — supersedes the note below
 
 The world is now playable and is **one model**. `src/overworld_gen.cpp` is the
-authority for terrain and places: procedural 320×320-tile continents (seeded
-land lobes and bays, tapered ranges, rivers, lakes, copses, story anchors placed
-by rule plus seeded sites), A*-routed
+authority for terrain and places: procedural continents (seeded landmasses on a
+300-tile **world** lattice, so neighbouring cells' land merges instead of each
+cell being an island; bays, world-lattice ridges, rivers, lakes, copses) over a
+world climate field, with story anchors placed by rule plus seeded sites,
+A*-routed
 roads with bridges and passes, deterministic from `(seed, region)`, with an LRU
 region cache and no outer boundary. The runtime field renderer, collision,
 encounters, music, the travelling map and the Survey page all read

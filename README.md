@@ -23,13 +23,17 @@ and the [soundtrack cue sheet](assets/audio/SCORE.txt).
 
 ### The world
 
-The overworld is a miniature SNES world, not an endless noise field. Every
-320×320-tile continent is procedurally generated: seeded land lobes with bays
-and capes, tapered wavy mountain ranges, meandering rivers, lakes, forests in
-copses, a beach fringe, story sites placed by rules, generated
-hamlets/dungeons, and A*-routed roads that cross water as bridges and ranges as
-passes. Each continent is deterministic from `(worldSeed, region)`; the atlas
-never runs out of cells.
+The overworld is a miniature SNES world, not an endless noise field. Land is a
+field of **world** position: seeded landmasses sit on a 300-tile lattice and
+every cell evaluates the same ones, so a continent runs on across a cell border
+and two neighbouring cells share one bigger island instead of each ending in a
+ring of sea. Bays, capes, tapered mountain ranges, meandering rivers, lakes,
+forest copses and a beach fringe dress that land; the weather comes from a
+world climate field (cold north, hot south, warped and dithered) so a coastline
+does not change biome at a straight line. Story sites are placed by rules inside
+the start cell, generic hamlets and dungeons by rules around it, and A*-routed
+roads cross water as bridges and ranges as passes. The whole world is
+deterministic from `(worldSeed, region)`; the atlas never runs out of cells.
 
 | | |
 |---|---|
@@ -44,10 +48,11 @@ position come from the seed.*
 
 ![Five by five atlas cells around the start](docs/screenshots/world_atlas.png)
 
-*The same seed, five by five cells: 1600×1600 tiles, every cell with its own
-continent, roads and sites, and another ring beyond this frame. The white box
-is the start cell. The atlas has no outer boundary: sail east and the next
-country generates, then the next.*
+*The same seed, five by five cells: 1600×1600 tiles and another ring beyond this
+frame. The white box is the start cell. Continents, ridges and climate zones all
+ignore the cell borders — the seams in this picture are the cell grid drawn for
+the atlas, not cuts in the land — and the atlas has no outer boundary: sail east
+and the next country generates, then the next.*
 
 These previews are rendered from the same tile atlas and the same C++ world
 data the game uses (`tools/preview_world.py`), not from a separate mock-up.

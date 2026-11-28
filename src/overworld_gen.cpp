@@ -48,7 +48,6 @@ namespace {
 // ---------------------------------------------------------------- constants
 constexpr int REGION = 320;             // tiles on a side of one continent cell
 constexpr int HALF = REGION / 2;
-constexpr int RIM = 20;                 // open ocean kept inside every region edge
 constexpr int N = REGION * REGION;
 
 // A continent is ~200 tiles across: a dozen screens of coast and country.
@@ -109,6 +108,7 @@ struct Province {
 
 struct Region {
     int rx = 0, ry = 0;
+    std::uint32_t seed = 0;              // world seed (for world-space fields)
     std::string name;
     std::vector<std::uint8_t> kind;      // OwTileKind
     std::vector<std::uint8_t> road;      // 1 where a road runs
@@ -152,15 +152,37 @@ float fbm(float x, float y, std::uint32_t seed, int octaves) {
 }
 
 // ---------------------------------------------------------------- climate
+// Climate is a field of world position, not a property of a cell: broad
+// latitude bands that run from cold in the north to hot in the south, with the
+// isotherms warped by noise. Two neighbouring cells therefore agree about the
+// weather on the land they share, and a landmass that spans a border fades from
+// one biome into the next instead of stopping at a square seam.
+constexpr float CLIMATE_SPAN = 950.0f;    // tiles from temperate to snow/sand
+
+float climateWarp(std::uint32_t seed, float wx, float wy) {
+    return (fbm(wx * 0.0032f + 9.0f, wy * 0.0032f - 4.0f, seed ^ 0xC11A7Eu, 2) - 0.5f) * 380.0f
+         + std::sin(wx * 0.0041f + 1.7f) * 52.0f;
+}
+
+OwClimate climateAtWorld(std::uint32_t seed, float wx, float wy) {
+    // A little high-frequency jitter: a threshold crossed by a smooth field
+    // draws a ruled line, and a ruled line between grass and sand in the middle
+    // of a continent looks as tiled as the water did.
+    float jitter = (fbm(wx * 0.085f + 3.0f, wy * 0.085f - 8.0f, seed ^ 0x5EEDu, 2) - 0.5f) * 0.075f;
+    float t = 0.5f + (wy + climateWarp(seed, wx, wy)) / CLIMATE_SPAN + jitter;
+    if (t < 0.5f - 0.19f) return OWC_SNOW;
+    if (t > 0.5f + 0.19f) return OWC_SAND;
+    return OWC_TEMPERATE;
+}
+
 OwClimate continentClimate(std::uint32_t seed, int rx, int ry) {
-    // The world runs cold in the north and hot in the south, like a world map;
-    // the starting continent is temperate. A little hash variation keeps the
-    // bands from feeling like wallpaper stripes.
+    // The cell's own weather, read from the same field at its heart. A little
+    // hash keeps a cell that straddles a border from being decided by rounding.
     std::uint32_t h = owHash2(rx * 7 + 13, ry * 11 - 5, seed ^ 0xC11A7Eu);
-    if (ry < 0) return (h % 9u == 0u) ? OWC_TEMPERATE : OWC_SNOW;
-    if (ry > 0) return (h % 8u == 0u) ? OWC_TEMPERATE : OWC_SAND;
-    if (rx == 0 && ry == 0) return OWC_TEMPERATE;
-    return (h % 3u == 0u) ? OWC_SAND : OWC_TEMPERATE;
+    float jx = static_cast<float>(h % 60u) - 30.0f;
+    float jy = static_cast<float>((h >> 8) % 60u) - 30.0f;
+    return climateAtWorld(seed, static_cast<float>(rx * REGION) + 160.0f + jx,
+                          static_cast<float>(ry * REGION) + 160.0f + jy);
 }
 
 OwTileKind plainForClimate(OwClimate c) {
@@ -185,7 +207,55 @@ void carveBay(Region& R, float cx, float cy, float rx, float ry);
 
 
 
-void buildLand(Region& R, Rng& rng, bool start) {
+// Continents are laid out on a WORLD lattice, not inside a cell. Each lattice
+// point seeds one landmass, and every cell evaluates the same landmasses, so a
+// continent that runs over a cell border is the same land on both sides. Two
+// neighbouring cells therefore share one bigger island instead of each being a
+// lone blob in a private square of sea.
+constexpr float LATTICE = 300.0f;       // tiles between landmass seeds
+constexpr float BLOB_MARGIN = 190.0f;   // how far a blob may reach past its seed
+
+void latticeBlobs(std::uint32_t seed, float wx0, float wy0, float wx1, float wy1,
+                  std::vector<Blob>& out) {
+    int i0 = static_cast<int>(std::floor((wx0 - BLOB_MARGIN) / LATTICE));
+    int i1 = static_cast<int>(std::floor((wx1 + BLOB_MARGIN) / LATTICE));
+    int j0 = static_cast<int>(std::floor((wy0 - BLOB_MARGIN) / LATTICE));
+    int j1 = static_cast<int>(std::floor((wy1 + BLOB_MARGIN) / LATTICE));
+    for (int j = j0; j <= j1; ++j) {
+        for (int i = i0; i <= i1; ++i) {
+            Rng rng(static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull ^
+                    (static_cast<std::uint64_t>(static_cast<std::uint32_t>(i)) << 32) ^
+                    (static_cast<std::uint64_t>(static_cast<std::uint32_t>(j)) * 0x85EBCA6Bull) ^
+                    0x5EA1A7EDull);
+            if (rng.chance(0.16f)) continue;   // open water: a strait, not a cell edge
+            float cx = (static_cast<float>(i) + rng.frange(0.26f, 0.74f)) * LATTICE;
+            float cy = (static_cast<float>(j) + rng.frange(0.26f, 0.74f)) * LATTICE;
+            Blob b{cx, cy, rng.frange(138.0f, 188.0f), 0.0f};
+            b.ry = b.rx * rng.frange(0.62f, 1.08f);
+            out.push_back(b);
+            // A shoulder mass: the second lobe that keeps a landmass from
+            // reading as one smooth ellipse. It crosses borders too.
+            if (rng.chance(0.80f)) {
+                float ang = rng.frange(0.0f, 6.2831853f);
+                float d = b.rx * rng.frange(0.45f, 0.85f);
+                Blob s{cx + std::cos(ang) * d, cy + std::sin(ang) * d,
+                       rng.frange(58.0f, 96.0f), 0.0f};
+                s.ry = s.rx * rng.frange(0.68f, 1.14f);
+                out.push_back(s);
+            }
+            if (rng.chance(0.35f)) {
+                float ang = rng.frange(0.0f, 6.2831853f);
+                float d = b.rx * rng.frange(1.05f, 1.45f);
+                Blob s{cx + std::cos(ang) * d, cy + std::sin(ang) * d,
+                       rng.frange(40.0f, 68.0f), 0.0f};
+                s.ry = s.rx * rng.frange(0.70f, 1.20f);
+                out.push_back(s);
+            }
+        }
+    }
+}
+
+void buildLand(Region& R, Rng& rng, bool start, std::uint32_t seed) {
     const int baseX = R.rx * REGION;
     const int baseY = R.ry * REGION;
     std::vector<Blob> blobs;
@@ -194,48 +264,50 @@ void buildLand(Region& R, Rng& rng, bool start) {
         // The homeland is generated like every other continent: a seeded ring
         // of lobes around one central mass. Only the *shape grammar* is
         // authored (a broad temperate heartland), never the map.
-        int lobes = 4 + rng.range(3);
+        int lobes = 5 + rng.range(3);
         float phase = rng.frange(0.0f, 6.2831853f);
-        Blob heart{0.0f, 0.0f, rng.frange(62.0f, 78.0f), rng.frange(54.0f, 70.0f)};
+        // A big heartland. Its coast sits far out, so the cell does not read as
+        // a small island in a frame of water.
+        Blob heart{0.0f, -6.0f, rng.frange(116.0f, 130.0f), rng.frange(82.0f, 96.0f)};
         blobs.push_back(heart);
         for (int i = 0; i < lobes; ++i) {
             float ang = phase + 6.2831853f * static_cast<float>(i) / static_cast<float>(lobes)
                       + rng.frange(-0.28f, 0.28f);
-            float dist = rng.frange(36.0f, 62.0f);
+            float dist = rng.frange(48.0f, 84.0f);
             Blob b;
             b.cx = std::cos(ang) * dist;
             b.cy = std::sin(ang) * dist;
-            b.rx = rng.frange(34.0f, 58.0f);
-            b.ry = b.rx * rng.frange(0.70f, 1.15f);
+            b.rx = rng.frange(54.0f, 84.0f);
+            b.ry = b.rx * rng.frange(0.72f, 1.12f);
+            // Keep the southern sea clear for the Tidewell isles: the south
+            // lobes are shorter, so the coast stays a voyage away.
+            if (std::sin(ang) > 0.55f) {
+                b.cy *= 0.62f;
+                b.rx *= 0.82f;
+                b.ry *= 0.82f;
+            }
             blobs.push_back(b);
         }
+
     } else {
-        const int count = 2 + rng.range(3);
-        const float maxCentre = static_cast<float>(HALF - RIM - 84);
-        for (int i = 0; i < count; ++i) {
-            Blob b;
-            b.cx = rng.frange(-maxCentre, maxCentre);
-            b.cy = rng.frange(-maxCentre, maxCentre);
-            b.rx = rng.frange(48.0f, 86.0f);
-            b.ry = b.rx * rng.frange(0.72f, 1.18f);
-            blobs.push_back(b);
-        }
+        latticeBlobs(seed, static_cast<float>(baseX - HALF), static_cast<float>(baseY - HALF),
+                     static_cast<float>(baseX + HALF), static_cast<float>(baseY + HALF), blobs);
     }
 
     R.kind.assign(N, static_cast<std::uint8_t>(OWT_DEEP_SEA));
 
     for (int ly = -HALF; ly < HALF; ++ly) {
         for (int lx = -HALF; lx < HALF; ++lx) {
-            // The warp and coast detail are functions of WORLD coordinates:
-            // the same fields every cell sees, so two cells never clone the
-            // same coastline. (Blob centres stay local because each cell owns
-            // its continent.)
+            // The blob field, the warp and the coast detail are all functions
+            // of WORLD coordinates: the same fields every cell sees, so two
+            // cells never clone a coastline and they agree about the land they
+            // share across a border.
             float wxWorld = static_cast<float>(lx + baseX);
             float wyWorld = static_cast<float>(ly + baseY);
-            float wx = static_cast<float>(lx) +
-                       (fbm(wxWorld * 0.018f + 31.0f, wyWorld * 0.018f - 11.0f, 0x51A9u, 2) - 0.5f) * 34.0f;
-            float wy = static_cast<float>(ly) +
-                       (fbm(wxWorld * 0.018f - 7.0f, wyWorld * 0.018f + 23.0f, 0x77C3u, 2) - 0.5f) * 34.0f;
+            float wx = wxWorld +
+                       (fbm(wxWorld * 0.018f + 31.0f, wyWorld * 0.018f - 11.0f, 0x51A9u, 2) - 0.5f) * 52.0f;
+            float wy = wyWorld +
+                       (fbm(wxWorld * 0.018f - 7.0f, wyWorld * 0.018f + 23.0f, 0x77C3u, 2) - 0.5f) * 52.0f;
 
             float shape = -9.0f;
             for (const Blob& b : blobs) {
@@ -286,8 +358,8 @@ void buildLand(Region& R, Rng& rng, bool start) {
         float cx = 0.0f, cy = 0.0f;
         bool placed = false;
         for (int attempt = 0; attempt < 24 && !placed; ++attempt) {
-            cx = rng.frange(-HALF + RIM + 14, HALF - RIM - 14);
-            cy = rng.frange(-HALF + RIM + 14, HALF - RIM - 14);
+            cx = rng.frange(-HALF + 14, HALF - 14);
+            cy = rng.frange(-HALF + 14, HALF - 14);
             bool tooClose = false, nearCoast = false;
             for (int dy = -24; dy <= 24 && !tooClose; ++dy)
                 for (int dx = -24; dx <= 24; ++dx) {
@@ -311,30 +383,20 @@ void buildLand(Region& R, Rng& rng, bool start) {
             }
     }
 
-    // One to three seeded bays: inlets, capes and a coast worth sailing.
+    // One to three seeded bays: inlets, capes and a coast worth sailing. A bay
+    // is cut only when the whole bite is inside this cell, because a bite that
+    // ran over a border would only exist on one side of it.
     {
         int bays = 1 + rng.range(3);
         for (int i = 0; i < bays; ++i) {
             float ang = rng.frange(0.0f, 6.2831853f);
             float dist = rng.frange(start ? 88.0f : 60.0f, start ? 118.0f : 96.0f);
-            carveBay(R, std::cos(ang) * dist, std::sin(ang) * dist,
-                     rng.frange(9.0f, 17.0f), rng.frange(7.0f, 13.0f));
+            float brx = rng.frange(9.0f, 17.0f), bry = rng.frange(7.0f, 13.0f);
+            float bx = std::cos(ang) * dist, by = std::sin(ang) * dist;
+            if (std::abs(bx) + brx + 3.0f > HALF || std::abs(by) + bry + 3.0f > HALF) continue;
+            carveBay(R, bx, by, brx, bry);
         }
     }
-
-    // The world edge is water. Continents never bleed into a neighbour's cell.
-    for (int ly = -HALF; ly < HALF; ++ly) {
-        for (int lx = -HALF; lx < HALF; ++lx) {
-            int edge = std::max(std::abs(lx), std::abs(ly));
-            if (edge > HALF - RIM) {
-                if (isLandKind(static_cast<OwTileKind>(R.kind[ridx(lx, ly)])))
-                    R.kind[ridx(lx, ly)] = static_cast<std::uint8_t>(OWT_SEA);
-            }
-        }
-    }
-
-    (void)baseX;
-    (void)baseY;
 }
 
 // A bay is a bite taken out of the coast: it only counts if it reaches the
@@ -443,6 +505,50 @@ void stampMountainRange(Region& R, const std::vector<Pt>& spine, float width, bo
     }
 }
 
+// Mountain spines are laid out on the world too: one spine per lattice point,
+// generated once and stamped by every cell it touches. A range therefore runs
+// on across a cell border instead of stopping square at it.
+constexpr float RIDGE_LATTICE = 420.0f;
+
+void latticeRidges(std::uint32_t seed, float wx0, float wy0, float wx1, float wy1,
+                   std::vector<std::vector<Pt>>& out) {
+    int i0 = static_cast<int>(std::floor((wx0 - 420.0f) / RIDGE_LATTICE));
+    int i1 = static_cast<int>(std::floor((wx1 + 420.0f) / RIDGE_LATTICE));
+    int j0 = static_cast<int>(std::floor((wy0 - 420.0f) / RIDGE_LATTICE));
+    int j1 = static_cast<int>(std::floor((wy1 + 420.0f) / RIDGE_LATTICE));
+    for (int j = j0; j <= j1; ++j) {
+        for (int i = i0; i <= i1; ++i) {
+            Rng rng(static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull ^
+                    (static_cast<std::uint64_t>(static_cast<std::uint32_t>(i)) << 32) ^
+                    (static_cast<std::uint64_t>(static_cast<std::uint32_t>(j)) * 0x85EBCA6Bull) ^
+                    0x3D9E17ull);
+            if (rng.chance(0.18f)) continue;   // open water in between: no ridge
+            float cx = (static_cast<float>(i) + rng.frange(0.15f, 0.85f)) * RIDGE_LATTICE;
+            float cy = (static_cast<float>(j) + rng.frange(0.15f, 0.85f)) * RIDGE_LATTICE;
+            float ang = rng.frange(0.0f, 3.1415926f);
+            // One or two parallel spines: a range is a chain of ridges, not a
+            // single drawn line.
+            int strands = 1 + (rng.chance(0.30f) ? 1 : 0);
+            for (int k = 0; k < strands; ++k) {
+                float off = (k == 0) ? 0.0f : rng.frange(13.0f, 26.0f) * (rng.chance(0.5f) ? 1.0f : -1.0f);
+                float len = rng.frange(300.0f, 560.0f);
+                float amp = rng.frange(7.0f, 15.0f);
+                int segs = 7 + rng.range(5);
+                std::vector<Pt> spine;
+                for (int s = 0; s <= segs; ++s) {
+                    float t = static_cast<float>(s) / segs - 0.5f;
+                    float x = cx + std::cos(ang) * len * t + rng.frange(-amp, amp)
+                            - std::sin(ang) * off;
+                    float y = cy + std::sin(ang) * len * t + rng.frange(-amp, amp)
+                            + std::cos(ang) * off;
+                    spine.push_back({x, y});
+                }
+                out.push_back(spine);
+            }
+        }
+    }
+}
+
 void buildMountains(Region& R, Rng& rng, bool start, bool snowy) {
     std::vector<std::vector<Pt>> ranges;
 
@@ -484,14 +590,13 @@ void buildMountains(Region& R, Rng& rng, bool start, bool snowy) {
             ranges.push_back(wavy(cx - hx, cx + hx, cy - hy, cy + hy, 6.5f, 4 + rng.range(3)));
         }
     } else {
-        // One or two ranges, each crossing most of the continent so it is a
-        // real barrier with real passes rather than scattered noise ridges.
-        int rangesCount = 1 + rng.range(2);
-        for (int r = 0; r < rangesCount; ++r) {
-            float y0 = rng.frange(-80.0f, 80.0f);
-            float y1 = y0 + rng.frange(-70.0f, 70.0f);
-            ranges.push_back(wavy(-128.0f, 128.0f, y0, y1, 12.0f, 6 + rng.range(3)));
-        }
+        // Ranges come from the world, not from this cell: see latticeRidges().
+        std::vector<std::vector<Pt>> ridges;
+        latticeRidges(R.seed, static_cast<float>(R.rx * REGION - HALF - 8),
+                      static_cast<float>(R.ry * REGION - HALF - 8),
+                      static_cast<float>(R.rx * REGION + HALF + 8),
+                      static_cast<float>(R.ry * REGION + HALF + 8), ridges);
+        for (auto& ridge : ridges) ranges.push_back(ridge);
     }
 
     for (const auto& range : ranges) stampMountainRange(R, range, 2.15f, snowy);
@@ -499,8 +604,8 @@ void buildMountains(Region& R, Rng& rng, bool start, bool snowy) {
     // A few isolated massifs / tors to break up the plains.
     const int massifs = start ? 4 : 3 + rng.range(4);
     for (int i = 0; i < massifs; ++i) {
-        float cx = rng.frange(-HALF + RIM + 20, HALF - RIM - 20);
-        float cy = rng.frange(-HALF + RIM + 20, HALF - RIM - 20);
+        float cx = rng.frange(-HALF + 20, HALF - 20);
+        float cy = rng.frange(-HALF + 20, HALF - 20);
         int tx = static_cast<int>(cx), ty = static_cast<int>(cy);
         if (!inRegion(tx, ty)) continue;
         if (!isLandKind(static_cast<OwTileKind>(R.kind[ridx(tx, ty)]))) continue;
@@ -675,7 +780,7 @@ void buildRivers(Region& R, Rng& rng, bool start, const std::vector<Blob>& blobs
 }
 
 // ---------------------------------------------------------------- biomes
-void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
+void paintBiomes(Region& R, Rng& rng, bool start) {
     (void)rng;
     // A single world-wide field: two neighbouring cells agree about where the
     // woods are, and no cell repeats another's forest pattern.
@@ -690,6 +795,9 @@ void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
 
             float x = static_cast<float>(lx + baseX);
             float y = static_cast<float>(ly + baseY);
+            // The tile's own climate, from the world field: a shore on the
+            // border of two cells is painted the same on both sides.
+            OwClimate climate = start ? OWC_TEMPERATE : climateAtWorld(R.seed, x, y);
             // Rotated, higher-frequency fields: value noise on an axis-aligned
             // lattice reads as rectangles at low frequency, and rectangles are
             // exactly what a forest must not look like.
@@ -754,9 +862,12 @@ void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
             if ((h % 100u) >= 46u) continue;
             int cx = gx + static_cast<int>((h >> 8) % 5u) - baseX;
             int cy = gy + static_cast<int>((h >> 12) % 5u) - baseY;
-            OwTileKind base = plainForClimate(climate);
-            OwTileKind forest = (climate == OWC_SNOW) ? OWT_FOREST_SNOW
-                              : (climate == OWC_SAND ? OWT_GRASS : OWT_FOREST_LEAF);
+            OwClimate cc = start ? OWC_TEMPERATE
+                                 : climateAtWorld(R.seed, static_cast<float>(gx),
+                                                  static_cast<float>(gy));
+            OwTileKind base = plainForClimate(cc);
+            OwTileKind forest = (cc == OWC_SNOW) ? OWT_FOREST_SNOW
+                              : (cc == OWC_SAND ? OWT_GRASS : OWT_FOREST_LEAF);
             bool ok = true;
             for (int dy = 0; dy < 2 && ok; ++dy)
                 for (int dx = 0; dx < 2; ++dx) {
@@ -790,8 +901,8 @@ void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
 
     // Beaches: a one-tile sand (or snow) rim where land meets the open sea.
     std::vector<std::uint8_t> next = R.kind;
-    for (int ly = -HALF + 1; ly < HALF - 1; ++ly) {
-        for (int lx = -HALF + 1; lx < HALF - 1; ++lx) {
+    for (int ly = -HALF; ly < HALF; ++ly) {
+        for (int lx = -HALF; lx < HALF; ++lx) {
             int id = ridx(lx, ly);
             OwTileKind k = static_cast<OwTileKind>(R.kind[id]);
             if (!isLandKind(k) || isMountainKind(k)) continue;
@@ -808,7 +919,10 @@ void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
                 if ((nk == OWT_SEA || nk == OWT_DEEP_SEA) && !R.river[nid]) seaSide = true;
             }
             if (!seaSide) continue;
-            next[id] = static_cast<std::uint8_t>(climate == OWC_SNOW ? OWT_SNOW : OWT_SAND);
+            OwClimate bc = start ? OWC_TEMPERATE
+                                 : climateAtWorld(R.seed, static_cast<float>(lx + baseX),
+                                                  static_cast<float>(ly + baseY));
+            next[id] = static_cast<std::uint8_t>(bc == OWC_SNOW ? OWT_SNOW : OWT_SAND);
         }
     }
     R.kind.swap(next);
@@ -847,24 +961,6 @@ bool sitePredicateOk(const Region& R, int lx, int ly, OwSiteType type) {
         }
     }
     return true;
-}
-
-struct SiteSnap {
-    int x = 0, y = 0;
-    bool found = false;
-};
-
-SiteSnap snapToSiteGround(const Region& R, int dx, int dy, OwSiteType type, int maxR = 34) {
-    for (int r = 0; r <= maxR; ++r) {
-        for (int oy = -r; oy <= r; ++oy) {
-            for (int ox = -r; ox <= r; ++ox) {
-                if (std::max(std::abs(ox), std::abs(oy)) != r) continue;
-                int x = dx + ox, y = dy + oy;
-                if (sitePredicateOk(R, x, y, type)) return {x, y, true};
-            }
-        }
-    }
-    return {dx, dy, false};
 }
 
 std::string uniqueSettlementName(std::uint32_t seed, int tx, int ty, OwSiteType type,
@@ -1143,10 +1239,10 @@ void carveTideIslands(Region& R, std::uint32_t seed, Rng& rng, std::vector<SiteP
             // The isles live in the southern sea the runtime searches for them
             // (x -100..100, y 60..130), well clear of any coast.
             int cx = -94 + rng.range(189);
-            int cy = 74 + rng.range(51);
+            int cy = 104 + rng.range(46);
             bool allWater = true;
-            for (int dy = -7; dy <= 7 && allWater; ++dy)
-                for (int dx = -7; dx <= 7; ++dx) {
+            for (int dy = -12; dy <= 12 && allWater; ++dy)
+                for (int dx = -12; dx <= 12; ++dx) {
                     int x = cx + dx, y = cy + dy;
                     if (!inRegion(x, y)) { allWater = false; break; }
                     if (isLandKind(static_cast<OwTileKind>(R.kind[ridx(x, y)]))) { allWater = false; break; }
@@ -1197,10 +1293,9 @@ void carveTideIslands(Region& R, std::uint32_t seed, Rng& rng, std::vector<SiteP
 }
 
 // ---------------------------------------------------------------- pads
-void clearSitePad(Region& R, const OwSiteInfo& s, OwClimate climate) {
+void clearSitePad(Region& R, const OwSiteInfo& s) {
     const bool settlement = owIsSettlement(s.type);
     const int radius = settlement ? 2 : 1;
-    OwTileKind ground = plainForClimate(climate);
     for (int dy = -radius; dy <= radius; ++dy)
         for (int dx = -radius; dx <= radius; ++dx) {
             // Round the clearing: a square of mown grass in the middle of a
@@ -1215,14 +1310,16 @@ void clearSitePad(Region& R, const OwSiteInfo& s, OwClimate climate) {
                 // get to fill the sea.
                 if (!settlement) continue;
             }
-            R.kind[id] = static_cast<std::uint8_t>(ground);
+            R.kind[id] = static_cast<std::uint8_t>(plainForClimate(
+                climateAtWorld(R.seed, static_cast<float>(x + R.rx * REGION),
+                               static_cast<float>(y + R.ry * REGION))));
             // Keep the road: a country road should run into a town gate, not
             // stop in the grass two tiles short of it. Rivers still yield.
             R.river[id] = 0;
         }
 }
 
-void ensurePadIsland(Region& R, int cx, int cy, OwClimate climate) {
+void ensurePadIsland(Region& R, int cx, int cy) {
     // Every site must be standable, including caves on a crag's shoulder.
     for (int dy = -2; dy <= 2; ++dy)
         for (int dx = -2; dx <= 2; ++dx) {
@@ -1230,7 +1327,9 @@ void ensurePadIsland(Region& R, int cx, int cy, OwClimate climate) {
             if (!inRegion(x, y)) continue;
             OwTileKind k = static_cast<OwTileKind>(R.kind[ridx(x, y)]);
             if (isMountainKind(k) || isWaterKind(k))
-                R.kind[ridx(x, y)] = static_cast<std::uint8_t>(plainForClimate(climate));
+                R.kind[ridx(x, y)] = static_cast<std::uint8_t>(plainForClimate(
+                    climateAtWorld(R.seed, static_cast<float>(x + R.rx * REGION),
+                                   static_cast<float>(y + R.ry * REGION))));
         }
 }
 
@@ -1599,6 +1698,7 @@ Region& getRegion(std::uint32_t seed, int rx, int ry) {
 void buildRegion(Region& R, std::uint32_t seed, int rx, int ry) {
     R.rx = rx;
     R.ry = ry;
+    R.seed = seed;
     R.name = continentNameFor(seed, rx, ry);
     R.road.assign(N, 0);
     R.river.assign(N, 0);
@@ -1612,14 +1712,14 @@ void buildRegion(Region& R, std::uint32_t seed, int rx, int ry) {
             static_cast<std::uint32_t>(packRegion(rx, ry)) ^ 0xD15EA5EDull);
 
     auto t0 = std::chrono::steady_clock::now();
-    buildLand(R, rng, start);
+    buildLand(R, rng, start, seed);
     auto t1 = std::chrono::steady_clock::now();
     std::vector<std::uint8_t> mainLand = largestLandComponent(R);
     auto t2 = std::chrono::steady_clock::now();
     buildMountains(R, rng, start, climate == OWC_SNOW);
     buildRivers(R, rng, start, {}, climate);
     auto t3 = std::chrono::steady_clock::now();
-    paintBiomes(R, rng, start, climate);
+    paintBiomes(R, rng, start);
     auto t4 = std::chrono::steady_clock::now();
     if (std::getenv("APFA_TIME"))
         std::fprintf(stderr, "[world] %dx%d land %lld comp %lld crag/river %lld biome %lld ms\n", rx, ry,
@@ -1658,7 +1758,7 @@ void buildRegion(Region& R, std::uint32_t seed, int rx, int ry) {
     int salt = 0;
     for (const SitePlan& p : plans) {
         if (!inRegion(p.x, p.y)) continue;
-        ensurePadIsland(R, p.x, p.y, p.island ? OWC_TEMPERATE : climate);
+        ensurePadIsland(R, p.x, p.y);
 
         OwSiteInfo s;
         s.type = p.type;
@@ -1681,7 +1781,7 @@ void buildRegion(Region& R, std::uint32_t seed, int rx, int ry) {
             if (p.fixedName && std::string(p.fixedName) == "Standing Stones") s.isLocketSite = true;
             if (p.fixedName && std::string(p.fixedName) == "Old Watchtower") s.isTowerSite = true;
         }
-        clearSitePad(R, s, s.climate);
+        clearSitePad(R, s);
         R.sites.push_back(s);
         ++salt;
     }
@@ -1734,7 +1834,7 @@ void buildRegion(Region& R, std::uint32_t seed, int rx, int ry) {
     }
 
     // ---- site centers clean again (a repair road may have run over one)
-    for (const OwSiteInfo& s : R.sites) clearSitePad(R, s, s.climate);
+    for (const OwSiteInfo& s : R.sites) clearSitePad(R, s);
 
     // Everything above is region-local (pads, roads and BFS all want a 320×320
     // grid); only now do the sites become world coordinates.
@@ -2074,7 +2174,7 @@ OwSiteInfo owTowerSite(std::uint32_t seed) {
 OwSiteInfo owTideIsland(std::uint32_t seed, int idx) {
     int i = std::max(0, std::min(2, idx));
     std::vector<OwSiteInfo> list;
-    owSitesInRect(seed, -100, 60, 100, 130, list);
+    owSitesInRect(seed, -100, 60, 100, 156, list);
     for (const auto& s : list)
         if (s.tideIslandIdx == i) return s;
 

@@ -420,7 +420,7 @@ def main() -> int:
                    OUT / "overworld_castle.png")
 
     # the south coast, where the boat is hired and the Tidewell isles wait
-    draw_scene(w, 6, 66, OUT / "overworld_coast.png", hero_dy=0)
+    draw_scene(w, 6, 83, OUT / "overworld_coast.png", hero_dy=0)
 
     draw_world_map(w, OUT / "world_map.png")
     if args.montage:
