@@ -226,12 +226,16 @@ void buildLand(Region& R, Rng& rng, bool start) {
 
     for (int ly = -HALF; ly < HALF; ++ly) {
         for (int lx = -HALF; lx < HALF; ++lx) {
-            // Warped coordinates: the coastline meanders instead of tracing a
-            // clean ellipse, and bays eat into the land.
+            // The warp and coast detail are functions of WORLD coordinates:
+            // the same fields every cell sees, so two cells never clone the
+            // same coastline. (Blob centres stay local because each cell owns
+            // its continent.)
+            float wxWorld = static_cast<float>(lx + baseX);
+            float wyWorld = static_cast<float>(ly + baseY);
             float wx = static_cast<float>(lx) +
-                       (fbm(lx * 0.018f + 31.0f, ly * 0.018f - 11.0f, 0x51A9u, 2) - 0.5f) * 34.0f;
+                       (fbm(wxWorld * 0.018f + 31.0f, wyWorld * 0.018f - 11.0f, 0x51A9u, 2) - 0.5f) * 34.0f;
             float wy = static_cast<float>(ly) +
-                       (fbm(lx * 0.018f - 7.0f, ly * 0.018f + 23.0f, 0x77C3u, 2) - 0.5f) * 34.0f;
+                       (fbm(wxWorld * 0.018f - 7.0f, wyWorld * 0.018f + 23.0f, 0x77C3u, 2) - 0.5f) * 34.0f;
 
             float shape = -9.0f;
             for (const Blob& b : blobs) {
@@ -242,7 +246,7 @@ void buildLand(Region& R, Rng& rng, bool start) {
 
             // Coast detail, and extra detail only close to the waterline so
             // the interior stays solid.
-            float detail = (fbm(lx * 0.075f + 5.0f, ly * 0.075f + 17.0f, 0xC0A57u, 3) - 0.5f) * 0.16f;
+            float detail = (fbm(wxWorld * 0.075f + 5.0f, wyWorld * 0.075f + 17.0f, 0xC0A57u, 3) - 0.5f) * 0.16f;
             float v = shape + detail;
 
             OwTileKind k = OWT_DEEP_SEA;
@@ -308,11 +312,11 @@ void buildLand(Region& R, Rng& rng, bool start) {
     }
 
     // One to three seeded bays: inlets, capes and a coast worth sailing.
-    if (start) {
+    {
         int bays = 1 + rng.range(3);
         for (int i = 0; i < bays; ++i) {
             float ang = rng.frange(0.0f, 6.2831853f);
-            float dist = rng.frange(88.0f, 118.0f);
+            float dist = rng.frange(start ? 88.0f : 60.0f, start ? 118.0f : 96.0f);
             carveBay(R, std::cos(ang) * dist, std::sin(ang) * dist,
                      rng.frange(9.0f, 17.0f), rng.frange(7.0f, 13.0f));
         }
@@ -353,7 +357,8 @@ void carveBay(Region& R, float cx, float cy, float rx, float ry) {
             int x = ix0 + dx, y = iy0 + dy;
             if (!inRegion(x, y)) continue;
             float nx = static_cast<float>(dx) / rx, ny = static_cast<float>(dy) / ry;
-            float wobble = (fbm(x * 0.19f + 13.0f, y * 0.19f - 5.0f, 0xB4A17u, 2) - 0.5f) * 0.30f;
+            float wobble = (fbm((x + R.rx * REGION) * 0.19f + 13.0f,
+                               (y + R.ry * REGION) * 0.19f - 5.0f, 0xB4A17u, 2) - 0.5f) * 0.30f;
             if (nx * nx + ny * ny + wobble > 1.0f) continue;
             int id = ridx(x, y);
             if (!isLandKind(static_cast<OwTileKind>(R.kind[id]))) continue;
@@ -613,7 +618,8 @@ void carveLake(Region& R, float cx, float cy, float rx, float ry) {
             if (!inRegion(x, y)) continue;
             float nx = static_cast<float>(dx) / rx;
             float ny = static_cast<float>(dy) / ry;
-            float wobble = (fbm(x * 0.22f + 3.0f, y * 0.22f - 8.0f, 0x1A4E5u, 2) - 0.5f) * 0.35f;
+            float wobble = (fbm((x + R.rx * REGION) * 0.22f + 3.0f,
+                               (y + R.ry * REGION) * 0.22f - 8.0f, 0x1A4E5u, 2) - 0.5f) * 0.35f;
             if (nx * nx + ny * ny + wobble > 1.0f) continue;
             int id = ridx(x, y);
             if (!isLandKind(static_cast<OwTileKind>(R.kind[id]))) continue;
@@ -671,7 +677,10 @@ void buildRivers(Region& R, Rng& rng, bool start, const std::vector<Blob>& blobs
 // ---------------------------------------------------------------- biomes
 void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
     (void)rng;
-    const std::uint32_t seed = static_cast<std::uint32_t>(R.rx * 92821 + R.ry * 68917 + 0x5EEDu);
+    // A single world-wide field: two neighbouring cells agree about where the
+    // woods are, and no cell repeats another's forest pattern.
+    const std::uint32_t seed = 0x5EEDu;
+    const int baseX = R.rx * REGION, baseY = R.ry * REGION;
 
     for (int ly = -HALF; ly < HALF; ++ly) {
         for (int lx = -HALF; lx < HALF; ++lx) {
@@ -679,8 +688,8 @@ void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
             OwTileKind k = static_cast<OwTileKind>(R.kind[id]);
             if (isWaterKind(k) || isMountainKind(k)) continue;
 
-            float x = static_cast<float>(lx);
-            float y = static_cast<float>(ly);
+            float x = static_cast<float>(lx + baseX);
+            float y = static_cast<float>(ly + baseY);
             // Rotated, higher-frequency fields: value noise on an axis-aligned
             // lattice reads as rectangles at low frequency, and rectangles are
             // exactly what a forest must not look like.
@@ -722,10 +731,10 @@ void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
             // darker pine belt under the north wall, and open heath east of the
             // river so the vale reads as three different places.
             if (start && out == OWT_GRASS) {
-                if (lx < -26.0f && lx > -78.0f && ly > -22.0f && ly < 34.0f &&
+                if (x < -26.0f && x > -78.0f && y > -22.0f && y < 34.0f &&
                     fbm(x * 0.11f, y * 0.11f, seed ^ 0xEA57u, 2) > 0.42f)
                     out = OWT_FOREST_LEAF;
-                if (ly < -20.0f && lx > -30.0f && lx < 52.0f)
+                if (y < -20.0f && x > -30.0f && x < 52.0f)
                     out = OWT_FOREST_PINE;
             }
 
@@ -733,14 +742,18 @@ void paintBiomes(Region& R, Rng& rng, bool start, OwClimate climate) {
         }
     }
 
-    // Copses: seeded 2x2 stands of canopy on open ground. Single forest tiles
-    // render as bare corners of the canopy mask, so always plant a block.
-    for (int gy = -HALF + 4; gy < HALF - 4; gy += 7) {
-        for (int gx = -HALF + 4; gx < HALF - 4; gx += 7) {
+    // Copses: seeded 2x2 stands of canopy on open ground, on a WORLD grid so
+    // a stand that straddles a cell border is stamped by both cells. Single
+    // forest tiles render as bare corners of the canopy mask, so always plant
+    // a block.
+    int wgx0 = baseX - HALF - 7, wgx1 = baseX + HALF + 7;
+    int wgy0 = baseY - HALF - 7, wgy1 = baseY + HALF + 7;
+    for (int gy = wgy0 - (wgy0 % 7); gy < wgy1; gy += 7) {
+        for (int gx = wgx0 - (wgx0 % 7); gx < wgx1; gx += 7) {
             std::uint32_t h = owHash2(gx, gy, seed ^ 0xB055u);
             if ((h % 100u) >= 46u) continue;
-            int cx = gx + static_cast<int>((h >> 8) % 5u);
-            int cy = gy + static_cast<int>((h >> 12) % 5u);
+            int cx = gx + static_cast<int>((h >> 8) % 5u) - baseX;
+            int cy = gy + static_cast<int>((h >> 12) % 5u) - baseY;
             OwTileKind base = plainForClimate(climate);
             OwTileKind forest = (climate == OWC_SNOW) ? OWT_FOREST_SNOW
                               : (climate == OWC_SAND ? OWT_GRASS : OWT_FOREST_LEAF);
@@ -1960,14 +1973,12 @@ std::string owContinentName(std::uint32_t seed, int tx, int ty) {
 }
 
 int owDangerTier(int tx, int ty) {
-    int rx = floorDiv(tx + HALF, REGION);
-    int ry = floorDiv(ty + HALF, REGION);
-    int ring = std::max(std::abs(rx), std::abs(ry));
-    int lx = tx - rx * REGION, ly = ty - ry * REGION;
-    float d = std::sqrt(static_cast<float>(lx * lx + ly * ly));
-    int tier = 1 + ring * 2;
-    if (d > 62.0f) ++tier;
-    if (d > 105.0f) ++tier;
+    // A smooth swell away from Elmswick, not a jump at each atlas border: the
+    // party can walk or sail from one cell to the next, so the difficulty
+    // curve must not step there.
+    float d = std::sqrt(static_cast<float>(tx) * static_cast<float>(tx) +
+                        static_cast<float>(ty) * static_cast<float>(ty));
+    int tier = 1 + static_cast<int>(d / 105.0f);
     if (tier < 1) tier = 1;
     if (tier > 8) tier = 8;
     return tier;

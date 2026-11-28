@@ -86,9 +86,15 @@ class World:
         return self.roads[ly + HALF][lx + HALF]
 
 
-def dump_world(seed: int, rx: int, ry: int) -> World:
-    with tempfile.TemporaryDirectory(prefix="apfa-preview-") as temp:
-        binary = pathlib.Path(temp) / "dump_world"
+_DUMP_BIN: pathlib.Path | None = None
+
+
+def dump_binary() -> pathlib.Path:
+    """Compile dump_world once per preview run; the atlas needs many regions."""
+    global _DUMP_BIN
+    if _DUMP_BIN is None:
+        temp = pathlib.Path(tempfile.mkdtemp(prefix="apfa-preview-"))
+        binary = temp / "dump_world"
         subprocess.run([
             os.environ.get("CXX", "c++"), "-std=c++17", "-O2",
             f"-I{ROOT / 'src'}",
@@ -96,8 +102,13 @@ def dump_world(seed: int, rx: int, ry: int) -> World:
             str(ROOT / "tools" / "dump_world.cpp"),
             "-o", str(binary),
         ], check=True, cwd=ROOT)
-        text = subprocess.run([str(binary), str(seed), str(rx), str(ry)],
-                              check=True, capture_output=True, text=True).stdout
+        _DUMP_BIN = binary
+    return _DUMP_BIN
+
+
+def dump_world(seed: int, rx: int, ry: int) -> World:
+    text = subprocess.run([str(dump_binary()), str(seed), str(rx), str(ry)],
+                          check=True, capture_output=True, text=True).stdout
 
     w = World(seed, rx, ry)
     lines = text.splitlines()
@@ -322,12 +333,74 @@ def draw_world_seeds(seeds: list[int], out: pathlib.Path, scale: int = 2) -> Non
     print("wrote", out.relative_to(ROOT), f"({img.width}x{img.height})")
 
 
+def region_image(w: World, scale: int = 1) -> Image.Image:
+    """Fast tile-only render of one 320x320 cell (no icons, no labels)."""
+    data = bytearray(REGION * REGION * 3)
+    for ly in range(REGION):
+        kinds = w.kinds[ly]
+        roads = w.roads[ly]
+        row = ly * REGION * 3
+        for lx in range(REGION):
+            k = kinds[lx]
+            c = (226, 192, 120) if roads[lx] else TERRAIN_COLOURS[k]
+            i = row + lx * 3
+            data[i] = c[0]
+            data[i + 1] = c[1]
+            data[i + 2] = c[2]
+    img = Image.frombytes("RGB", (REGION, REGION), bytes(data))
+    if scale != 1:
+        img = img.resize((REGION * scale, REGION * scale), Image.NEAREST)
+    return img
+
+
+def draw_atlas(seed: int, out: pathlib.Path, ring: int = 2) -> None:
+    """The atlas around the start cell: (2*ring+1)^2 cells, no edge, no crop.
+
+    One pixel per tile. The point is that the world does not stop at the
+    borders of the cell the party starts in: every neighbouring cell has its
+    own continents, roads and sites, and the next ring after that exists too.
+    """
+    cells = ring * 2 + 1
+    size = cells * REGION
+    img = Image.new("RGB", (size, size), TERRAIN_COLOURS[DEEP_SEA])
+    start_x = start_y = None
+    for ry in range(-ring, ring + 1):
+        for rx in range(-ring, ring + 1):
+            w = dump_world(seed, rx, ry)
+            tile = region_image(w, 1)
+            px, py = (rx + ring) * REGION, (ry + ring) * REGION
+            img.paste(tile, (px, py))
+            for s in w.sites:
+                sx = px + (s["x"] - w.base_x)
+                sy = py + (s["y"] - w.base_y)
+                if 0 <= sx < size and 0 <= sy < size:
+                    col = (255, 224, 96) if s["type"] in (1, 2, 3) else (255, 120, 90)
+                    img.putpixel((sx, sy), col)
+            if rx == 0 and ry == 0:
+                start_x, start_y = px, py
+    d = ImageDraw.Draw(img)
+    if start_x is not None:
+        d.rectangle([start_x, start_y, start_x + REGION - 1, start_y + REGION - 1],
+                    outline=(255, 244, 210), width=2)
+        d.rectangle([start_x + 6, start_y + 6, start_x + 214, start_y + 24], fill=(16, 20, 28))
+        d.text((start_x + 10, start_y + 10), "START CELL  -  Elmswick is here",
+               fill=(255, 238, 190))
+    d.rectangle([8, 8, 560, 28], fill=(16, 20, 28))
+    d.text((12, 12),
+           f"THE ATLAS  seed {seed}  -  {cells}x{cells} cells = {size}x{size} tiles, no edge",
+           fill=(255, 232, 150))
+    img.save(out)
+    print("wrote", out.relative_to(ROOT), f"({size}x{size})")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--region", type=int, nargs=2, default=[0, 0])
     ap.add_argument("--montage", action="store_true",
                     help="also write world_seeds.png: two seeds of the same homeland")
+    ap.add_argument("--atlas", action="store_true",
+                    help="also write world_atlas.png: 5x5 cells around the start, no edge")
     args = ap.parse_args()
 
     OUT.mkdir(parents=True, exist_ok=True)
@@ -352,6 +425,8 @@ def main() -> int:
     draw_world_map(w, OUT / "world_map.png")
     if args.montage:
         draw_world_seeds([args.seed, args.seed ^ 0x9E3779B9], OUT / "world_seeds.png")
+    if args.atlas:
+        draw_atlas(args.seed, OUT / "world_atlas.png")
     return 0
 
 

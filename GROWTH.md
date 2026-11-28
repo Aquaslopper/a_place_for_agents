@@ -27,6 +27,15 @@ wall of bricks. The one authored gesture is a northern range so the homeland
 keeps the Lufia silhouette; its latitude, tilt, length and wave still come from
 the seed.
 
+The atlas is a grid of 320-tile cells, and the generator is pure per cell, so
+the world has no outer edge: sailing into the next cell builds the next
+continent, its roads and its sites. The preview now renders a 5×5 block of
+cells (1600×1600 tiles) to show that (`docs/screenshots/world_atlas.png`), and
+coast warp, forest fields and copse placement use **world** coordinates so two
+cells never clone the same coastline or woods. The sailing mode also has the
+[M] sea chart now, centred on the hull, because on open water the chart is the
+only way to see where the next country is.
+
 The runtime field renderer, collision, encounters, music mapping, the [M]
 travelling map and the Journal's **Survey** page all read `owSampleTile` /
 `owSitesInRect` from this one generator. The Survey page was rewritten: it

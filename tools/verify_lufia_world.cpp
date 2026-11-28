@@ -439,6 +439,6 @@ int main() {
         std::printf("PASS performance: cold continent generated in %lld ms\n", (long long)dt);
     }
 
-    std::printf("PASS Lufia II world: designed continents, walkable roads, boat-only isles\n");
+    std::printf("PASS Lufia II world: procedural continents, walkable roads, boat-only isles\n");
     return 0;
 }

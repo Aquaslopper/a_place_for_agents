@@ -42,6 +42,13 @@ never runs out of cells.
 their roles, but the land, the ranges, the rivers, the lakes and every site
 position come from the seed.*
 
+![Five by five atlas cells around the start](docs/screenshots/world_atlas.png)
+
+*The same seed, five by five cells: 1600×1600 tiles, every cell with its own
+continent, roads and sites, and another ring beyond this frame. The white box
+is the start cell. The atlas has no outer boundary: sail east and the next
+country generates, then the next.*
+
 These previews are rendered from the same tile atlas and the same C++ world
 data the game uses (`tools/preview_world.py`), not from a separate mock-up.
 
@@ -71,7 +78,7 @@ image-aligned scanline shading. Clean pixels are always available.
 |---|---|
 | `WASD` / arrow keys | Walk (cardinal movement; hold `Shift` to run) |
 | Left mouse button | Click to walk; the party routes around obstacles |
-| `M` | Toggle the travelling map in the overworld |
+| `M` | Toggle the world map / sea chart (works at sea too) |
 | Click a building | Walk to its door and enter |
 | `Space` / `E` / `Enter` | Talk, open a chest, enter a door, or advance dialogue |
 | `Esc` / `Tab` | Open or close the pause menu |
@@ -286,7 +293,7 @@ python3 tools/link_check.py                 # every TU compiles, the binary link
 python3 tools/verify_world.py               # determinism, ports, reachability, traversal, 201 atlas cells
 c++ -std=c++17 -O2 -Isrc src/overworld_gen.cpp src/town_gen.cpp \
     tools/verify_lufia_world.cpp -o /tmp/vlw && /tmp/vlw   # world-structure suite
-/tmp/venv/bin/python tools/preview_world.py --montage  # rebuild screenshots + two-seed montage
+/tmp/venv/bin/python tools/preview_world.py --montage --atlas  # + seeds + 5x5 atlas
 ```
 
 `tools/dump_world.cpp` is a headless text dump of one continent (kinds, roads,

@@ -504,13 +504,15 @@ void worldDrawOverviewMap() {
 
     DrawRectangle(0, 0, g.vw, g.vh, Fade(BLACK, 0.55f));
     drawWindow({ px0, py0, panelW, panelH }, true);
-    drawTextCentered("WORLD MAP   [M / ESC to close]", px0 + panelW * 0.5f, py0 + 7.0f,
-                     Color{ 255, 232, 150, 255 }, 8);
+    drawTextCentered(g.sailing ? "SEA CHART   [M / ESC to close]" : "WORLD MAP   [M / ESC to close]",
+                     px0 + panelW * 0.5f, py0 + 7.0f, Color{ 255, 232, 150, 255 }, 8);
 
     const float ox = px0 + 12.0f;
     const float oy = py0 + 21.0f;
-    const int centerTx = (int)floorf(g.px);
-    const int centerTy = (int)floorf(g.py);
+    const float wxPos = g.sailing ? gSailX : g.px;
+    const float wyPos = g.sailing ? gSailY : g.py;
+    const int centerTx = (int)floorf(wxPos);
+    const int centerTy = (int)floorf(wyPos);
     const int startTx = centerTx - mapCols / 2;
     const int startTy = centerTy - mapRows / 2;
 

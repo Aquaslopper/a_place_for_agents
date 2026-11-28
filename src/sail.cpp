@@ -1,35 +1,23 @@
-// sail.cpp — the Open Water: docking, sailing, landings, and the Tidemill Isles.
+// sail.cpp — the Open Water: the sea chart, docking, sailing, landings.
 //
-// This is the growth that turns the millpond from wallpaper into a road.
+// The overworld is an atlas of 320-tile cells and it has no outer edge: sail
+// east past the coast and the next cell generates its own continent, roads
+// and sites. The sea is therefore a road, not a wall. This file is that road:
 //
-// Before it, water was a wall everywhere: cellWalkable() refused G_WATER, so
-// the 5,000-tile lake west of Elmswick could be looked at and never entered,
-// and every island in it was decoration. Past the coast the same was true of
-// the whole sea — the world simply ran on forever in every direction, which
-// is how a player ends up walking thirty minutes north without arriving
-// anywhere.
-//
-// The Open Water fixes both halves:
-//
-//   * The world has a COAST (world.cpp, shoreT()). Land stops at a seed's
-//     own shoreline and the sea past it is deep and unenterable. One
-//     continent, about a minute and a half across at running speed — the size
-//     of an SNES world map, not the size of an ocean.
-//   * The water inside the coast is SAILABLE (cellSailable()). The pond, the
-//     rivers and the highland tarns are all fair water; deep water is not a
-//     different rule, it is simply water.
-//   * The ferryman sells you the boat (DLG_BUY_BOAT) and every dock on the
-//     map boards it. Docks are found from the shore, never authored, so they
-//     move with the seed and always sit on ground you can stand on.
-//   * Three Tidemill Isles are stamped into the pond (world.cpp). Each has a
+//   * The world has real coasts (world.cpp draws the same atlas from the deck
+//     as from the shore). Land stops at the beach; the water past it is sea.
+//   * Water is SAILABLE (cellSailable()). Shallow and deep water are both fair
+//     water, because the next country is on the other side of it.
+//   * Three Tidewell isles sit offshore in the southern sea. Each has a
 //     Tidewell: dry until found, running afterwards. Finding all three
-//     finishes "The Tidemill Islands" and the isles' stones light for good.
-//
-// The sail is its own Mode (MODE_SAIL), not a flag on the overworld. It has
-// its own camera, its own encounter roll (water things only), its own music
-// (the field cue, because the score has one and silence over a lake is worse),
-// and it draws its own water. Battles return here; the menu returns here; the
-// map is still the same world underneath, so the Journal works unchanged.
+//     finishes "The Tidewell Islands" and the isles' stones light for good.
+//   * [M] opens the same travelling map as the shore, centred on the hull and
+//     titled "SEA CHART" — on open water it is how you see where the next
+//     country is. ESC closes it; ESC again opens the menu.
+//   * The sail is its own Mode (MODE_SAIL), not a flag on the overworld. It has
+//     its own camera, its own encounter roll (water things only), its own music
+//     (the field cue), and it draws the world's own ground pass. Battles return
+//     here; the menu returns here; the Journal works unchanged.
 #include "game.hpp"
 #include "world.hpp"
 #include "regions.hpp"
@@ -52,10 +40,6 @@ static float wake[10][2];            // recent stern positions, newest last
 static int wakeN = 0;
 static float wakeAge[10];
 
-static void stampTile(Texture2D atlas, int mask, int row, int x, int y) {
-    DrawTextureRec(atlas, { (float)(mask * TILE), (float)(row * TILE), TILE, TILE },
-                   { (float)x, (float)y }, WHITE);
-}
 static const float SAIL_SPEED = 5.6f;     // tiles / second: a little faster than a walk
 static const float SAIL_RUN = 8.6f;       // and a proper clip under full sail
 
@@ -71,10 +55,8 @@ static int isleAtWell(int tx, int ty) {
 
 const char* sailZoneName() {
     static char buf[64];
-    // The pond has one name; the rest of the water borrows the country's.
-    if (gSailX * gSailX + gSailY * gSailY < 130.0f * 130.0f && gSailX < 40.0f && gSailY > -60.0f) {
-        return "Elmswick Millpond";
-    }
+    // Near the homeland the chart names the coast; further out it is open sea.
+    if (gSailX * gSailX + gSailY * gSailY < 150.0f * 150.0f) return "The Elmlands Coast";
     snprintf(buf, sizeof(buf), "The Open Water");
     return buf;
 }
@@ -326,6 +308,22 @@ void sailUpdate(float dt) {
 
     sailBob = sinf(g.surfT * 1.7f) * 1.2f;
 
+    // The sea chart: the same [M] map as the shore, centred on the hull. On
+    // open water it is the only way to see where the next country is.
+    if (IsKeyPressed(KEY_M)) {
+        g.travelMap = !g.travelMap;
+        playSoundIf(g.assets.cursor);
+        return;
+    }
+    if (g.travelMap) {
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_X) || IsKeyPressed(KEY_TAB) ||
+            IsKeyPressed(KEY_Z) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            g.travelMap = false;
+            playSoundIf(g.assets.cancel);
+        }
+        return;
+    }
+
     sailStep(dt);
 
     // camera: same smoothing as the walk, but a touch looser so the horizon
@@ -466,6 +464,8 @@ void sailDraw() {
         DrawCircle((int)cx, (int)cy, 4, Fade(Color{ 255, 226, 150, 255 }, 0.55f));
         DrawCircleLines((int)cx, (int)cy, 7, Fade(Color{ 255, 226, 150, 255 }, 0.30f));
     }
+
+    if (g.travelMap) worldDrawOverviewMap();
 }
 
 void sailHud() {
